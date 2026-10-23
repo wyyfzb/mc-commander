@@ -138,6 +138,12 @@ export function _stopStatsCollection() {
     clearTimeout(this._worldStateTimer);
     this._worldStateTimer = null;
   }
+  if (this._reachabilityTimer) {
+    clearTimeout(this._reachabilityTimer);
+    this._reachabilityTimer = null;
+  }
+  // 停止即作废可达性缓存：那是上一次运行的实测值，留着会让已停的实例仍显示「已可达」
+  this._reachability = null;
 }
 
 export function _collectStats() {

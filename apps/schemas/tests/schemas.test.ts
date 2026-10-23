@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises'
 import { describe, it, expect } from 'vitest'
 import {
   compareVersions,
@@ -13,6 +14,11 @@ import {
   wsMessageSchema,
   WS_EVENT_TYPES,
   WS_EVENT_KINDS,
+  PANEL_PORT,
+  GAME_PORT_START,
+  GAME_PORT_END,
+  RCON_PORT_START,
+  RCON_PORT_END,
   WS_STATE_RECOVERY,
   WS_STATUS_EVENT_NAMES,
   CRITICAL_STATUS_EVENTS,
@@ -1086,5 +1092,34 @@ describe('状态快照载荷：msmpPush 可选', () => {
 
   it('类型不对 ⇒ 拦下（不能把字符串当布尔用）', () => {
     expect(() => wsStatusSnapshotSchema.parse({ ...base, msmpPush: 'true' })).toThrow()
+  })
+})
+
+/**
+ * 端口段是服务端分配与前端提示共用的同一份事实：任一处各写一份，
+ * 改分配器就会让界面上的「去云控制台放行哪几段」静默变成假话。
+ */
+describe('端口段位', () => {
+  it('实例段整体在面板端口之上，且不与面板端口重叠', () => {
+    expect(GAME_PORT_START).toBeGreaterThan(PANEL_PORT)
+    expect(GAME_PORT_END).toBe(GAME_PORT_START + 99)
+    expect(GAME_PORT_END).toBeLessThan(RCON_PORT_START)
+  })
+
+  it('RCON 段与实例段等长且隔开，中间没有把空段说成实例端口', () => {
+    expect(RCON_PORT_END - RCON_PORT_START).toBe(GAME_PORT_END - GAME_PORT_START)
+    expect(RCON_PORT_START).toBeGreaterThan(GAME_PORT_END)
+  })
+
+  /* 前端提示语与服务端分配器必须读同一份：两处各写一份时，改分配器不会有任何门禁变红，
+     而用户照着界面上的段位去放行，实例仍然连不上 */
+  it('服务端分配器不再自带一份段位常量', async () => {
+    const src = await readFile(
+      new URL('../../server/src/services/port-allocator.js', import.meta.url),
+      'utf8',
+    )
+    expect(src).toContain("from '@mc-commander/schemas'")
+    expect(src).not.toMatch(/const GAME_PORT_START = \d/)
+    expect(src).not.toMatch(/const RCON_PORT_START = \d/)
   })
 })

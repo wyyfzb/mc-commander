@@ -23,7 +23,23 @@ export function UpdateCheckSection() {
     )
   }
 
-  if (isError || !data) return null
+  // 检查失败不能静默留白：用户点进「关于」就是要知道有没有新版，空白等于什么都没说
+  if (isError || !data) {
+    return (
+      <NoticeBanner variant="neutral" icon={WifiOff}>
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+          <span>没查到最新版本（面板连不上更新源，不影响使用）</span>
+          <button
+            type="button"
+            onClick={() => void refetch()}
+            className="text-mcs-xs font-medium text-mcs-info-fg hover:underline"
+          >
+            重试
+          </button>
+        </div>
+      </NoticeBanner>
+    )
+  }
 
   // 已是最新
   if (!data.hasUpdate) {

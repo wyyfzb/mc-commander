@@ -44,13 +44,21 @@ async function mockApiKeyChannel(page: Page, enabled: boolean) {
 }
 
 test.describe('设置页', () => {
-  test('子导航：六子页 + 默认重定向连接设置', async ({ page }) => {
+  test('子导航：七子页 + 默认重定向连接设置', async ({ page }) => {
     await setupConnection(page)
     await page.goto('/settings')
     // /settings → 重定向 /settings/connection
     await expect(page).toHaveURL(/\/settings\/connection/)
-    // 子导航六项（含安全主线的账号与安全）
-    for (const label of ['连接设置', '账号与安全', '通用设置', '通知设置', '备份管理', '关于']) {
+    // 子导航七项（含安全主线的账号与安全、面板自身去留的数据与卸载）
+    for (const label of [
+      '连接设置',
+      '账号与安全',
+      '通用设置',
+      '通知设置',
+      '备份管理',
+      '数据与卸载',
+      '关于',
+    ]) {
       await expect(page.getByRole('link', { name: label })).toBeVisible()
     }
     await expect(page.getByRole('link', { name: '连接设置' })).toHaveAttribute(
@@ -123,6 +131,15 @@ test.describe('设置页', () => {
     await page.getByRole('button', { name: '保存连接' }).click()
     await expect(page.getByText('连接配置已保存')).toBeVisible()
     await maybeShot(page, 'settings-connection-dark.png')
+  })
+
+  test('连接设置：从其他设备访问——本机地址打开时指路，不给可复制地址', async ({ page }) => {
+    await setupConnection(page)
+    // e2e 的 dev server 在 localhost：环回地址换到别的设备上打不开，卡片改为指路
+    await page.goto('/settings/connection')
+    await expect(page.getByText('从其他设备访问')).toBeVisible()
+    await expect(page.getByText(/本机地址/)).toBeVisible()
+    await expect(page.getByRole('button', { name: '复制地址' })).toHaveCount(0)
   })
 
   test('连接设置：登录会话属于别的面板 → 提示改用 API Key，且不把人踢下线', async ({ page }) => {
@@ -400,7 +417,8 @@ test.describe('设置页', () => {
     await setupConnection(page)
     await page.goto('/settings/about')
     await expect(page.getByRole('heading', { name: 'MC Commander' })).toBeVisible()
-    await expect(page.getByText(`v${APP_VERSION}`)).toBeVisible()
+    // 精确匹配版本徽章：更新检查卡也有「当前 v…」，模糊匹配会命中两个
+    await expect(page.getByText(`v${APP_VERSION}`, { exact: true })).toBeVisible()
     await expect(page.getByText('开源项目', { exact: true })).toBeVisible()
     await expect(page.getByText('基于 AGPL-3.0 协议开源')).toBeVisible()
     // 外链（GitHub 主仓与 Gitee 镜像）

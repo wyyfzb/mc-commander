@@ -11,6 +11,7 @@ import { useServerStore } from '@/stores/server'
 import { useConnectionStore } from '@/stores/connection'
 import { useCommandBus } from '@/stores/command-bus'
 import { useTerminalStore } from '@/stores/terminal'
+import { usePanelPreferencesStore } from '@/stores/panel-preferences'
 
 /**
  * 命令输入组件测试：补全 / 发送（MSW 拦截）/ 快捷 chips
@@ -35,6 +36,8 @@ function renderInput() {
 
 beforeEach(() => {
   localStorage.clear()
+  // 偏好已拉回（写入被拒绝的边界另有专门用例覆盖）
+  usePanelPreferencesStore.setState({ remote: {}, saving: false })
   useConnectionStore.setState({ baseUrl: '', apiKey: 'test-key', status: 'ready' })
   useServerStore.setState({
     status: null,
@@ -74,15 +77,19 @@ describe('CommandInput', () => {
     expect(screen.getByRole('button', { name: 'kill @e[type=!player]' })).toBeInTheDocument()
   })
 
-  it('删除快捷指令：经二次确认后移除并更新持久化', () => {
+  it('删除快捷指令：经二次确认后移除并写入面板偏好', async () => {
     renderInput()
     fireEvent.click(screen.getByRole('button', { name: '删除 give @p diamond 64' }))
     // 确认前不删除（Dialog modal 置背景 aria-hidden，role 查询不可用，用文本断言）
     expect(screen.getByText('give @p diamond 64')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /^删除$/ }))
     expect(screen.queryByText('give @p diamond 64')).not.toBeInTheDocument()
-    const stored = JSON.parse(localStorage.getItem('mcs-command-presets') ?? '[]') as string[]
-    expect(stored).not.toContain('give @p diamond 64')
+    // 落点是服务端偏好（换设备一致），不是本机 localStorage
+    await waitFor(() =>
+      expect(usePanelPreferencesStore.getState().remote?.commandPresets).not.toContain(
+        'give @p diamond 64',
+      ),
+    )
   })
 
   it('点击 chip 主体仅填充不发送；播放按钮立即发送', async () => {
@@ -199,8 +206,6 @@ describe('CommandInput', () => {
   })
 
   describe('历史状态回显（sent/failed 指示器）', () => {
-    const HISTORY_KEY = 'mcs-command-history'
-
     it('成功命令入列 + ↑ 导航显示「已送达」', async () => {
       renderInput()
       const input = screen.getByLabelText('服务器命令输入')
@@ -268,57 +273,97 @@ describe('CommandInput', () => {
       fireEvent.change(input, { target: { value: 'say dup' } })
       fireEvent.keyDown(input, { key: 'Enter' })
       expect(await screen.findByText(/命令发送失败/)).toBeInTheDocument()
-      // 历史仍只有一条
-      const stored = JSON.parse(localStorage.getItem(HISTORY_KEY)!) as string[]
-      expect(stored.filter((c) => c === 'say dup').length).toBe(1)
-      // ↑ 导航显示最新（失败）状态
+      // 历史仍只有一条（↑ 一次到它，再 ↑ 不移动）
       fireEvent.keyDown(input, { key: 'ArrowUp' })
       expect(screen.getByText('失败: mock 二次失败')).toBeInTheDocument()
+      fireEvent.keyDown(input, { key: 'ArrowUp' })
+      expect(input).toHaveValue('say dup')
     })
   })
 
-  describe('命令历史持久化（localStorage）', () => {
-    const HISTORY_KEY = 'mcs-command-history'
+  describe('偏好未拉回时的写入闸门', () => {
+    it('未拉取完成时保存快捷指令 → 提示失败，且不发写请求', async () => {
+      usePanelPreferencesStore.setState({ remote: null, saving: false })
+      let putCalls = 0
+      server.use(
+        http.put('*/api/v1/preferences', () => {
+          putCalls += 1
+          return HttpResponse.json({ status: 'ok', data: {}, message: 'Success' })
+        }),
+      )
+      renderInput()
+      const input = screen.getByLabelText('服务器命令输入')
+      fireEvent.change(input, { target: { value: 'say new-preset' } })
+      fireEvent.click(screen.getByRole('button', { name: '存为预设' }))
 
-    it('发送命令后写入 localStorage', async () => {
+      expect(await screen.findByText('保存快捷指令失败')).toBeInTheDocument()
+      expect(putCalls).toBe(0)
+    })
+  })
+
+  describe('命令历史来源（服务端 command_history）', () => {
+    it('打开时读取服务端历史，↑ 可翻到旧命令', async () => {
+      server.use(
+        http.get('*/api/v1/command-history', () =>
+          HttpResponse.json({
+            status: 'ok',
+            data: [
+              {
+                id: 2,
+                instanceId: 'demo',
+                command: 'say newer',
+                source: 'api',
+                success: true,
+                response: null,
+                durationMs: 3,
+                createdAt: '2026-01-01T00:00:02Z',
+              },
+              {
+                id: 1,
+                instanceId: 'demo',
+                command: 'say older',
+                source: 'api',
+                success: true,
+                response: null,
+                durationMs: 3,
+                createdAt: '2026-01-01T00:00:01Z',
+              },
+            ],
+            pagination: { page: 1, pageSize: 50, total: 2, totalPages: 1 },
+            message: 'Success',
+            timestamp: '2026-01-01T00:00:03Z',
+          }),
+        ),
+      )
+      renderInput()
+      const input = screen.getByLabelText('服务器命令输入')
+      // 服务端按 id 倒序返回，导航须按时间正序：↑ 先到最新。
+      // 历史未加载完时 ↑ 是空操作（不推进导航位），故可重试到加载完为止。
+      await waitFor(() => {
+        fireEvent.keyDown(input, { key: 'ArrowUp' })
+        expect(input).toHaveValue('say newer')
+      })
+      fireEvent.keyDown(input, { key: 'ArrowUp' })
+      expect(input).toHaveValue('say older')
+    })
+
+    it('不再写本地历史（跨设备一致性由服务端承担）', async () => {
       renderInput()
       const input = screen.getByLabelText('服务器命令输入')
       fireEvent.change(input, { target: { value: 'say persist-test' } })
       fireEvent.keyDown(input, { key: 'Enter' })
       await waitFor(() => expect(input).toHaveValue(''))
-      const stored = JSON.parse(localStorage.getItem(HISTORY_KEY)!) as string[]
-      expect(Array.isArray(stored)).toBe(true)
-      expect(stored).toContain('say persist-test')
+      expect(localStorage.getItem('mcs-command-history')).toBeNull()
     })
 
-    it('连续相同命令不重复写入', async () => {
+    it('发送后 ↑ 能翻到刚发的命令', async () => {
       renderInput()
       const input = screen.getByLabelText('服务器命令输入')
-      fireEvent.change(input, { target: { value: 'say dup' } })
+      fireEvent.change(input, { target: { value: 'say fresh' } })
       fireEvent.keyDown(input, { key: 'Enter' })
       await waitFor(() => expect(input).toHaveValue(''))
-      fireEvent.change(input, { target: { value: 'say dup' } })
-      fireEvent.keyDown(input, { key: 'Enter' })
-      await waitFor(() => expect(input).toHaveValue(''))
-      const stored = JSON.parse(localStorage.getItem(HISTORY_KEY)!) as string[]
-      const dupCount = stored.filter((c) => c === 'say dup').length
-      expect(dupCount).toBe(1)
-    })
-
-    it('超出 50 条上限裁剪最旧条目', async () => {
-      // 预填 50 条历史
-      const fifty = Array.from({ length: 50 }, (_, i) => `cmd ${i}`)
-      localStorage.setItem(HISTORY_KEY, JSON.stringify(fifty))
-      renderInput()
-      const input = screen.getByLabelText('服务器命令输入')
-      fireEvent.change(input, { target: { value: 'cmd newest' } })
-      fireEvent.keyDown(input, { key: 'Enter' })
-      await waitFor(() => expect(input).toHaveValue(''))
-      const stored = JSON.parse(localStorage.getItem(HISTORY_KEY)!) as string[]
-      expect(stored.length).toBe(50)
-      // 最旧的 cmd 0 被裁掉
-      expect(stored).not.toContain('cmd 0')
-      expect(stored).toContain('cmd newest')
+      fireEvent.keyDown(input, { key: 'ArrowUp' })
+      expect(input).toHaveValue('say fresh')
     })
   })
 })

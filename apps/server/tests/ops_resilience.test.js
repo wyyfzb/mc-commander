@@ -2,7 +2,7 @@
  * 运维韧性测试
  * - 崩溃循环熔断（滑动窗口计数 + 达阈值禁用 autoRestart + 持久化 + WS 事件）
  * - 磁盘使用率（getDiskUsage 缓存 + 去重 + statfsSync 返回值）
- * - check-update 端点（npm registry / 离线回退）
+ * - check-update 端点（releases 版本源 / 离线回退）
  * - autoStart 恢复（面板重启后逐个错峰启动，跳过熔断/已运行/缺失）
  *
  * 超时余量：本节里三例在 it() 内动态 import 模块图（routes/index.js 是整棵路由树、
@@ -11,7 +11,7 @@
  * 下界，即被上限截断）。故这三例显式放到 60s；其余纯逻辑用例保留默认值。
  * testTimeout 不覆盖 hook：本文件无重 hook，故无需 hookTimeout。
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 
 // ── 1. 崩溃循环熔断 ──────────────────────────────────────
 describe('崩溃循环熔断', () => {
@@ -122,9 +122,23 @@ describe('磁盘使用率 getDiskUsage', () => {
     expect(config.autoStartDelayMs).toBe(3000);
   });
 
-  it('config.npmPkgName 已配置', async () => {
+  it('config.repoPath 有默认值（更新检查的仓库路径）', async () => {
     const config = (await import('../src/config.js')).default;
-    expect(config.npmPkgName).toBe('mc-commander-server');
+    expect(config.repoPath).toBe('wyyfzb/mc-commander');
+  });
+
+  it('UPDATE_REPO 可覆盖仓库路径（fork 后不再查到上游版本）', async () => {
+    const saved = process.env.UPDATE_REPO;
+    process.env.UPDATE_REPO = 'someone/fork';
+    try {
+      vi.resetModules();
+      const config = (await import('../src/config.js')).default;
+      expect(config.repoPath).toBe('someone/fork');
+    } finally {
+      if (saved === undefined) delete process.env.UPDATE_REPO;
+      else process.env.UPDATE_REPO = saved;
+      vi.resetModules();
+    }
   });
 });
 

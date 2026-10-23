@@ -33,7 +33,7 @@ export function CustomPointDialog({
         if (!open) onDraftChange(null)
       }}
       title="添加快捷传送点"
-      description="保存到本地浏览器，可随时一键传送"
+      description="保存在面板里，换台设备也能用"
       confirmText="添加"
       loading={running}
       onConfirm={handleConfirm}

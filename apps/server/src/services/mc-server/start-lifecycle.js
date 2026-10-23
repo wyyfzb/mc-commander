@@ -236,6 +236,13 @@ export function _attachStdinErrorListener() {
 export function _initializeRuntimeState() {
   this.isRunning = true;
   this.startTime = Date.now();
+  // 端口要等 JVM 绑定完才在听，立即探会得到「未监听」的假结论；延迟一拍再刷，
+  // 结果进缓存供 toStatus 同步读取。句柄要能被进程退出清理，否则实例停了还挂着定时器
+  this._reachabilityTimer = setTimeout(() => {
+    this._reachabilityTimer = null;
+    this.refreshReachability().catch(() => {});
+  }, 15000);
+  this._reachabilityTimer.unref?.();
   // 清空上一次会话的日志缓冲，避免冷启动时混杂旧日志
   this.logBuffer = [];
   // 流式输出的按行组装残留同样按次清零：上一轮的尾巴不能混进新一轮

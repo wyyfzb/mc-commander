@@ -67,6 +67,8 @@ const config = {
   // .env 文件路径（dotenv 加载源）：面板备份把它作快照伴生文件收进灾备
   // （API_KEY_HASH/SETUP_TOKEN 只存于 .env，丢 .env = 管理员无法重新接入）
   envFilePath: path.join(PACKAGE_ROOT, '.env'),
+  // 安装根目录：面板内「彻底删除」要调用随载荷落地的清理脚本
+  rootDir: PACKAGE_ROOT,
   apiKeyHash: process.env.API_KEY_HASH || '',
   // 只读机器凭据（与 API_KEY_HASH 同款「只存 SHA-256 摘要」）：未配置 = 该通道
   // 不存在（fail-closed，不是「不校验」）。仅可访问白名单内的只读监控端点，
@@ -188,8 +190,16 @@ const config = {
   },
   // 面板重启后自动恢复实例间隔（ms）
   autoStartDelayMs: intFromEnv('AUTO_START_DELAY_MS', '3000'),
-  // npm 包名（更新检查用）
-  npmPkgName: 'mc-commander-server',
+  // 更新检查取 releases/latest 的仓库路径（与部署脚本同源；面板不经 npm 分发）。
+  // fork 后指向自己的仓库，否则永远查到上游版本。
+  repoPath: process.env.UPDATE_REPO || 'wyyfzb/mc-commander',
+  // 内置 HTTPS：与 PORT 同一个端口（首字节分流），故无需另配端口。
+  // 默认开启——加密能力装好就在，用户不必先知道它存在；HTTP 通道始终保留
+  // 且从不重定向，未装根证书的设备照常可用（否则新用户第一次访问就会撞上
+  // 整页红色的证书拦截）。
+  tls: {
+    enabled: boolFromEnv('TLS_ENABLED', true),
+  },
 };
 
 // fail-fast：全部配置项求值后统一裁决，错误信息逐项给出变量名与实际读到的值，

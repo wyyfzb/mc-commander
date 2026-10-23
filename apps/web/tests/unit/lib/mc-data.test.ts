@@ -1,7 +1,7 @@
 /**
  * 静态数据完整性单测：211 物品 / 20 药水 / 6 礼包 + 礼包 schema 往返
  */
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ITEM_CATEGORIES, MINECRAFT_ITEMS, fullItemId, itemImageUrl } from '@/lib/mc-items'
 import {
   CUSTOM_LEVEL_DURATIONS,
@@ -14,13 +14,33 @@ import {
   potionDisplayName,
   potionLevelLabel,
 } from '@/lib/mc-potions'
-import {
-  DEFAULT_KITS,
-  kitFromJson,
-  kitToJson,
-  loadKitsFromStorage,
-  saveKitsToStorage,
-} from '@/lib/mc-kits'
+import { DEFAULT_KITS, kitFromJson, kitToJson, kitsFromPreferences, saveKits } from '@/lib/mc-kits'
+import { usePanelPreferencesStore } from '@/stores/panel-preferences'
+
+// 面板偏好走服务端：假实现记录每次 PUT 的补丁并返回合并后的快照，
+// 与真实路由「整份写入单项、返回完整快照」一致
+const preferences = vi.hoisted(() => {
+  const state: { remote: Record<string, unknown>; writes: Record<string, unknown>[] } = {
+    remote: {},
+    writes: [],
+  }
+  return state
+})
+
+vi.mock('@/api/preferences', () => ({
+  apiGetPreferences: async () => preferences.remote,
+  apiPutPreferences: async (_config: unknown, patch: Record<string, unknown>) => {
+    preferences.remote = { ...preferences.remote, ...patch }
+    preferences.writes.push(patch)
+    return preferences.remote
+  },
+}))
+
+beforeEach(() => {
+  preferences.remote = {}
+  preferences.writes = []
+  usePanelPreferencesStore.setState({ remote: null, saving: false })
+})
 
 describe('物品目录完整性（211 种）', () => {
   it('共 211 种物品', () => {
@@ -183,22 +203,22 @@ describe('默认礼包（6 个）与持久化 schema', () => {
     expect(partial?.items).toEqual([{ id: 'diamond', count: 1 }])
   })
 
-  it('localStorage 读写与损坏回退默认礼包', () => {
-    const mem = new Map<string, string>()
-    const storage = {
-      getItem: (k: string) => mem.get(k) ?? null,
-      setItem: (k: string, v: string) => void mem.set(k, v),
-    } as Storage
+  it('未配置（偏好快照为空）回退默认礼包', () => {
+    expect(kitsFromPreferences(null)).toEqual(DEFAULT_KITS)
+    expect(kitsFromPreferences({})).toEqual(DEFAULT_KITS)
+  })
 
-    // 空存储 → 默认礼包
-    expect(loadKitsFromStorage(storage)).toHaveLength(6)
-    // 保存 → 读取
-    saveKitsToStorage(storage, [DEFAULT_KITS[0]!])
-    const loaded = loadKitsFromStorage(storage)
-    expect(loaded).toHaveLength(1)
-    expect(loaded[0]!.name).toBe('新手起步包')
-    // 损坏 JSON → 回退默认
-    storage.setItem('mc_commander_kits', '{bad json')
-    expect(loadKitsFromStorage(storage)).toHaveLength(6)
+  it('写入后从偏好快照派生回来：整份 PUT，快照替换为新列表', async () => {
+    usePanelPreferencesStore.setState({ remote: {}, saving: false })
+    await saveKits([DEFAULT_KITS[0]!])
+
+    expect(preferences.writes).toEqual([{ kits: [DEFAULT_KITS[0]] }])
+    const kits = kitsFromPreferences(usePanelPreferencesStore.getState().remote)
+    expect(kits).toHaveLength(1)
+    expect(kits[0]!.name).toBe('新手起步包')
+  })
+
+  it('礼包被删光（空列表）是合法配置，不回退默认', () => {
+    expect(kitsFromPreferences({ kits: [] })).toEqual([])
   })
 })

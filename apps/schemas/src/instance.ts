@@ -61,10 +61,21 @@ export const instanceStatusSchema = z.object({
   consecutiveCrashes: z.number(),
   uptime: z.number(),
   address: z.string(),
+  /** 玩家连接端口：实例卡片展示用，与 address 里的端口同源 */
+  port: z.number().int().optional(),
   // 地址可达范围：'public' 为公网（可直接发给玩家），'private' 为内网/环回
   // （仅同一网络内可连）。前端据此标注，避免把「玩家连不上的地址」当对外地址展示；
   // 判据在服务端由 isPrivateIp 派生，不在前端重算（双端各算一次必然漂移）
   addressType: z.enum(['public', 'private']),
+  /**
+   * 玩家能不能真的连进来。addressType 只说明地址「看起来是公网还是内网」，
+   * 不说明这一层之外还有没有云平台安全组拦着——那才是用户装完打不开的真实原因。
+   * null 表示尚未检测（实例没运行时不检测，避免把「没启动」误报成「被拦」）。
+   */
+  reachability: z
+    .enum(['reachable', 'blocked', 'not_listening', 'no_public_address'])
+    .nullable()
+    .optional(),
   players: z.array(z.unknown()),
   playerCount: z.number(),
   maxPlayers: z.number(),
@@ -447,3 +458,9 @@ export const crashArtifactHistoryQuerySchema = z.object({
 
 export type CrashArtifactHistoryItem = z.infer<typeof crashArtifactHistoryItemSchema>
 export type CrashArtifactHistory = z.infer<typeof crashArtifactHistorySchema>
+
+/** 玩家连接可达性检测结果；state 为 null 表示实例没在运行、无从判定 */
+export const reachabilitySchema = z.object({
+  state: z.enum(['reachable', 'blocked', 'not_listening', 'no_public_address']).nullable(),
+})
+export type Reachability = z.infer<typeof reachabilitySchema>

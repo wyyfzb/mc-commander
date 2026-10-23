@@ -9,8 +9,27 @@ import {
   type TeleportTabProps,
 } from '@/features/players/components/detail-teleport-tab'
 import { useConnectionStore } from '@/stores/connection'
-import { QUICK_TELEPORT_STORAGE_KEY } from '@/lib/mc-teleport'
+import { usePanelPreferencesStore } from '@/stores/panel-preferences'
 import type { Player } from '@/api/types'
+
+// 面板偏好走服务端：假实现记录每次 PUT 的补丁并返回合并后的快照，
+// 与真实路由「整份写入单项、返回完整快照」一致
+const preferences = vi.hoisted(() => {
+  const state: { remote: Record<string, unknown>; writes: Record<string, unknown>[] } = {
+    remote: {},
+    writes: [],
+  }
+  return state
+})
+
+vi.mock('@/api/preferences', () => ({
+  apiGetPreferences: async () => preferences.remote,
+  apiPutPreferences: async (_config: unknown, patch: Record<string, unknown>) => {
+    preferences.remote = { ...preferences.remote, ...patch }
+    preferences.writes.push(patch)
+    return preferences.remote
+  },
+}))
 
 /**
  * TeleportTab 传送 Tab 测试
@@ -114,6 +133,10 @@ afterAll(() => server.close())
 beforeEach(() => {
   serverPlayers = [steve, alex, bob]
   localStorage.clear()
+  // 偏好快照按「已拉回且为空」起测：未拉回时写入会被 store 拒绝，属单独用例
+  preferences.remote = {}
+  preferences.writes = []
+  usePanelPreferencesStore.setState({ remote: {}, saving: false })
   useConnectionStore.setState({ baseUrl: '', apiKey: 'test-key', status: 'ready' })
 })
 
@@ -271,12 +294,10 @@ describe('TeleportTab', () => {
     await vi.waitFor(() =>
       expect(onAction).toHaveBeenCalledWith({ kind: 'command', command: 'tp Steve 0 64 0' }),
     )
-    // 删除 → chip 消失 + localStorage 持久化
+    // 删除 → chip 消失 + 写入面板偏好
     fireEvent.click(screen.getByRole('button', { name: '删除主世界原点' }))
     expect(screen.queryByText('主世界原点')).not.toBeInTheDocument()
-    const saved = JSON.parse(localStorage.getItem(QUICK_TELEPORT_STORAGE_KEY) ?? '{}') as {
-      hideOrigin: boolean
-    }
+    const saved = preferences.writes.at(-1)?.quickTeleports as { hideOrigin: boolean }
     expect(saved.hideOrigin).toBe(true)
     // 重新挂载后仍隐藏
     renderTab()
@@ -293,9 +314,9 @@ describe('TeleportTab', () => {
     fireEvent.change(within(dialog).getByLabelText('Z'), { target: { value: '3' } })
     fireEvent.click(within(dialog).getByRole('button', { name: '添加' }))
 
-    // chip 出现且持久化
+    // chip 出现且写入面板偏好
     expect(screen.getByText('基地')).toBeInTheDocument()
-    const saved = JSON.parse(localStorage.getItem(QUICK_TELEPORT_STORAGE_KEY) ?? '{}') as {
+    const saved = preferences.writes.at(-1)?.quickTeleports as {
       items: Array<{ name: string; x: number; y: number; z: number }>
     }
     expect(saved.items).toEqual([{ name: '基地', x: 1, y: 2, z: 3 }])
@@ -309,10 +330,21 @@ describe('TeleportTab', () => {
     // 删除 → chip 消失 + 持久化清空
     fireEvent.click(screen.getByRole('button', { name: '删除基地' }))
     expect(screen.queryByText('基地')).not.toBeInTheDocument()
-    const afterDelete = JSON.parse(localStorage.getItem(QUICK_TELEPORT_STORAGE_KEY) ?? '{}') as {
-      items: unknown[]
-    }
+    const afterDelete = preferences.writes.at(-1)?.quickTeleports as { items: unknown[] }
     expect(afterDelete.items).toEqual([])
+  })
+
+  it('偏好尚未拉回时保存快捷点：提示失败且服务端不变', async () => {
+    usePanelPreferencesStore.setState({ remote: null, saving: false })
+    renderTab()
+    fireEvent.click(screen.getByRole('button', { name: '添加快捷传送点' }))
+    const dialog = await screen.findByRole('dialog', { name: /添加快捷传送点/ })
+    fireEvent.change(within(dialog).getByLabelText('名称'), { target: { value: '基地' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: '添加' }))
+    expect(await screen.findByText('快捷传送点保存失败')).toBeInTheDocument()
+    expect(preferences.writes).toEqual([])
+    // 列表派生自快照：写入失败不会本地先加
+    expect(screen.queryByText('基地')).not.toBeInTheDocument()
   })
 
   it('自定义快捷点：名称为空时拦截', async () => {
@@ -321,7 +353,7 @@ describe('TeleportTab', () => {
     const dialog = await screen.findByRole('dialog', { name: /添加快捷传送点/ })
     fireEvent.click(within(dialog).getByRole('button', { name: '添加' }))
     expect(await screen.findByText('请输入名称')).toBeInTheDocument()
-    expect(localStorage.getItem(QUICK_TELEPORT_STORAGE_KEY)).toBeNull()
+    expect(preferences.writes).toEqual([])
   })
 
   it('批量模式：当前位置多行列表 + 跳过离线目标 + 汇总 toast', async () => {

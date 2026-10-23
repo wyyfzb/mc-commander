@@ -458,6 +458,18 @@ test.describe('玩家表窄屏：行式卡片', () => {
   test.use({ viewport: { width: 375, height: 812 } })
 
   test('375px：表格转卡片，勾选/全选/操作菜单可用且页面无横向溢出', async ({ page }) => {
+    // 头像取自 mc-heads 外链：取不到时组件回退成 span，下面按 img 量中线会拿到 null。
+    // 用一张本地 1x1 PNG 顶替，几何断言就不受外网可达性支配
+    await page.route('https://mc-heads.net/**', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'image/png',
+        body: Buffer.from(
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+          'base64',
+        ),
+      }),
+    )
     await setupConnection(page)
     await page.goto('/players')
 

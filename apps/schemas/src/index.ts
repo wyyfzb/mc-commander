@@ -61,12 +61,23 @@ export {
   type PlayerInventory,
 } from './player'
 
+// 端口段位（面板 / 实例 / RCON，服务端分配与前端提示共用同一份事实）
+export {
+  PANEL_PORT,
+  GAME_PORT_START,
+  GAME_PORT_COUNT,
+  GAME_PORT_END,
+  RCON_PORT_START,
+  RCON_PORT_END,
+} from './ports'
+
 // 实例
 export {
   MSMP_MIN_MC_VERSION,
   crashArtifactQuerySchema,
   instanceSummarySchema,
   instanceStatusSchema,
+  reachabilitySchema,
   instanceStatusListSchema,
   instanceUpdatePayloadSchema,
   instanceSettingsRequestBodySchema,
@@ -353,6 +364,8 @@ export {
   panelErrorEntrySchema,
   panelErrorsSchema,
   panelErrorsQuerySchema,
+  httpsStatusSchema,
+  type HttpsStatus,
   type DiskInfo,
   type DiskUsage,
   type DiskAlertThresholds,
@@ -362,6 +375,31 @@ export {
   type PanelErrorEntry,
   type PanelErrors,
 } from './system'
+
+// 面板偏好（跨设备一致的配置）
+export {
+  PANEL_PREFERENCE_KEYS,
+  panelPreferencesSchema,
+  panelPreferencesPatchSchema,
+  commandPresetsSchema,
+  announcementPresetSchema,
+  announcementPresetsSchema,
+  kitItemSchema,
+  kitPresetSchema,
+  kitsSchema,
+  quickTeleportPointSchema,
+  quickTeleportsSchema,
+  notificationPreferencesSchema,
+  type PanelPreferenceKey,
+  type PanelPreferences,
+  type PanelPreferencesPatch,
+  type AnnouncementPreset,
+  type KitItem,
+  type KitPreset,
+  type QuickTeleportPoint,
+  type QuickTeleports,
+  type NotificationPreferences,
+} from './preferences'
 
 // 认证与 API Key
 export {

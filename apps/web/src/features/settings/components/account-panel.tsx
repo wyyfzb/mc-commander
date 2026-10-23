@@ -32,6 +32,7 @@ import { PasswordInput } from '@/components/ui/password-input'
 import { StatusPill } from '@/components/mcs/status-pill'
 import { SettingsSectionCard as SectionCard } from './settings-section-card'
 import { TotpPanel } from './totp-panel'
+import { HttpsPanel } from './https-panel'
 import { ReadonlyCredentialPanel } from './readonly-credential-panel'
 
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
@@ -306,6 +307,9 @@ export function AccountPanel() {
 
       {/* ── 两步验证（TOTP）挂靠向导 ── */}
       <TotpPanel baseUrl={baseUrl} apiKey={apiKey} authed={authed} />
+
+      {/* ── 传输加密（内置 HTTPS 的根证书引导） ── */}
+      <HttpsPanel baseUrl={baseUrl} apiKey={apiKey} authed={authed} />
 
       {/* ── 只读监控凭据（机器凭据生命周期） ── */}
       <ReadonlyCredentialPanel baseUrl={baseUrl} apiKey={apiKey} authed={authed} />

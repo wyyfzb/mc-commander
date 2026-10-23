@@ -64,87 +64,79 @@ describe('routes/index.js 聚合层', () => {
   });
 
   describe('GET /api/v1/check-update', () => {
-    it('有更新：latest 与当前版本不同 → hasUpdate true + npm url', async () => {
-      fetchMock.mockResolvedValue({
-        ok: true,
-        json: async () => ({ version: '9.9.9' }),
-      });
+    /** 造一个 releases/latest 的 302 响应（Location 的最后一段是 tag） */
+    function redirect(tag) {
+      return {
+        status: 302,
+        headers: {
+          get: (k) =>
+            k.toLowerCase() === 'location'
+              ? `https://gitee.com/${config.repoPath}/releases/tag/${tag}`
+              : null,
+        },
+      };
+    }
+
+    it('有新版本：tag 高于当前版本 → hasUpdate true + releases 链接', async () => {
+      fetchMock.mockResolvedValue(redirect('v9.9.9'));
 
       const res = await apiGet('/api/v1/check-update');
 
       expect(res.status).toBe(200);
-      expect(res.body.status).toBe('ok');
       expect(res.body.data).toEqual({
         current: SERVER_VERSION,
         latest: '9.9.9',
         hasUpdate: true,
-        url: `https://www.npmjs.com/package/${config.npmPkgName}/v/9.9.9`,
+        url: `https://gitee.com/${config.repoPath}/releases/tag/v9.9.9`,
       });
-      // npm registry 查询使用 config.npmPkgName 拼接
+      // 首选 Gitee（与部署脚本同口径），且靠 Location 头取值、不解析响应体
       expect(fetchMock).toHaveBeenCalledWith(
-        `https://registry.npmjs.org/${config.npmPkgName}/latest`,
-        expect.objectContaining({ signal: expect.anything() }),
+        `https://gitee.com/${config.repoPath}/releases/latest`,
+        expect.objectContaining({ redirect: 'manual', signal: expect.anything() }),
       );
     });
 
-    it('无更新：latest 等于当前版本 → hasUpdate false，latest truthy 时 url 仍返回', async () => {
-      fetchMock.mockResolvedValue({
-        ok: true,
-        json: async () => ({ version: SERVER_VERSION }),
-      });
+    it('无新版本：tag 等于当前版本 → hasUpdate false', async () => {
+      fetchMock.mockResolvedValue(redirect(`v${SERVER_VERSION}`));
 
       const res = await apiGet('/api/v1/check-update');
 
-      expect(res.status).toBe(200);
       expect(res.body.data.latest).toBe(SERVER_VERSION);
       expect(res.body.data.hasUpdate).toBe(false);
-      // url 判断条件是 latest truthy 而非 hasUpdate（锁定当前行为）
-      expect(res.body.data.url).toBe(
-        `https://www.npmjs.com/package/${config.npmPkgName}/v/${SERVER_VERSION}`,
+    });
+
+    it('旧版本（回退过）不算有更新：0.8.0 对 0.9.0 → false', async () => {
+      // 字符串比较会把 0.8.0 判成更新，故必须逐段数值比较
+      fetchMock.mockResolvedValue(redirect('v0.8.0'));
+
+      const res = await apiGet('/api/v1/check-update');
+
+      expect(res.body.data.hasUpdate).toBe(false);
+    });
+
+    it('Gitee 取不到 → 回退 GitHub，仍能拿到版本', async () => {
+      fetchMock.mockRejectedValueOnce(new TypeError('fetch failed'));
+      fetchMock.mockResolvedValueOnce({
+        status: 302,
+        headers: { get: () => `https://github.com/${config.repoPath}/releases/tag/v9.9.9` },
+      });
+
+      const res = await apiGet('/api/v1/check-update');
+
+      expect(res.body.data.latest).toBe('9.9.9');
+      expect(fetchMock).toHaveBeenNthCalledWith(
+        2,
+        `https://github.com/${config.repoPath}/releases/latest`,
+        expect.objectContaining({ redirect: 'manual' }),
       );
     });
 
-    it('无更新：响应缺 version 字段 → latest null，url undefined', async () => {
-      fetchMock.mockResolvedValue({
-        ok: true,
-        json: async () => ({}),
-      });
+    it('两源都取不到 → 降级 offline:true 且 200，不抛 500', async () => {
+      fetchMock.mockRejectedValue(new TypeError('fetch failed'));
 
       const res = await apiGet('/api/v1/check-update');
 
       expect(res.status).toBe(200);
-      expect(res.body.data).toEqual({
-        current: SERVER_VERSION,
-        latest: null,
-        hasUpdate: false,
-        url: undefined,
-      });
-    });
-
-    it('npm registry 非 ok → throw 进错误中间件 500（通用文案不泄露状态细节）', async () => {
-      fetchMock.mockResolvedValue({
-        ok: false,
-        status: 500,
-        json: async () => ({}),
-      });
-
-      const res = await apiGet('/api/v1/check-update');
-
-      expect(res.status).toBe(500);
-      expect(res.body.status).toBe('error');
-      expect(res.body.code).toBe(50000);
-      expect(res.body.message).toBe('Internal Server Error');
-    });
-
-    it('AbortError（5s 超时 abort）→ 优雅降级 offline:true 正常 200', async () => {
-      const abortErr = new Error('This operation was aborted');
-      abortErr.name = 'AbortError';
-      fetchMock.mockRejectedValue(abortErr);
-
-      const res = await apiGet('/api/v1/check-update');
-
-      expect(res.status).toBe(200);
-      expect(res.body.status).toBe('ok');
       expect(res.body.data).toEqual({
         current: SERVER_VERSION,
         latest: null,
@@ -153,26 +145,25 @@ describe('routes/index.js 聚合层', () => {
       });
     });
 
-    it('连接错误（UND_ERR_CONNECTABLE）→ 同走优雅降级 offline:true', async () => {
-      const connErr = new Error('connect failed');
-      connErr.code = 'UND_ERR_CONNECTABLE';
-      fetchMock.mockRejectedValue(connErr);
+    it('Location 缺失或不是合法版本号 → 视为该源失败，继续降级', async () => {
+      fetchMock.mockResolvedValue({ status: 302, headers: { get: () => null } });
 
       const res = await apiGet('/api/v1/check-update');
 
       expect(res.status).toBe(200);
       expect(res.body.data.offline).toBe(true);
-      expect(res.body.data.hasUpdate).toBe(false);
+      // 两个源都试过
+      expect(fetchMock).toHaveBeenCalledTimes(2);
     });
 
-    it('其他异常（非 AbortError/连接错误）→ 经 asyncHandler 走错误中间件 500', async () => {
-      fetchMock.mockRejectedValue(new TypeError('unexpected payload shape'));
+    it('超时（AbortError）→ 同样降级 offline:true', async () => {
+      const abortErr = new Error('This operation was aborted');
+      abortErr.name = 'AbortError';
+      fetchMock.mockRejectedValue(abortErr);
 
       const res = await apiGet('/api/v1/check-update');
 
-      expect(res.status).toBe(500);
-      expect(res.body.code).toBe(50000);
-      expect(res.body.message).toBe('Internal Server Error');
+      expect(res.body.data.offline).toBe(true);
     });
   });
 

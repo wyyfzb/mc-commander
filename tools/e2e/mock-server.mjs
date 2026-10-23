@@ -696,6 +696,9 @@ const server = createServer((req, res) => {
       )
     }
 
+    // 更新检查：mock 的版本与 package.json 同档，故恒为「已是最新」
+    if (path === '/api/v1/check-update')
+      return res.end(ok({ current: '0.9.0', latest: '0.9.0', hasUpdate: false }))
     if (path === '/api/v1/overview') return res.end(ok(overview))
     if (path === '/api/v1/system-stats') return res.end(ok(systemStats))
     // ── 安全主线：auth 端点（登录 e2e 用；mock 固定凭据，严禁真实密码） ──

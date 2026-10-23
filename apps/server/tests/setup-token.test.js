@@ -26,6 +26,7 @@ import {
   verifySetupToken,
   consumeSetupToken,
   stripSetupTokenLines,
+  DEFAULT_ENV_PATH,
   _setSetupToken,
   _getSetupToken,
 } from '../src/utils/setup-token.js';
@@ -131,6 +132,12 @@ describe('consumeSetupToken（内存 + .env 双重作废）', () => {
     _setSetupToken(TOKEN_A);
     expect(consumeSetupToken(tmpEnv)).toEqual({ cleared: true, envRemoved: false });
     expect(consumeSetupToken(tmpEnv)).toEqual({ cleared: false, envRemoved: false });
+  });
+
+  // 默认路径必须与 dotenv 的加载源是同一份文件：从模块目录上推在 src/ 布局下
+  // 落到 src/.env（不存在），作废写不进去又被 best-effort 吞掉，令牌永远留在 .env。
+  it('默认 .env 路径取 config.envFilePath，不从模块目录上推', () => {
+    expect(DEFAULT_ENV_PATH).toBe(config.envFilePath);
   });
 
   it('.env 文件不存在时不抛出（best-effort），内存仍清空', () => {

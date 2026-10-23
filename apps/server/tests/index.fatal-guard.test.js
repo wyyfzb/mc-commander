@@ -19,7 +19,7 @@ function mockCfgRoot() {
 }
 const h = vi.hoisted(() => {
   const appUse = vi.fn();
-  const app = { use: appUse, set: vi.fn() };
+  const app = { use: appUse, set: vi.fn(), get: vi.fn() };
   const stopSystemStatsBroadcast = vi.fn();
   const serverOn = vi.fn();
   const server = {
@@ -65,6 +65,8 @@ vi.mock('express', () => ({
 vi.mock('http', () => ({ default: { createServer: () => h.server } }));
 vi.mock('ws', () => ({
   WebSocketServer: class {
+    // 真实 ws 的 WebSocketServer 恒有 clients 集合，停机流程会遍历它断开连接
+    clients = new Set();
     constructor(options) {
       h.wsOpts = options;
       h.wss = this;
@@ -102,6 +104,9 @@ vi.mock('../src/config.js', () => ({
     },
     logLevel: 'info',
     rateLimit: { windowMs: 60000, max: 100 },
+    // TLS 关闭：本文件验的是停机与崩溃兜底，开 TLS 会额外拉起 https 与 mux，
+    // 让停机断言数到不该数的监听器
+    tls: { enabled: false },
   },
 }));
 vi.mock('../src/middleware/auth.js', () => ({

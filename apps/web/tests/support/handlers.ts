@@ -1272,6 +1272,14 @@ export const handlers = [
       { status: 401 },
     ),
   ),
+  // 面板偏好（跨设备一致的配置）：默认空快照 = 全部按默认值渲染
+  http.get('*/api/v1/preferences', () => ok({})),
+  http.put('*/api/v1/preferences', async ({ request }) => {
+    const patch = (await request.json()) as Record<string, unknown>
+    return ok(patch)
+  }),
+  // 命令历史（仪表盘输入框 ↑ 导航与服务端同源；默认空）
+  http.get('*/api/v1/command-history', () => ok([])),
   // 登录状态探测（hasPassword 由测试用例按需覆写：http.all 场景在组件测试内自建 server）
   http.get('*/api/v1/auth/status', () => ok({ hasPassword: true })),
   // 密码登录（固定测试凭据）

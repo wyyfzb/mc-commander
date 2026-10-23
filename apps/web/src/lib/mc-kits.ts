@@ -1,9 +1,11 @@
 /**
  * 预设礼包数据与持久化
- * - 6 个默认礼包（首次使用或存储损坏时回退）
+ * - 6 个默认礼包（从未配置过时回退）
  * - 持久化 schema：{name, icon, desc, items:[{id,count}]}
- * - 礼包中可能存在不在物品目录中的 id（如 brick_block/quartz_block），应用时"找不到则跳过"的容错由调用方保留
+ * - 礼包中可能存在不在物品目录中的 id（如 quartz_block），应用时"找不到则跳过"的容错由调用方保留
  */
+import type { PanelPreferences } from '@mc-commander/schemas'
+import { writePreference } from '@/stores/panel-preferences'
 
 export interface KitItem {
   /** 物品 ID（无命名空间前缀） */
@@ -23,10 +25,7 @@ export interface KitPreset {
   items: KitItem[]
 }
 
-/** localStorage 键 */
-export const KITS_STORAGE_KEY = 'mc_commander_kits'
-
-/** 默认礼包列表（首次使用或存储损坏时使用） */
+/** 默认礼包列表（从未配置过礼包时使用） */
 export const DEFAULT_KITS: KitPreset[] = [
   {
     name: '新手起步包',
@@ -145,23 +144,20 @@ export function kitFromJson(json: unknown): KitPreset | null {
   }
 }
 
-/** 从 localStorage 读取礼包列表（损坏回退默认礼包） */
-export function loadKitsFromStorage(storage: Storage): KitPreset[] {
-  try {
-    const raw = storage.getItem(KITS_STORAGE_KEY)
-    if (raw === null || raw.length === 0) return [...DEFAULT_KITS]
-    const parsed: unknown = JSON.parse(raw)
-    if (!Array.isArray(parsed) || parsed.length === 0) return [...DEFAULT_KITS]
-    const kits = parsed.map((e) => kitFromJson(e)).filter((e): e is KitPreset => e !== null)
-    return kits.length > 0 ? kits : [...DEFAULT_KITS]
-  } catch {
-    return [...DEFAULT_KITS]
-  }
+/**
+ * 从偏好快照派生礼包列表：渲染期直接订阅，列表本身不另存本地副本——
+ * 本地快照与服务端之间必然存在不一致窗口，而删除/新增都要基于最新列表整份覆盖。
+ *
+ * 空列表是「用户把礼包删光了」的合法配置，不回退默认：删掉的礼包下次打开又出现，
+ * 删除看起来就像没生效。只有从未写过这一项才用默认礼包。
+ */
+export function kitsFromPreferences(remote: PanelPreferences | null): KitPreset[] {
+  return remote?.kits ?? DEFAULT_KITS
 }
 
-/** 保存礼包列表到 localStorage */
-export function saveKitsToStorage(storage: Storage, kits: KitPreset[]): void {
-  storage.setItem(KITS_STORAGE_KEY, JSON.stringify(kits.map((k) => kitToJson(k))))
+/** 写入礼包列表（整份替换）；失败抛出，由调用方提示 */
+export function saveKits(kits: KitPreset[]): Promise<void> {
+  return writePreference('kits', kits)
 }
 
 /** 应用礼包时按 id 查找物品（不在目录中的 id 返回 undefined，调用方跳过） */

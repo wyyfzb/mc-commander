@@ -1,6 +1,6 @@
 /**
  * ConnectionForm 测试（连接表单）：
- * - 表单初始化（store 有值回填）/ 空值校验 warning toast
+ * - 表单初始化（store 有值回填）/ 校验（地址留空合法，API Key 按会话是否适用决定必填）
  * - 测试连接：成功（请求 URL/X-API-Key 正确 + 成功 toast，不写 store）/ 失败（ApiError 友好文案、
  *   网络错误通用文案）/ 在途 loading 禁用
  * - 公网 http 明文警告：触发 ConfirmDialog、取消中止、确认后继续；内网 http 不打扰
@@ -8,6 +8,7 @@
  * - API Key 掩码 + 明文切换
  * - onboarding variant：大标题布局、无状态行
  * - 标题层级（headingAs）：设置子页默认 h1，引导页传 h2 让位给页面级 h1
+ * - 从其他设备访问：设置页显示当前站点地址并可复制；onboarding 不显示
  * mock 数据为结构占位（虚构地址/密钥），严禁真实服务器信息
  */
 import { describe, it, expect, beforeEach, afterEach, afterAll, beforeAll, vi } from 'vitest'
@@ -165,6 +166,23 @@ function setSession(token = 'sess-token-abc') {
   })
 }
 
+/**
+ * 临时替换 window.location（jsdom 的 location 可配置）：换设备访问卡片按它算地址。
+ * 返回恢复函数——不恢复会把后面的用例一起带到假地址上。
+ */
+function stubLocation(href: string): () => void {
+  const url = new URL(href)
+  const original = Object.getOwnPropertyDescriptor(window, 'location')
+  Object.defineProperty(window, 'location', {
+    value: { origin: url.origin, hostname: url.hostname, host: url.host, href: url.href },
+    configurable: true,
+    writable: true,
+  })
+  return () => {
+    if (original) Object.defineProperty(window, 'location', original)
+  }
+}
+
 /** 造一个绑定到指定面板的登录会话（结构占位，非真实凭据） */
 function setBoundSession(issuedFor: string, token = 'sess-token-abc') {
   useAuthStore.setState({
@@ -196,11 +214,9 @@ describe('ConnectionForm 渲染', () => {
     expect(screen.getByLabelText('API Key')).toHaveValue('demo-key-123')
   })
 
-  it('地址输入下方显示协议说明辅助文案', () => {
+  it('地址输入下方说明留空即当前地址', () => {
     renderForm()
-    expect(
-      screen.getByText('支持 http/https 协议；局域网自建服务器推荐内网地址'),
-    ).toBeInTheDocument()
+    expect(screen.getByText(/留空即用当前地址/)).toBeInTheDocument()
   })
 
   it('settings variant：状态行三档——凭据存在不等于已连接', () => {
@@ -241,6 +257,54 @@ describe('ConnectionForm 渲染', () => {
     expect(screen.getByRole('button', { name: '连接并进入面板' })).toBeInTheDocument()
   })
 
+  it('从其他设备访问：非环回地址下显示当前站点地址并可复制；onboarding 不显示', async () => {
+    const restore = stubLocation('http://1.2.3.4:25566')
+    try {
+      const user = userEvent.setup()
+      renderForm({ variant: 'settings' })
+      expect(screen.getByText('http://1.2.3.4:25566')).toBeInTheDocument()
+
+      copyTextMock.mockClear()
+      await user.click(screen.getByRole('button', { name: '复制地址' }))
+      expect(copyTextMock).toHaveBeenCalledWith('http://1.2.3.4:25566')
+
+      cleanup()
+      // 引导页是「首次连上」的流程，地址还没确定，给不了这一块
+      renderForm({ variant: 'onboarding' })
+      expect(screen.queryByText('从其他设备访问')).not.toBeInTheDocument()
+    } finally {
+      restore()
+    }
+  })
+
+  it('从其他设备访问：本机地址（localhost/127.x）不给可复制地址，改为指路到服务器 IP', () => {
+    const restore = stubLocation('http://localhost:25566')
+    try {
+      renderForm({ variant: 'settings' })
+      // 环回地址在别的设备上打不开，给出它比不给更糟
+      expect(screen.queryByText('http://localhost:25566')).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: '复制地址' })).not.toBeInTheDocument()
+      expect(screen.getByText(/本机地址/)).toBeInTheDocument()
+    } finally {
+      restore()
+    }
+  })
+
+  it('从其他设备访问：同源用户（地址留空 + 有会话）可保存，且地址不被写成绝对地址', async () => {
+    setSession()
+    const user = userEvent.setup()
+    server.use(
+      http.get('*/api/v1/overview', () => okEnvelope(mockOverview)),
+      http.get('*/api/v1/auth/capabilities', () => okEnvelope({ apiKeyEnabled: true })),
+    )
+    renderForm({ variant: 'settings' })
+
+    await user.click(screen.getByRole('button', { name: '保存连接' }))
+    // 地址留空＝同源，请求走相对路径：钉成绝对地址会让用户换个地址访问时变成跨源
+    await waitFor(() => expect(useConnectionStore.getState().status).toBe('ready'))
+    expect(useConnectionStore.getState().baseUrl).toBe('')
+  })
+
   it('标题层级：默认 h1（设置子页里它就是该页主标题），headingAs="h2" 时降为二级标题', () => {
     renderForm({ variant: 'onboarding' })
     expect(screen.getByRole('heading', { level: 1, name: '连接你的服务器' })).toBeInTheDocument()
@@ -267,7 +331,7 @@ describe('ConnectionForm 渲染', () => {
 })
 
 describe('ConnectionForm 校验', () => {
-  it('空值：地址或 key 为空 → 行内错误提示，不弹警告、不发起请求', async () => {
+  it('地址留空（同源）不算空：只拦 API Key，不弹警告', async () => {
     let requested = 0
     server.use(
       http.get('*/api/v1/overview', () => {
@@ -279,19 +343,11 @@ describe('ConnectionForm 校验', () => {
     renderForm()
 
     await user.click(screen.getByRole('button', { name: '测试连接' }))
-    expect(screen.getByText('请填写服务器地址')).toBeInTheDocument()
-    expect(screen.getByText('请填写 API Key')).toBeInTheDocument()
-    expect(requested).toBe(0)
-
-    // 仅填地址仍视为空
-    await user.type(screen.getByLabelText('面板地址'), 'https://192.168.1.100:25566')
-    await user.click(screen.getByRole('button', { name: '测试连接' }))
     expect(screen.queryByText('请填写服务器地址')).not.toBeInTheDocument()
     expect(screen.getByText('请填写 API Key')).toBeInTheDocument()
     expect(requested).toBe(0)
 
     await user.click(screen.getByRole('button', { name: '保存连接' }))
-    expect(screen.queryByText('请填写服务器地址')).not.toBeInTheDocument()
     expect(screen.getByText('请填写 API Key')).toBeInTheDocument()
     expect(useConnectionStore.getState().apiKey).toBe('')
   })
@@ -988,6 +1044,17 @@ describe('ConnectionForm 复制 / 粘贴导入', () => {
     await waitFor(() => expect(written).toHaveLength(1))
     expect(written[0]).toBe('面板地址: https://panel-a.example.com\nAPI Key: fake-key-abcdef')
     expect(await screen.findByText('连接配置已复制')).toBeInTheDocument()
+  })
+
+  it('复制配置：地址留空（同源）时写出当前站点地址——别的设备解析不出空地址', async () => {
+    useConnectionStore.setState({ baseUrl: '', apiKey: 'fake-key-abcdef', status: 'ready' })
+    const written = captureClipboard()
+    const user = userEvent.setup()
+    renderForm({ variant: 'settings' })
+    await user.click(screen.getByRole('button', { name: '复制配置' }))
+
+    await waitFor(() => expect(written).toHaveLength(1))
+    expect(written[0]).toBe(`面板地址: ${window.location.origin}\nAPI Key: fake-key-abcdef`)
   })
 
   /**

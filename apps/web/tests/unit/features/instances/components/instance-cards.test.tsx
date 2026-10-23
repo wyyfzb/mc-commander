@@ -50,6 +50,8 @@ function baseProps(overrides: Partial<InstanceCardsProps> = {}): InstanceCardsPr
     busyId: null,
     phaseById: {},
     onDeploy: vi.fn(),
+    onCheckReachability: vi.fn(),
+    checkingReachabilityId: null,
     ...overrides,
   }
 }
@@ -231,17 +233,20 @@ describe('InstanceCards', () => {
     const card = (id: string) =>
       container.querySelector(`[data-instance-id="${id}"]`) as HTMLElement
 
-    // 卡片内除操作行外无其他按钮，故按钮集合即操作行
+    // 卡片里另有两类按钮：玩家连接地址的复制键（地址行）与可达性检测键（运行中才有）
     const labels = (id: string) =>
       within(card(id))
         .getAllByRole('button')
-        .map((b) => b.getAttribute('aria-label'))
+        .map((b) => b.getAttribute('aria-label') ?? b.textContent?.trim() ?? '')
     expect(labels('alpha')).toEqual([
+      '复制 虚构甲服 的玩家连接地址',
+      '检测',
       '停止 虚构甲服',
       '重启 虚构甲服',
       '切换到 虚构甲服',
       '虚构甲服 操作菜单',
     ])
+    // beta 没有详情数据：地址行不渲染（地址未知时不编造），故也没有复制键
     expect(labels('beta')).toEqual(['启动 虚构乙服', '切换到 虚构乙服', '虚构乙服 操作菜单'])
   })
 
@@ -252,8 +257,14 @@ describe('InstanceCards', () => {
     expect(
       within(card)
         .getAllByRole('button')
-        .map((b) => b.getAttribute('aria-label')),
-    ).toEqual(['停止 虚构甲服', '重启 虚构甲服', '虚构甲服 操作菜单'])
+        .map((b) => b.getAttribute('aria-label') ?? b.textContent?.trim() ?? ''),
+    ).toEqual([
+      '复制 虚构甲服 的玩家连接地址',
+      '检测',
+      '停止 虚构甲服',
+      '重启 虚构甲服',
+      '虚构甲服 操作菜单',
+    ])
   })
 
   /* 横幅说「重启实例后生效」，出口必须在这张卡上——只说「重启」而不给入口，
@@ -269,8 +280,15 @@ describe('InstanceCards', () => {
     expect(
       within(card)
         .getAllByRole('button')
-        .map((b) => b.getAttribute('aria-label')),
-    ).toEqual(['停止 虚构甲服', '重启 虚构甲服', '切换到 虚构甲服', '虚构甲服 操作菜单'])
+        .map((b) => b.getAttribute('aria-label') ?? b.textContent?.trim() ?? ''),
+    ).toEqual([
+      '复制 虚构甲服 的玩家连接地址',
+      '检测',
+      '停止 虚构甲服',
+      '重启 虚构甲服',
+      '切换到 虚构甲服',
+      '虚构甲服 操作菜单',
+    ])
 
     await user.click(within(card).getByRole('button', { name: '重启 虚构甲服' }))
     expect(onRestart).toHaveBeenCalledWith(expect.objectContaining({ id: 'alpha' }))
@@ -622,5 +640,84 @@ describe('InstanceCards 实例事实载体（刷新时机 / 低 TPS / 待重启�
     expect(value).not.toHaveClass('text-mcs-warning-fg')
     expect(value).not.toHaveClass('text-mcs-error-fg')
     expect(value).toHaveAttribute('title', '20.0')
+  })
+  /* 玩家连接地址的正确归宿：顶栏那份只在 lg 以上可见，且随选中实例变化，
+     多实例时用户无法从顶栏看出「这个服」的地址——必须落到卡片上 */
+  describe('玩家连接地址与可达性', () => {
+    const card = (c: HTMLElement, id = 'alpha') =>
+      c.querySelector(`[data-instance-id="${id}"]`) as HTMLElement
+
+    it('卡片显示该实例自己的连接地址', () => {
+      const { container } = render(<InstanceCards {...baseProps()} />)
+      expect(within(card(container)).getByText('1.2.3.4:25565')).toBeInTheDocument()
+    })
+
+    it('没有详情时不编造地址', () => {
+      const { container } = render(<InstanceCards {...baseProps()} />)
+      // beta 无详情数据
+      expect(within(card(container, 'beta')).queryByText('玩家连接')).not.toBeInTheDocument()
+    })
+
+    it('可达性为 blocked 时明确说玩家还连不进来', () => {
+      const { container } = render(
+        <InstanceCards
+          {...baseProps({
+            detailStatuses: {
+              alpha: {
+                ...mockInstanceStatus,
+                id: 'alpha',
+                name: '虚构甲服',
+                reachability: 'blocked',
+              },
+            },
+          })}
+        />,
+      )
+      expect(within(card(container)).getByText('玩家还连不进来')).toBeInTheDocument()
+    })
+
+    it('可达或未检测时不打扰（不显示警示）', () => {
+      for (const reachability of ['reachable', null, undefined] as const) {
+        const { container, unmount } = render(
+          <InstanceCards
+            {...baseProps({
+              detailStatuses: {
+                alpha: {
+                  ...mockInstanceStatus,
+                  id: 'alpha',
+                  name: '虚构甲服',
+                  reachability: reachability ?? null,
+                },
+              },
+            })}
+          />,
+        )
+        expect(within(card(container)).queryByText('玩家还连不进来')).not.toBeInTheDocument()
+        unmount()
+      }
+    })
+
+    it('运行中的实例才有检测按钮，已停止不给（端口未监听，测了只会误报）', () => {
+      const { container } = render(<InstanceCards {...baseProps()} />)
+      expect(within(card(container)).getByRole('button', { name: '检测' })).toBeInTheDocument()
+      // beta 已停止
+      expect(within(card(container, 'beta')).queryByRole('button', { name: '检测' })).toBeNull()
+    })
+
+    it('点检测触发回调并携带实例 id', async () => {
+      const user = userEvent.setup()
+      const onCheckReachability = vi.fn()
+      const { container } = render(<InstanceCards {...baseProps({ onCheckReachability })} />)
+      await user.click(within(card(container)).getByRole('button', { name: '检测' }))
+      expect(onCheckReachability).toHaveBeenCalledWith('alpha')
+    })
+
+    it('检测中按钮转文案并禁用', () => {
+      const { container } = render(
+        <InstanceCards {...baseProps({ checkingReachabilityId: 'alpha' })} />,
+      )
+      const btn = within(card(container)).getByRole('button', { name: '检测中…' })
+      expect(btn).toBeDisabled()
+    })
   })
 })

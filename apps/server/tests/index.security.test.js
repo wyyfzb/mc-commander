@@ -30,7 +30,7 @@ function mockCfgRoot() {
 }
 const h = vi.hoisted(() => {
   const appUse = vi.fn();
-  const app = { use: appUse, set: vi.fn() };
+  const app = { use: appUse, set: vi.fn(), get: vi.fn() };
   const serverOn = vi.fn();
   const server = {
     listen: vi.fn((port, host, cb) => typeof cb === 'function' && cb()),
@@ -65,6 +65,13 @@ vi.mock('ws', () => ({
     constructor(options) {
       h.wsOpts = options;
     }
+    // 停机路径会调 close：桩缺它会让 shutdown 抛错，把用例失败伪装成「关闭失败」
+    close(cb) {
+      if (typeof cb === 'function') cb();
+    }
+    handleUpgrade() {}
+    emit() {}
+    on() {}
   },
 }));
 vi.mock('../src/config.js', () => ({
@@ -99,6 +106,9 @@ vi.mock('../src/config.js', () => ({
     },
     logLevel: 'info',
     rateLimit: { windowMs: 60000, max: 100 },
+    // TLS 关闭：本文件断言的是明文链路的中间件装配顺序，开 TLS 会让
+    // https.createServer 与 mux 进来，被测结构就不是这里要验的那个了
+    tls: { enabled: false },
   },
 }));
 vi.mock('../src/middleware/auth.js', () => ({
@@ -164,18 +174,27 @@ function resetAndImport() {
   return import('../src/index.js');
 }
 
-describe('WebSocketServer maxPayload', () => {
+describe('WebSocketServer maxPayload 与路径守卫', () => {
   beforeEach(() => {
     vi.unstubAllEnvs();
     vi.stubEnv('NODE_ENV', 'development');
     h.apiKeyHash = VALID_HASH;
   });
 
-  it('WebSocketServer 构造应设置 maxPayload 为 1MB 并保留原 path', async () => {
+  it('WebSocketServer 构造应设置 maxPayload 为 1MB', async () => {
     await resetAndImport();
     expect(h.wsOpts).not.toBeNull();
-    expect(h.wsOpts.path).toBe('/ws');
     expect(h.wsOpts.maxPayload).toBe(1024 * 1024);
+  });
+
+  // 同一端口要同时接明文与 TLS，两个 server 都要能升级 WS，故 wss 走 noServer
+  // 模式自行 handleUpgrade——此时路径不再由 wss 的 path 选项把关，必须由
+  // upgrade 处理器自己做，否则任意路径都能建立 WS 连接
+  it('WS 路径守卫挂在 server 的 upgrade 事件上（noServer 模式下 wss 不再自行按路径拒绝）', async () => {
+    await resetAndImport();
+    const upgradeCalls = h.serverOn.mock.calls.filter(([event]) => event === 'upgrade');
+    expect(upgradeCalls).toHaveLength(1);
+    expect(typeof upgradeCalls[0][1]).toBe('function');
   });
 });
 

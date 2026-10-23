@@ -471,6 +471,26 @@ function createTables() {
     logger.info('Migration: added machine_credentials table');
   }
 
+  // 迁移 v16：面板级偏好（跨设备一致的配置）。
+  //
+  // 这些数据不属于任何一台设备——命令预设、礼包、快捷传送点是服主对这台服务器的
+  // 配置，换设备/换浏览器后应看到同一份。存本机的只剩三类：凭据（同步等于扩大
+  // 泄漏面）、设备显示习惯、会话态。
+  //
+  // 键值表而非每类一表：访问方式只有「整份读、整份写」，没有关联查询与按实例
+  // 过滤的需求；value 存 JSON，新增一类预设不必再动表结构。
+  if (userVersion < 16) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS panel_preferences (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    db.pragma('user_version = 16');
+    logger.info('Migration: added panel_preferences table');
+  }
+
   // 创建索引
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_admin_sessions_expires ON admin_sessions(expires_at);

@@ -1,13 +1,15 @@
 /**
  * notification-preferences store 单测：
- * 默认全开 / 单类型开关 / 类级批量开关 / localStorage 持久化往返
+ * 默认全开 / 单类型开关 / 类级批量开关 / 写入面板偏好（跨设备一致）
  */
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useNotificationPreferenceStore } from '@/stores/notification-preferences'
+import { usePanelPreferencesStore } from '@/stores/panel-preferences'
 
 beforeEach(() => {
-  localStorage.clear()
   useNotificationPreferenceStore.setState({ prefs: {} })
+  usePanelPreferencesStore.setState({ remote: {}, saving: false })
+  vi.restoreAllMocks()
 })
 
 describe('notification-preferences', () => {
@@ -48,19 +50,24 @@ describe('notification-preferences', () => {
     expect(useNotificationPreferenceStore.getState().isEnabled('save')).toBe(true)
   })
 
-  it('localStorage 持久化往返：关闭项重载后保持关闭', () => {
-    const store = useNotificationPreferenceStore.getState()
-    store.setEnabled('death', false)
+  it('关闭项写入面板偏好（换设备/换浏览器后仍是关闭）', () => {
+    const save = vi.spyOn(usePanelPreferencesStore.getState(), 'save').mockResolvedValue(undefined)
 
-    // 模拟新会话：从 localStorage 重新读取
-    const raw = localStorage.getItem('mcs-notification-preferences')
-    expect(raw).not.toBeNull()
-    const parsed = JSON.parse(raw as string) as Record<string, { toast: boolean }>
-    expect(parsed.death?.toast).toBe(false)
+    useNotificationPreferenceStore.getState().setEnabled('death', false)
 
-    // 用读到的原始数据重建（等价于 store 重启）
-    useNotificationPreferenceStore.setState({ prefs: parsed })
+    expect(save).toHaveBeenCalledWith({ notificationPreferences: { death: { toast: false } } })
+  })
+
+  it('偏好拉回后整体替换：重载后关闭项保持关闭', () => {
+    useNotificationPreferenceStore.getState().replaceAll({ death: { toast: false } })
+
     expect(useNotificationPreferenceStore.getState().isEnabled('death')).toBe(false)
     expect(useNotificationPreferenceStore.getState().isEnabled('revive')).toBe(true)
+  })
+
+  it('不写本机 localStorage（落点是服务端偏好）', () => {
+    useNotificationPreferenceStore.getState().setEnabled('death', false)
+
+    expect(localStorage.getItem('mcs-notification-preferences')).toBeNull()
   })
 })

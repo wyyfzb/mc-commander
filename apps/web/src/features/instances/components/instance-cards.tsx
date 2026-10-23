@@ -25,10 +25,13 @@ import {
   Server,
   Settings,
   ShieldAlert,
+  Copy,
   Square,
   Trash2,
   TriangleAlert,
 } from 'lucide-react'
+import { toast } from 'sonner'
+import { copyText } from '@/lib/clipboard'
 import { useEffect, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import {
@@ -109,6 +112,10 @@ export interface InstanceCardsProps {
   onDeploy: () => void
   /** 内存余量一行；null 表示暂无读数 */
   remainingMemoryText?: string | null
+  /** 现测玩家可达性；页面负责调接口并刷新该实例详情 */
+  onCheckReachability?: (id: string) => void
+  /** 正在检测的实例 id（按钮转「检测中」并禁用） */
+  checkingReachabilityId?: string | null
 }
 
 export function InstanceCards({
@@ -130,6 +137,8 @@ export function InstanceCards({
   phaseById,
   onDeploy,
   remainingMemoryText,
+  onCheckReachability,
+  checkingReachabilityId,
 }: InstanceCardsProps) {
   if (instances.length === 0) {
     return (
@@ -166,6 +175,10 @@ export function InstanceCards({
           onStart={onStart}
           onStop={onStop}
           onRestart={onRestart}
+          onCheckReachability={
+            onCheckReachability ? () => onCheckReachability(instance.id) : undefined
+          }
+          checkingReachability={checkingReachabilityId === instance.id}
           className={`animate-mcs-fade-up mcs-delay-${Math.min(index + 1, 6)}`}
         />
       ))}
@@ -198,6 +211,8 @@ function InstanceCard({
   onStart,
   onStop,
   onRestart,
+  onCheckReachability,
+  checkingReachability,
   className,
 }: {
   instance: InstanceSummary
@@ -218,6 +233,9 @@ function InstanceCard({
   onStop: (instance: InstanceSummary) => void
   /** 重启（页面负责确认弹窗）：与停止不同，重启不留停机窗口 */
   onRestart: (instance: InstanceSummary) => void
+  /** 现测玩家可达性（页面负责调接口与刷新详情） */
+  onCheckReachability?: () => void
+  checkingReachability?: boolean
   /** 入场 stagger（页面组合处注入，组件内不内嵌动效类） */
   className?: string
 }) {
@@ -339,6 +357,52 @@ function InstanceCard({
           </StatusPill>
         )}
       </div>
+
+      {/* 玩家连接地址：这是「发给朋友」的那串，必须在本卡出现——顶栏那份只在 lg 以上可见，
+          且随选中实例变化，多实例时用户无法从顶栏看出「这个服」的地址 */}
+      {detail?.address && (
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="text-mcs-2xs text-mcs-text-muted">玩家连接</span>
+          <code className="font-mono text-mcs-xs text-mcs-text-default">{detail.address}</code>
+          <button
+            type="button"
+            onClick={() =>
+              // 玩家习惯不带端口（默认 25565），而实例端口在 25567 以上：
+              // 只说「已复制」时，用户把地址拆开发给朋友很容易漏掉端口
+              void copyText(detail.address).then((ok) =>
+                ok
+                  ? toast.success('已复制，含端口，请整串发给朋友', { duration: 2500 })
+                  : toast.error('复制失败，请手动选中复制'),
+              )
+            }
+            aria-label={`复制 ${name} 的玩家连接地址`}
+            className="rounded-mcs-xs p-0.5 text-mcs-text-muted transition-colors hover:bg-mcs-state-hover hover:text-mcs-text-default focus-visible:outline-2 focus-visible:outline-mcs-focus-ring focus-visible:outline-offset-1"
+          >
+            <Copy className="size-3" aria-hidden />
+          </button>
+          {/* 地址能显示 ≠ 玩家连得上：云主机的安全组是独立一层，面板放行不了，
+              只能测出来并指路。blocked 时才提示——可达或未检测都不打扰 */}
+          {detail.reachability === 'blocked' && (
+            <StatusPill
+              tone="warning"
+              className="text-mcs-2xs"
+              title="本地已在监听，但外网连不进来；需要在云控制台放行这个端口"
+            >
+              玩家还连不进来
+            </StatusPill>
+          )}
+          {isRunning && onCheckReachability && (
+            <button
+              type="button"
+              onClick={onCheckReachability}
+              disabled={checkingReachability}
+              className="rounded-mcs-xs px-1 text-mcs-2xs text-mcs-text-muted transition-colors hover:bg-mcs-state-hover hover:text-mcs-text-default focus-visible:outline-2 focus-visible:outline-mcs-focus-ring focus-visible:outline-offset-1 disabled:opacity-50"
+            >
+              {checkingReachability ? '检测中…' : '检测'}
+            </button>
+          )}
+        </div>
+      )}
 
       {/* 指标行（在线/TPS/内存/世界大小；详情缺省 —）
           这里的 memoryUsage 是**进程驻留内存**（服务端 stats-collector 三平台分支分别取

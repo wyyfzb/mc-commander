@@ -13,9 +13,29 @@ import { Toaster, toast as sonnerToast } from 'sonner'
 import { GiveItemPanel } from '@/features/players/components/give-item-dialog'
 import { MINECRAFT_ITEMS } from '@/lib/mc-items'
 import { MINECRAFT_POTIONS } from '@/lib/mc-potions'
-import { DEFAULT_KITS, KITS_STORAGE_KEY, type KitPreset } from '@/lib/mc-kits'
+import { DEFAULT_KITS, type KitPreset } from '@/lib/mc-kits'
+import { usePanelPreferencesStore } from '@/stores/panel-preferences'
 import type { Player } from '@/api/types'
 import type { PlayerActionRequest } from '@/features/players/mutations'
+
+// 面板偏好走服务端：假实现记录每次 PUT 的补丁并返回合并后的快照，
+// 与真实路由「整份写入单项、返回完整快照」一致
+const preferences = vi.hoisted(() => {
+  const state: { remote: Record<string, unknown>; writes: Record<string, unknown>[] } = {
+    remote: {},
+    writes: [],
+  }
+  return state
+})
+
+vi.mock('@/api/preferences', () => ({
+  apiGetPreferences: async () => preferences.remote,
+  apiPutPreferences: async (_config: unknown, patch: Record<string, unknown>) => {
+    preferences.remote = { ...preferences.remote, ...patch }
+    preferences.writes.push(patch)
+    return preferences.remote
+  },
+}))
 
 // ── 结构占位 mock ────────────────────────────────────────────────
 
@@ -128,6 +148,10 @@ if (typeof Element.prototype.hasPointerCapture !== 'function') {
 
 beforeEach(() => {
   localStorage.clear()
+  // 偏好快照按「已拉回且为空」起测：未拉回时写入会被 store 拒绝，属单独用例
+  preferences.remote = {}
+  preferences.writes = []
+  usePanelPreferencesStore.setState({ remote: {}, saving: false })
   // sonner toast 存于模块级 store，跨测试残留会导致同文案 toast 重复匹配
   sonnerToast.dismiss()
 })
@@ -535,7 +559,7 @@ describe('GiveItemPanel 预设礼包', { timeout: 15000 }, () => {
     expect(screen.getByText(/已选 9 种物品/)).toBeInTheDocument()
   })
 
-  it('新建礼包：编辑器校验 + 创建 + localStorage 持久化', async () => {
+  it('新建礼包：编辑器校验 + 创建 + 写入面板偏好', async () => {
     const user = userEvent.setup()
     renderPanel()
     await openKitsTab(user)
@@ -553,8 +577,8 @@ describe('GiveItemPanel 预设礼包', { timeout: 15000 }, () => {
     expect(within(dialog).getByText('当前物品（1）')).toBeInTheDocument()
     fireEvent.click(within(dialog).getByRole('button', { name: '创建' }))
     expect(await screen.findByText('已添加礼包「测试礼包」')).toBeInTheDocument()
-    // localStorage 持久化（schema：{name, icon, desc, items}）
-    const stored = JSON.parse(localStorage.getItem(KITS_STORAGE_KEY)!) as KitPreset[]
+    // 整份写入面板偏好（schema：{name, icon, desc, items}）
+    const stored = preferences.writes.at(-1)?.kits as KitPreset[]
     expect(stored).toHaveLength(DEFAULT_KITS.length + 1)
     const created = stored.find((k) => k.name === '测试礼包')
     expect(created?.icon).toBe('⭐')
@@ -577,7 +601,7 @@ describe('GiveItemPanel 预设礼包', { timeout: 15000 }, () => {
     fireEvent.click(within(dialog).getByRole('button', { name: '保存' }))
     expect(await screen.findByText('已更新礼包「起步包改」')).toBeInTheDocument()
     expect(screen.getByTestId('kit-card-起步包改')).toBeInTheDocument()
-    const stored = JSON.parse(localStorage.getItem(KITS_STORAGE_KEY)!) as KitPreset[]
+    const stored = preferences.writes.at(-1)?.kits as KitPreset[]
     expect(stored.some((k) => k.name === '起步包改')).toBe(true)
   })
 
@@ -593,8 +617,23 @@ describe('GiveItemPanel 预设礼包', { timeout: 15000 }, () => {
     fireEvent.click(within(dialog).getByRole('button', { name: '删除' }))
     expect(await screen.findByText('已删除礼包「新手起步包」')).toBeInTheDocument()
     expect(screen.queryByTestId('kit-card-新手起步包')).not.toBeInTheDocument()
-    const stored = JSON.parse(localStorage.getItem(KITS_STORAGE_KEY)!) as KitPreset[]
+    const stored = preferences.writes.at(-1)?.kits as KitPreset[]
     expect(stored).toHaveLength(DEFAULT_KITS.length - 1)
     expect(stored.some((k) => k.name === '新手起步包')).toBe(false)
+  })
+
+  it('偏好尚未拉回时保存：提示失败且服务端礼包不变', async () => {
+    const user = userEvent.setup()
+    usePanelPreferencesStore.setState({ remote: null, saving: false })
+    renderPanel()
+    await openKitsTab(user)
+    await user.click(screen.getByLabelText('新手起步包 礼包操作'))
+    await user.click(screen.getByRole('menuitem', { name: /删除/ }))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: '删除' }))
+    expect(await screen.findByText('礼包保存失败，请重试')).toBeInTheDocument()
+    expect(preferences.writes).toEqual([])
+    // 卡片仍在：列表派生自快照，写入失败不会本地先删
+    expect(screen.getByTestId('kit-card-新手起步包')).toBeInTheDocument()
   })
 })
