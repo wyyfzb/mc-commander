@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.1](https://github.com/wyyfzb/mc-commander/compare/v0.10.0...v0.10.1) (2026-10-23)
+
+
+### Bug Fixes
+
+* **server:** 卸载真的会卸掉系统包与软件源 ([#681](https://github.com/wyyfzb/mc-commander/issues/681)) ([a1c4357](https://github.com/wyyfzb/mc-commander/commit/a1c43573473dd8002b41562daf4f8aa1fe78743b))
+
 ## [0.10.0](https://github.com/wyyfzb/mc-commander/compare/v0.9.0...v0.10.0) (2026-10-23)
 
 
