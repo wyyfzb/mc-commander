@@ -20,6 +20,7 @@ import {
   EyeOff,
   Info,
   Loader2,
+  MonitorSmartphone,
   RefreshCw,
   Save,
   Wifi,
@@ -33,6 +34,7 @@ import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
 import { Card } from '@/components/mcs/card'
 import { InfoHint } from '@/components/mcs/info-hint'
+import { SettingsSectionCard as SectionCard } from './settings-section-card'
 import { cn } from '@/lib/utils'
 import { ApiError, apiPost, apiRequest } from '@/api/client'
 import type { OverviewData } from '@/api/types'
@@ -41,6 +43,8 @@ import { useApiKeyCapabilities } from '@/api/queries'
 import {
   normalizeBaseUrl,
   needsHttpPlaintextWarning,
+  panelAddress,
+  panelShareAddress,
   parseConnectionConfig,
   serializeConnectionConfig,
   sessionAppliesToPanel,
@@ -95,7 +99,6 @@ export function ConnectionForm({
   const [testedOk, setTestedOk] = useState(false)
   const [latencyMs, setLatencyMs] = useState<number | null>(null)
   const [pendingAction, setPendingAction] = useState<PendingAction>(null)
-  const [urlError, setUrlError] = useState('')
   const [keyError, setKeyError] = useState('')
   /** 粘贴导入区是否展开（默认收起：它是「换设备/帮别人配」的旁路，不是每次配置都要走） */
   const [importOpen, setImportOpen] = useState(false)
@@ -145,18 +148,25 @@ export function ConnectionForm({
   const statusLabel = isConnected ? '已连接' : status === 'ready' ? '凭据已配置' : '未连接'
 
   /**
+   * 当前站点的面板身份（会话签发面板用的同一口径）。
+   * 空地址＝同源，取当前站点根；复制配置时用它把「留空」落成别的设备能解析的绝对地址。
+   */
+  const currentPanelAddress = panelAddress('')
+  /** null = 当前是本机地址，别的设备访问不到，卡片改为指路到服务器 IP */
+  const shareAddress =
+    typeof window === 'undefined'
+      ? null
+      : panelShareAddress({ origin: window.location.origin, hostname: window.location.hostname })
+
+  /**
    * 空值校验（测试/保存前置）——行内提示，对齐 deploy-dialog 范式。
+   * 地址留空合法：它表示同源，请求走相对路径，换个地址访问照样对——按「没填」拦下会把
+   * 同源部署的用户（默认形态）挡在保存之外。
    * API Key 只在该地址没有可用登录会话时必填：有会话时客户端走 Bearer（双通道互斥，Key 不参与请求），
    * 仍强制填写会把密码登录用户挡在门外——他们手上没有服务端 .env 里的 Key，连地址都改不了
    */
   function ensureFilled(): boolean {
     let valid = true
-    if (url.trim() === '') {
-      setUrlError('请填写服务器地址')
-      valid = false
-    } else {
-      setUrlError('')
-    }
     if (!sessionApplies && apiKey.trim() === '') {
       setKeyError('请填写 API Key')
       valid = false
@@ -249,8 +259,10 @@ export function ConnectionForm({
    */
   async function handleCopyConfig() {
     if (!ensureFilled()) return
+    // 地址留空＝同源，只有本机能解析；复制给别的设备必须写绝对地址，否则那边导入解析不出面板
+    const target = normalizeBaseUrl(url) || currentPanelAddress
     // copyText 内部降级 execCommand，且绝不抛异常（HTTP 非安全上下文也可用）
-    const ok = await copyText(serializeConnectionConfig({ baseUrl: normalizeBaseUrl(url), apiKey }))
+    const ok = await copyText(serializeConnectionConfig({ baseUrl: target, apiKey }))
     if (ok) {
       toast.success('连接配置已复制', {
         description: '粘贴到另一台设备的「粘贴导入」即可，注意它含 API Key 明文',
@@ -259,6 +271,14 @@ export function ConnectionForm({
     } else {
       toast.error('复制失败，请手动选中复制')
     }
+  }
+
+  /** 复制当前面板地址（不带任何凭据：给的是「去哪」，不是「以什么身份进」） */
+  async function handleCopyPanelAddress() {
+    if (shareAddress === null) return
+    const ok = await copyText(shareAddress)
+    if (ok) toast.success('地址已复制')
+    else toast.error('复制失败，请手动选中复制')
   }
 
   /** 粘贴导入：填入表单但**不自动保存**——走既有的「测试连接 → 保存」链路，用户仍有确认机会 */
@@ -271,7 +291,6 @@ export function ConnectionForm({
     setUrl(parsed.baseUrl)
     setApiKey(parsed.apiKey)
     setTestedOk(false)
-    setUrlError('')
     setKeyError('')
     setImportError('')
     setImportText('')
@@ -367,15 +386,13 @@ export function ConnectionForm({
           onChange={(e) => {
             setUrl(e.target.value)
             setTestedOk(false)
-            setUrlError('')
           }}
           placeholder="https://192.168.1.100:25566"
           autoComplete="off"
           spellCheck={false}
         />
-        {urlError !== '' && <p className="text-mcs-xs text-mcs-error-fg">{urlError}</p>}
         <p className="text-mcs-xs text-mcs-text-muted">
-          支持 http/https 协议；局域网自建服务器推荐内网地址
+          留空即用当前地址；连其他面板才需填完整地址（支持 http/https，局域网推荐内网地址）
         </p>
         {foreignSession && (
           <NoticeBanner variant="info" icon={Info}>
@@ -579,6 +596,42 @@ export function ConnectionForm({
       <Card as="div" className={cn('flex flex-col gap-5 p-6', variant === 'settings' && 'mt-4')}>
         {formFields}
       </Card>
+
+      {variant === 'settings' && (
+        <div className="mt-4">
+          <SectionCard
+            icon={MonitorSmartphone}
+            title="从其他设备访问"
+            description={
+              shareAddress === null
+                ? '当前地址只有这台机器能打开，其他设备需要一个服务器地址'
+                : '在手机、另一台电脑的浏览器里打开下面这个地址，即可管理同一个面板'
+            }
+          >
+            {shareAddress === null ? (
+              <NoticeBanner variant="info" icon={Info}>
+                本机地址只有这台机器能打开。用服务器的公网或内网 IP
+                重新打开面板后，这里会显示可分享的地址。
+              </NoticeBanner>
+            ) : (
+              <div className="flex flex-wrap items-center gap-2">
+                <code className="min-w-0 flex-1 truncate rounded-mcs-sm bg-mcs-bg-muted px-2.5 py-2 font-mono text-mcs-sm text-mcs-text-default">
+                  {shareAddress}
+                </code>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void handleCopyPanelAddress()}
+                >
+                  <Copy className="size-3.5" aria-hidden />
+                  复制地址
+                </Button>
+              </div>
+            )}
+          </SectionCard>
+        </div>
+      )}
 
       <ConfirmDialog
         open={pendingAction !== null}

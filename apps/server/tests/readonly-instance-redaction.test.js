@@ -285,6 +285,8 @@ describe('敏感字段 × 裁剪清单哨兵（新增契约字段必须显式分
       // 与 address 同属「客户端连接信息」：只说明该地址是公网还是内网，
       // 不泄露任何凭据/路径，readonly 视图本就给了 address，故一并保留
       'addressType',
+      'reachability',
+      'port',
       'players',
       'playerCount',
       'maxPlayers',

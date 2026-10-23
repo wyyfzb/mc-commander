@@ -16,14 +16,15 @@
  */
 import fs from 'node:fs';
 import crypto from 'node:crypto';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import config from '../config.js';
 import { atomicWriteFile } from './fs-utils.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-/** .env 路径与 config.js 的 dotenv 加载路径一致（服务端根目录） */
-const DEFAULT_ENV_PATH = path.resolve(__dirname, '../.env');
+/**
+ * .env 路径必须取 config 的 dotenv 加载源：同一份文件被读写。
+ * 从模块目录上推（utils/../.env）在 src/ 布局下指向 src/.env，而真实 .env 在包根——
+ * 读不到也写不到，作废失败却不报错（best-effort 吞掉），令牌会永远留在 .env 里。
+ */
+export const DEFAULT_ENV_PATH = config.envFilePath;
 
 /** 内存中的当前 token：模块加载时自 config（.env）读入，作废后即清空 */
 let currentToken = config.setupToken || '';

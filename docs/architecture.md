@@ -5,7 +5,7 @@ MC_Commander 由两部分组成：**服务端**（Node.js，部署在 Minecraft 
 无需在 Minecraft 服务端安装任何插件。
 
 两端的接口契约由共享包 `apps/schemas/`（zod）单一维护：前端经 vite alias 直读其 `src`，
-服务端经 `file:` 链接消费其构建产物 `dist`——因此改 `src` 后必须重建并一并提交 `dist`。
+服务端经 workspace 链接消费其构建产物 `dist`——`dist` 是构建产物、不入库，改 `src` 后重建即可。
 
 ```
 ┌─────────────┐  HTTPS/WSS   ┌──────────────────────┐   RCON / HTTP   ┌──────────────┐
@@ -20,6 +20,9 @@ MC_Commander 由两部分组成：**服务端**（Node.js，部署在 Minecraft 
 ## 服务端（apps/server/）
 
 - **入口**：`src/index.js`（Express + ws），同源托管 `public/` 下的前端产物
+- **传输层**：同一端口上按连接首字节分流明文与 TLS（`services/tls/`），证书由面板
+  自签（本地 CA，100 年，`var/data/tls/`）；HTTP 通道始终保留且从不重定向，
+  未导入根证书的设备照常可用。理由见 SECURITY.md 的「传输层加密」一节
 - **认证**：双通道 —— 管理员会话（`Authorization: Bearer`，面板默认路径）与全局 API Key
   （`X-API-Key` 头，脚本/集成），+ 双级速率限制（见 SECURITY.md 信任模型）
 - **实例管理**：`services/mc_server.js` —— 子进程生命周期（spawn/崩溃检测/自动重启）、
@@ -42,8 +45,7 @@ MC_Commander 由两部分组成：**服务端**（Node.js，部署在 Minecraft 
   settings/dashboard/onboarding/plugins/webhooks/audit/auth），跨域复用下沉
   `src/lib/`、`src/components/mcs/`
 - **通信**：REST（`src/api/`）+ WebSocket 优先、HTTP 轮询保底降级
-- **测试**：vitest + @testing-library + msw（单测 141 文件）；Playwright e2e 12 spec
-  （mock 后端 + dev server 双 webServer 自启）。（文件数为 v0.2.1 时点，仅示意规模）
+- **测试**：vitest + @testing-library + msw（单测）；Playwright e2e（`tools/e2e/`，mock 后端 + dev server 双 webServer 自启）
 
 ## 实时事件：状态与事件的分类口径
 

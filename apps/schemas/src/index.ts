@@ -67,6 +67,7 @@ export {
   crashArtifactQuerySchema,
   instanceSummarySchema,
   instanceStatusSchema,
+  reachabilitySchema,
   instanceStatusListSchema,
   instanceUpdatePayloadSchema,
   instanceSettingsRequestBodySchema,
@@ -353,6 +354,8 @@ export {
   panelErrorEntrySchema,
   panelErrorsSchema,
   panelErrorsQuerySchema,
+  httpsStatusSchema,
+  type HttpsStatus,
   type DiskInfo,
   type DiskUsage,
   type DiskAlertThresholds,
@@ -362,6 +365,31 @@ export {
   type PanelErrorEntry,
   type PanelErrors,
 } from './system'
+
+// 面板偏好（跨设备一致的配置）
+export {
+  PANEL_PREFERENCE_KEYS,
+  panelPreferencesSchema,
+  panelPreferencesPatchSchema,
+  commandPresetsSchema,
+  announcementPresetSchema,
+  announcementPresetsSchema,
+  kitItemSchema,
+  kitPresetSchema,
+  kitsSchema,
+  quickTeleportPointSchema,
+  quickTeleportsSchema,
+  notificationPreferencesSchema,
+  type PanelPreferenceKey,
+  type PanelPreferences,
+  type PanelPreferencesPatch,
+  type AnnouncementPreset,
+  type KitItem,
+  type KitPreset,
+  type QuickTeleportPoint,
+  type QuickTeleports,
+  type NotificationPreferences,
+} from './preferences'
 
 // 认证与 API Key
 export {

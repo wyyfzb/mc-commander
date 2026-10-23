@@ -1,537 +1,284 @@
+<h1 align="center">MC_Commander</h1>
+<p align="center">自托管的 Minecraft 服务器管理面板：不装插件、不进游戏，在浏览器里管玩家、管服务器。</p>
+
 <p align="center">
   <img src="https://img.shields.io/github/actions/workflow/status/wyyfzb/mc-commander/ci.yml?branch=main&style=flat-square&label=CI" alt="CI">
   <img src="https://img.shields.io/github/v/release/wyyfzb/mc-commander?style=flat-square&label=version&color=blue" alt="Version">
   <img src="https://img.shields.io/badge/license-AGPL--3.0-green?style=flat-square" alt="License">
 </p>
 
-<h1 align="center">MC_Commander</h1>
-<p align="center">自托管 Minecraft 服务器管理面板 — 图形化免命令管理你的 MC 服务器</p>
+<p align="center">
+  <a href="#快速开始"><b>我要安装 →</b></a>　·　<a href="https://github.com/wyyfzb/mc-commander"><b>我要看代码 →</b></a>
+</p>
 
-MC_Commander 是一个自托管的 Minecraft 服务器管理工具。**核心定位：图形化界面拼装指令，服主无需手敲任何 MC 命令**——可视化给予物品（含附魔/药水）、传送、封禁、踢出等操作全部由面板自动生成指令。架构为 **Web 前端（React 19）+ Node.js 服务端（Express + WebSocket + better-sqlite3）**，浏览器直接访问即用。**面板本身不要求你在 MC 服务端安装任何东西**（不需要前置插件、也不进游戏）：管理操作经 RCON 下发原版命令，状态回读直接解析服务端文件，因此 Vanilla / Paper / Purpur / Fabric / Forge 各类服务端都能直接用。**起步依赖极少**：一个 Node.js 22+ 进程即可跑起来（Java 由部署脚本按 MC 版本自动安装），**不强制任何容器或数据库中间件**；需要容器化编排时也能自行容器化部署。功能覆盖 MC 服务器全生命周期——建服、运营、扩展、排障、迁移——以友好直观的界面与交互，打造高效、省心、值得信赖的服务器控制面板。国内用户可访问 gitee 镜像仓库（`https://gitee.com/wyyfzb/mc-commander`，分支/标签自动同步；**发布产物与校验摘要由 CI 同步到其 Release**，部署脚本会自动选用最快的源，无需任何配置）。
+<p align="center">
+  <img src="docs/assets/screenshots/dashboard.png" width="32%" alt="仪表盘">
+  <img src="docs/assets/screenshots/players.png" width="32%" alt="玩家管理">
+  <img src="docs/assets/screenshots/instances.png" width="32%" alt="实例列表">
+</p>
 
-> **能力边界（先说清，避免预期错配）**：本面板通过 RCON 与存档文件工作，因此能力上限受
-> **原版命令空间 + 文件格式 + 官方管理协议（MSMP）**约束——例如「离线玩家背包写入」
-> 「禁言」这类原版做不到、文件也写不进去的操作，本面板**不做伪实现**。需要装插件才能
-> 实现的管理功能（权限组、经济、领地等）不在本面板范围内——本面板管的是**服务器与玩家
-> 本身**，不替代服务端插件生态。
->
-> 括注里的 **MSMP** 指 Mojang 自 1.21.9 起内置的 *Minecraft Server Management Protocol*：
-> 它是本面板规划的后续能力来源，**当前版本尚未接入**。列进这条定义只为把「上限由什么决定」
-> 说完整，**不代表已经支持**。
+## 它适合谁 / 不适合谁
+只做「服务器与玩家本身」的管理：原版做不到的操作（离线玩家背包写入、禁言）不做伪实现，插件生态里的玩法功能也不替代。
 
-### 适合 / 不适合
-
-| | 说明 |
+| 判断 | 说明 |
 |---|---|
-| **适合** | **一台到几台自己的 MC 服**、想少敲命令的服主：装一个 Node 进程就能用，日常运维（加物品、封禁、备份、看日志、改配置）都在浏览器里点完 |
-| **适合** | **不想在服务端装插件**的场景：管理走 RCON 与原版文件，Vanilla / Paper / Purpur / Fabric / Forge 都能直接用，不必为了装面板去改服务端生态 |
-| **适合** | **玩家洞察优先于托管编排**：跨会话的玩家档案（物品 / 成就 / 上线轨迹 / IP 历史）与批量操作是主功能，不是附属页 |
-| **不适合** | **要卖服务器 / 多租户分权**：本面板没有用户体系与资源配额，一个部署就是一台面板的单一管理员（只读监控凭据是**凭据作用域**，不是多用户权限） |
-| **不适合** | **要容器编排 / 集群调度**：面板自身可容器化部署，但它**不提供编排层**——不做多机调度、容器生命周期与资源配额那一套 |
-| **不适合** | **要权限组 / 经济 / 领地这类玩法插件功能**：那属服务端插件生态，本面板不替代 |
-
----
-
-## 截图
-
-> 以下截图为示例环境（虚构数据）渲染效果，实际面板展示你的服务器真实状态。
-
-| 仪表盘 |
-|---|
-| ![仪表盘](docs/assets/screenshots/dashboard.png) |
-
-| 备份管理 | 实例列表 |
-|---|---|
-| ![备份管理](docs/assets/screenshots/backup.png) | ![实例列表](docs/assets/screenshots/instances.png) |
-
-| 文件管理 | 玩家管理 |
-|---|---|
-| ![文件管理](docs/assets/screenshots/files.png) | ![玩家管理](docs/assets/screenshots/players.png) |
-
-| 世界 | 任务 |
-|---|---|
-| ![世界](docs/assets/screenshots/world.png) | ![任务](docs/assets/screenshots/tasks.png) |
-
-| 插件 | Webhook |
-|---|---|
-| ![插件](docs/assets/screenshots/plugins.png) | ![Webhook](docs/assets/screenshots/webhooks.png) |
-
-| 审计日志 | 设置 |
-|---|---|
-| ![审计日志](docs/assets/screenshots/audit.png) | ![设置](docs/assets/screenshots/settings.png) |
-
-> 完整操作流程见 [docs/user-guide.md](docs/user-guide.md)。
-
----
-
-## 功能特性
-
-### 玩家管理（免命令图形化）
-- **可视化给予物品** — 200 余种物品 9 大分类 + 40 余种附魔（按物品过滤、冲突禁用）+ 20 余种药水（3 种瓶型/等级/时长）+ 6 套预设礼包（可自定义增删）；命令按 MC 版本三格式自适应（1.21.2+/26.x、1.20.5-1.21.1、≤1.20.4），附命令预览与复制
-- **可视化传送** — 传送到玩家 / 坐标表单（默认填当前位置）/ 世界出生点 / 个人复活点 / 主世界原点 / 自定义快捷点（持久化），支持修改世界出生点
-- **封禁/解封** — 玩家/IP 双类型、6 档时长（1 小时~永久，**临时封禁服务端自实现**，不依赖插件）、9 个预设理由+自定义、可附加踢出；封禁记录弹窗与详情区块（30 秒自动刷新）
-- **批量操作** — 批量传送/给予/白名单/OP/清空背包/切换模式/踢出，自动跳过离线玩家
-- 踢出、OP/取消 OP、白名单增删（离线玩家也有效）、切换游戏模式、清空背包、治疗/喂饱（效果命令封装）、私聊、玩家详情 5-Tab 浮层（概览/物品栏/传送/给予物品/日志）、**Excel 导出**
-
-### 世界与服务器
-- **server.properties 全表单化** — 70 余个已知属性（玩法/世界生成/服务器设置三大类）可视化编辑，**未知属性自动追加**（自动识别布尔/数值），保存提示需重启项，热改属性服务端自动转命令即时生效
-- **游戏规则** — 全量 gamerule 查询/行级编辑，命令输出双版本解析（MC 26.x 与旧版）
-- **仪表盘** — 实时状态卡片、MC 时钟、日志流、**公告发送**（say/tellraw 自动转义）、**天气/时间分段按钮**（乐观更新）、快捷命令 chips（持久化）、命令自动补全（30 余条 14 分类）、EULA 引导、断线重连 Banner
-- **定时任务** — 重启/备份/执行命令/停止/启动 5 种类型，cron **可视化编辑器**（分/时/日/月/周）+ 预设模板，立即执行，最近运行状态回显
-- **文件管理** — 在线浏览/编辑，Monaco 全屏编辑器（语法高亮/行号/多步撤销重做/Ctrl/⌘+S/CRLF 保真/脏标记拦截），删除确认
-
-### 部署与运维
-- **进程级异常兜底** — 未捕获异常/拒绝（uncaughtException/unhandledRejection）记录结构化错误日志（含堆栈）后自动优雅停机（停实例落盘、关库），避免无日志静默崩溃导致所有实例托管断连
-- **一键部署** — Vanilla/Paper/Fabric/Forge/Purpur 五种服务端类型，自动下载 JAR（实时进度）、Java 版本检测、首次启动配置、失败可重试
-- **Aikar's Flags JVM 优化** — 一键生成 G1GC 优化参数集，内存滑块带推荐值
-- **备份管理** — **目录快照 + 增量传输**（Linux rsync `--link-dest` 硬链接快照：未变化文件零拷贝；Windows rsync 优先、自动降级 robocopy 全量镜像）、**实例级备份**（世界+配置+插件全量，自动排除日志/加载器依赖/jar，兼容 26.x 新布局与旧版 Bukkit 维度目录）、在线备份原子序列（save-off→save-all flush→save-on）、恢复异步化（后台执行 + 进度事件 + 自动回滚 + 快照预检 + level.dat 完整性校验）、**自动清理**（数量/天数双上限）、磁盘预检与快照完整性校验（SQLite 持久化）、**面板自身数据快照**（SQLite 在线备份 API 每日快照至 `var/backups/panel/`，保留策略与实例备份一致，恢复步骤见服务端 README 备份章节；`.env` 不入自动备份，手动备份在服务端 README 有指引）
-- **性能监控** — CPU/内存/TPS 采集，WebSocket 实时推送
-
-### 实时与可靠性
-- **WebSocket 实时推送**（30 余种事件）— 日志流、状态、玩家加入/离开/死亡/复活/成就/聊天/入睡、TPS/性能、天气、玩家状态（血量/坐标）、备份/恢复进度（含恢复异步化三事件与跳过提示）、部署/升级进度、系统资源统计
-- **通知事件落库 + 断线补齐** — 通知类事件广播前持久化，客户端重连携带 lastEventId 重放断线期间事件（重启不丢近期事件）
-- **WebSocket 优先 + HTTP 保底轮询** — WS 断开自动降级轮询（间隔可配置）；心跳保活（30s ping）清理死连接，广播背压保护防慢客户端拖垮内存
-- **通知系统** — 游戏事件/管理命令/服务器告警（severity 分级：崩溃/备份失败→error、资源告警→warning），Toast（时长分级/底部堆叠/图标/动画规范化）+ 系统通知，逐项可配开关；去重组合键（类型+实体）聚合计数 ×N 防刷屏；**通知中心交互闭环**（未读/已读/清除/角标）；历史持久化重启不丢；备份失败全程可见（含定时备份 setup 阶段）；批量死亡事件 5s 窗口聚合（团灭只广播一条）
-- **Webhook 国内渠道预设** — 飞书/钉钉/企微/Server酱/PushPlus 五渠道开箱即用，按各平台官方协议自动构造签名与消息体（飞书 body 内加签、钉钉 URL 参数加签），表单 URL/密钥字段随渠道联动，服务器事件可推送到手机 IM
+| **适合** | 一台到几台自己的 MC 服，想少敲命令的服主 |
+| **适合** | 不想在服务端装插件、也不想进游戏的管理场景 |
+| **不适合** | 要卖服务器 / 多租户分权 / 资源配额 |
+| **不适合** | 要权限组、经济、领地这类玩法插件功能 |
 
 ## 快速开始
 
-### 服务端部署
+面向 Linux 服务器，Ubuntu / Debian 优先。Node.js 22+ 与 Java 17/21/25 由脚本自动安装，不用先准备。
 
-需要 **Node.js 22+** 和 **Java 17/21/25**（部署脚本会自动安装）。三个包与 workspace 根均声明 `engines`（node>=22）并启用 engine-strict，低版本 Node 执行 `npm install` 会直接报错拒绝安装，避免装完依赖运行时才崩溃。
-
-#### 方式一：Linux 一键部署（推荐）
-
-**复制下面整段**（先后取 Gitee 国内镜像源与 GitHub 源，任一成功就用它；**两条都失败则不会执行任何脚本**——
-避免把上一次的残留/半截文件当脚本用 `sudo` 跑起来）：
+1. **复制下面这一整行**（单行，不要拆开——拆开只会执行前半段，什么都不会发生），粘贴到服务器终端回车：
 
 ```bash
-rm -f /tmp/deploy-mc-commander.sh && \
-( curl -fsSL --connect-timeout 10 --max-time 60 -o /tmp/deploy-mc-commander.sh https://gitee.com/wyyfzb/mc-commander/raw/main/apps/server/scripts/deploy-mc-commander.sh ||
-  curl -fsSL --connect-timeout 10 --max-time 60 -o /tmp/deploy-mc-commander.sh https://raw.githubusercontent.com/wyyfzb/mc-commander/main/apps/server/scripts/deploy-mc-commander.sh ) && \
-sudo bash /tmp/deploy-mc-commander.sh
+rm -f /tmp/deploy-mc-commander.sh && ( curl -fsSL --connect-timeout 10 --max-time 60 -o /tmp/deploy-mc-commander.sh https://gitee.com/wyyfzb/mc-commander/raw/main/apps/server/scripts/deploy-mc-commander.sh || curl -fsSL --connect-timeout 10 --max-time 60 -o /tmp/deploy-mc-commander.sh https://raw.githubusercontent.com/wyyfzb/mc-commander/main/apps/server/scripts/deploy-mc-commander.sh ) && sudo bash /tmp/deploy-mc-commander.sh
 ```
 
-> 第一条是 **Gitee 源**（国内直连），第二条是 GitHub 源——命令里的 `--max-time 60` 保证第一条
-> 超过 60 秒无响应就自动换第二条，不会无限期卡住；两源内容逐字节一致。
-> 如果你只想用其中一条，单独执行它也行：
-> GitHub `https://raw.githubusercontent.com/wyyfzb/mc-commander/main/apps/server/scripts/deploy-mc-commander.sh`、
-> 镜像 `https://gitee.com/wyyfzb/mc-commander/raw/main/apps/server/scripts/deploy-mc-commander.sh`。
+2. **等它跑完**：脚本会装系统依赖、下载代码、注册并启动系统服务，最后打印面板地址与一次性 `SETUP_TOKEN`。
+3. **打开地址**：浏览器访问面板地址，按向导设置管理员密码，把 `SETUP_TOKEN` 粘进去（用后即作废）。
 
-脚本会自动安装 Java/Node.js、下载代码、生成 API Key 与一次性 SETUP_TOKEN 并注册 systemd 服务（下载
-tarball 带 sha256 完整性校验）。
-**SETUP_TOKEN 仅首次设密使用**：公网部署时，浏览器首访设密页需粘贴部署输出中的 SETUP_TOKEN
-（防部署完成到设密窗口内被抢先接管面板，一次性，用后作废）。
-**下载卡住或失败怎么办**：脚本对每处下载都做了「停滞中止 + 断点续传」——60 秒内均速低于 1KB/s
-即中止，并从已下载处续传（最多 5 次），不会再无限等待。若最终仍失败，按报错提示二选一：
-① `sudo VERSION=vX.Y.Z bash deploy-mc-commander.sh` 指定具体版本；② 自行取到
-`mc-commander-server.tar.gz` 解压进安装目录（默认 `/opt/mc-commander`）后执行
-`sudo SKIP_DOWNLOAD=1 bash deploy-mc-commander.sh`。
-**下载源（脚本内部）**：**默认走 Gitee**（源码与发布产物、`SHA256SUMS.txt` 都由 CI 同步到
-Gitee Release；分支 `main`，无 `master`），Gitee 不可用或该版本尚未同步时**自动回退 GitHub 权威源**
-（产物由 CI 构建、带 Immutable Releases 签名）——你不需要传任何参数。两个源的包与摘要始终同源，
-sha256 校验强度不变。要强制首选 GitHub：`SOURCE_PREFERENCE=github`；要禁用自动换源：
-`ALLOW_SOURCE_FALLBACK=0`。
+> **云服务器还需在控制台安全组放行 25566/TCP**——脚本只处理系统防火墙，云平台那一层它碰不到。打不开时按[常见问题](#常见问题)第一条排查。
 
-若两个源都拉不动，仍可走上面的 ②（自行取包 + `SKIP_DOWNLOAD=1`）或下方「方式二：手动部署」。
+装之前确认三件事：机器能访问外网（Gitee 或 GitHub 任一可达）、你有 `sudo` 权限、25566 端口没被别的程序占用。装完面板由 systemd 托管并随开机自启，用 `systemctl status mc-commander` 看状态。
 
-#### 方式二：手动部署
+脚本会把面板装到 `/opt/mc-commander`，创建专用低权限用户 `mc-commander` 并以它运行服务（25566 是高位端口，不需要 root）。
+
+脚本默认走 Gitee 镜像，失败自动回退 GitHub，两源的代码包与校验摘要同源，下载带 sha256 校验；每处下载都有停滞中止与断点续传。最终仍失败时，按报错提示用 `VERSION=vX.Y.Z` 指定版本，或自行取包解压进安装目录后用 `SKIP_DOWNLOAD=1` 重跑。
+
+一键脚本只面向 Linux；Windows / macOS 走[手动部署](#手动部署)。
+
+装完下一步：[第一次使用](#第一次使用)——创建实例、启动，把地址发给玩家。
+
+## 第一次使用
+
+1. **进面板**：浏览器打开部署输出里的地址（形如 `http://<公网 IP>:25566`）。打不开先按[常见问题](#常见问题)第一条排查。
+2. **设密**：首次进入是设置向导，设置管理员密码并确认，再把部署输出里的 `SETUP_TOKEN` 粘进去。设密成功后令牌立即作废，之后只用密码登录。
+3. **创建实例**：侧栏「实例」→ 右上「部署新实例」，选服务端类型（Vanilla / Paper / Fabric / Forge / Purpur）、MC 版本、实例名称与内存，最后一步勾选 EULA 同意。
+4. **启动**：勾了 EULA 的话部署完成后会自动启动；没勾就回实例列表点「启动」。首次启动要生成世界，等状态变成「运行中」。启动时若弹出 EULA 确认框，同意后面板会写入并重启。
+5. **连服**：面板顶栏会显示这台实例的「地址:端口」，把它发给玩家在游戏里添加即可。端口在 25565–25664 之间由面板按实例分配，和面板自己的 25566 不是一回事。
+
+> 玩家连不上时，先确认云安全组也放行了这台实例的游戏端口（默认从 25565 起），以及实例状态是「运行中」。
+
+> 部署进度条会实时显示下载 / 安装 / 首启阶段；中途点「取消部署」会终止进程并清理未完成的实例目录，不会在列表里留下半个实例。
+
+**改实例配置**：实例卡片 → 操作菜单 →「实例设置」，可改内存、Java 路径、JVM 参数，以及「实时推送」开关；这些改动都要重启实例才生效。
+
+**先做一次备份**：进「设置 → 备份管理」点「立即备份」，之后改配置、升级版本或动存档前都多一个还原点。备份默认保留最近 10 份、30 天，可在服务端用环境变量调整。
+
+**换个设备继续用**：手机或另一台电脑打开同一个面板地址，用同一管理员密码登录即可。忘了地址就进「设置 → 连接设置」，最下方「从其他设备访问」会显示当前地址，可一键复制。
+
+**要给自动化工具用**：浏览器本身用不到 API Key；确实要接脚本时，在「设置 → 连接设置」里生成，明文只显示一次。
+
+## 日常操作速查
+
+| 想做什么 | 去哪里 |
+|---|---|
+| **玩家** | 侧栏「玩家」：给物品、传送、封禁、白名单、OP、踢出，命令全部由面板生成 |
+| **世界** | 侧栏「世界」：server.properties 全表单 + 游戏规则，热改属性保存即生效 |
+| **备份** | 设置 → 备份管理：立即备份、一键恢复、下载到本机做离机副本 |
+| **文件** | 侧栏「文件」：浏览、编辑、上传、下载，编辑器里 Ctrl/⌘+S 保存 |
+| **任务** | 侧栏「任务」：重启 / 备份 / 执行命令 / 停止 / 启动，cron 可视化编辑 |
+| **通知** | 顶栏铃铛：未读徽章 + 抽屉，游戏事件、备份失败、资源告警都在这里 |
+
+更细的操作步骤与逐页截图见[用户指南](docs/user-guide.md)。
+
+## 界面一览
+
+| 世界页：属性表单与游戏规则放在一起，热改保存即生效 | 文件页：浏览、上传、下载，内置编辑器改配置 |
+|---|---|
+| ![世界](docs/assets/screenshots/world.png) | ![文件](docs/assets/screenshots/files.png) |
+
+| 备份页：立即备份、一键恢复、下载做离机副本 | 任务页：五类任务用 cron 可视化编辑器编排 |
+|---|---|
+| ![备份](docs/assets/screenshots/backup.png) | ![任务](docs/assets/screenshots/tasks.png) |
+
+| 插件页：启停与上传，Modrinth 市场一键安装 | Webhook 页：飞书 / 钉钉 / 企微 / Server酱 / PushPlus |
+|---|---|
+| ![插件](docs/assets/screenshots/plugins.png) | ![Webhook](docs/assets/screenshots/webhooks.png) |
+
+| 审计页：操作记录与命令历史双 Tab，可导出 Excel | 设置页：连接、账号与安全、通知、备份管理 |
+|---|---|
+| ![审计日志](docs/assets/screenshots/audit.png) | ![设置](docs/assets/screenshots/settings.png) |
+
+截图为示例环境（虚构数据），实际面板显示你的服务器真实状态。
+
+## 升级 / 卸载 / 忘记密码
+
+**升级**：重跑[快速开始](#快速开始)里的那条安装命令即可原地升级。脚本幂等，会保留 `.env`、`var/` 下的实例 / 数据库 / 备份，以及已装依赖，完成后自动重启服务。
+
+**升级前**：面板自身数据每天自动快照到 `var/backups/panel/`；要额外留实例还原点，就去「设置 → 备份管理」点一次「立即备份」。
+
+**升级后**：刷新面板页面确认版本号（设置 → 关于），再看一眼实例列表与备份列表是否完整；实例的世界存档不受升级影响。
+
+**回滚**：`sudo VERSION=<旧版本标签> bash /tmp/deploy-mc-commander.sh` 只回退代码，`var/` 下的数据不回退。
+
+**升级失败**：脚本在下载或校验阶段失败会中止并保留原版本，重跑同一条命令即可；已装好的服务不会停在半新半旧的状态。
+
+**卸载**：`sudo bash /tmp/deploy-mc-commander.sh --uninstall` 移除面板但保留 `var/` 下的数据；连数据一起删用 `--uninstall --purge`（需二次确认）。脚本已不在 `/tmp` 时，先按快速开始第 1 步重新取一次。
+
+卸载不会移除 25566 的防火墙放行规则（可能被其它服务共用），如不再需要请自行清理。
+
+**忘记密码**：密码只存哈希、无法反解。清空管理员账号与会话后重启，面板即回到首访设密流程：
 
 ```bash
-git clone https://github.com/wyyfzb/mc-commander.git
-# 依赖：在仓库根装一次（npm workspaces，根 lock 覆盖三个包）
-cd mc-commander
-npm ci
-
-# 契约包产物 + 前端产物（面板界面由服务端托管：public/index.html 不存在时只提供 API，
-# 浏览器访问 25566 拿不到界面）；public/ 目录可用 PUBLIC_DIR 覆盖
-npm run build -w apps/schemas
-npm run build -w apps/web
-mkdir -p apps/server/public && cp -r apps/web/dist/. apps/server/public/
-
-cd apps/server
-cp .env.example .env   # 编辑 .env，设置 API Key（两种部署口径见下）
-npm start
+sudo systemctl stop mc-commander
+sudo sqlite3 /opt/mc-commander/var/data/mc_commander.db "DELETE FROM admin_account; DELETE FROM admin_sessions;"
+sudo systemctl start mc-commander
 ```
 
-**API Key 部署口径**：`API_KEY_HASH` **留空即可**——服务端首次启动会自己签发一把
-`mcck-` 前缀的 32 字节随机 Key（256 位 CSPRNG），把 SHA-256 摘要写回 `.env`，并把明文
-在启动横幅里显示一次。服务端只存摘要、明文不落盘；轮换走 `POST /api/v1/rotate-key`
-（服务端写回该行）。忘记明文可删掉该行重启重新签发（旧 Key 随即失效）。
+> 路径按默认安装目录 `/opt/mc-commander` 给出，装到别处请换成实际路径。只删这两张表，实例、备份、定时任务与审计记录都不受影响；会话必须一并清空——直接改库不经过改密接口，留着旧令牌仍能登录。机器上没有 `sqlite3` 时，用任意 SQLite 客户端执行同样两条语句即可。
 
-想指定自己的 Key（如从密钥管理系统注入）时，请用 **≥32 字节 CSPRNG**，不要用人挑的
-短语：`printf '%s' "$(openssl rand -hex 32)" | sha256sum`，把输出填进 `API_KEY_HASH`。
-留空且写回 `.env` 失败（目录只读等）时，服务端打印错误横幅并以 `exit(1)` 拒绝启动——
-不降级为「每次重启换一把」的临时凭据。
+## 常见问题
 
-服务端默认运行在 `http://localhost:25566`
+**面板地址打不开**
+按顺序查三处：① 云服务器控制台 → 安全组，放行 `25566/TCP`；② 系统防火墙，`sudo ufw status` 看是否放行，没有就 `sudo ufw allow 25566/tcp`；③ 服务是否在跑，`systemctl status mc-commander`，日志用 `journalctl -u mc-commander -n 50`。
 
-#### 卸载
+**实例一直起不来**
+先看实例卡片与仪表盘上的崩溃提示、日志尾部；再确认 Java 版本（MC 26.x 需要 Java 25，旧版本用 17/21）、内存是否给够、端口是否被别的程序占用。
 
-一键部署会在系统上留下 4 处痕迹：安装目录（默认 `/opt/mc-commander`）、专用低权限用户
-`mc-commander`、`/etc/systemd/system/mc-commander.service`、以及该服务的开机自启。用
-`--uninstall` 一次清干净：
+**面板提示需要开启 RCON**
+`enable-rcon` 与 `rcon.password` 属安全敏感项，面板属性页只读。到服务器上编辑该实例的 `server.properties`，写入 `enable-rcon=true` 和自定义的 `rcon.password`，然后重启实例。
 
-```bash
-sudo bash /tmp/deploy-mc-commander.sh --uninstall
-```
+**备份失败**
+先看通知与备份列表里的失败原因；再查磁盘剩余空间、Linux 是否装了 `rsync`、备份目录与实例目录是否在同一个文件系统上。
 
-**默认保留你的数据**——`var/servers/`（每个实例的完整 Minecraft 世界存档）、`var/data/`、`var/backups/`
-都会原样留下，只是面板本身被移除；脚本结束时会打印它们的位置。想连数据一起删：
+**数据不是实时刷新**
+MC 1.21.9 及更新版本由面板在启动前自动开启实时推送，更旧的版本走 30 秒轮询。若在实例设置里关过「实时推送」，重新打开后重启实例生效。
 
-```bash
-sudo bash /tmp/deploy-mc-commander.sh --uninstall --purge   # 会二次确认，需输入 yes
-```
+**面板数据丢了 / 换机器**
+面板自身每天快照到 `var/backups/panel/`：停服务 → 把目标快照复制为 `var/data/mc_commander.db` → 删掉 `-wal` / `-shm` 残留 → 启动。实例世界数据用实例备份恢复，两者相互独立。
 
-`--purge` 会删除整个世界存档且**不可恢复**，故必须交互确认；自动化场景加 `--yes` 跳过。
-防火墙端口 `25566` 的放行规则不会被自动移除（可能被其它服务共用），如不再需要请自行清理。
+## 进阶部署
 
-> 手动部署（方式二）没有系统级痕迹，直接删掉目录即可；若用 `systemd` 等方式自行托管，
-> 请一并停掉你创建的服务。
+### 加密访问（HTTPS）
 
-### Web 前端运行
+面板在**同一个端口**上同时接受 HTTP 与 HTTPS，装好即可用，不需要额外端口、域名或反向代理。
+证书由面板首次启动时自签（本地 CA，有效期 100 年），服务器换 IP 会自动重签而 CA 不变。
 
-需要 **Node.js 22+**（`npm ci` 受 engines 门禁强制校验，低版本 Node 直接报错拒绝安装）。
+**在每台设备上导入一次根证书**，之后该设备访问面板就是全绿的 https（含手机装到主屏）：
 
-```bash
-npm ci                      # 仓库根：workspace 一次装齐三包依赖
+1. 用 HTTP 打开面板并登录 → 「设置 → 账号与安全 → 传输加密」
+2. 点「下载根证书」，按页面给出的分平台步骤安装
+3. 回到该页点「检测」，确认显示已信任，再点「切换到 https」
 
-npm run dev -w apps/web      # 开发运行（默认 http://localhost:5173，代理指向 25566）
-npm run build -w apps/web    # 生产构建（tsc -b + vite build）
-npm run preview -w apps/web  # 预览生产构建
-```
+浏览器不允许网页自行安装根证书，这一步必须由人操作一次。**根证书首次下载走 HTTP，可能与页面显示的 SHA-256 指纹核对**——指纹不一致就不要安装。
 
-首次打开引导页按向导设置管理员密码（如服务端配置了 `SETUP_TOKEN`，按提示输入）即可使用。
+没导入根证书的设备继续走 HTTP，功能不受影响（面板从不把 HTTP 强制跳到 HTTPS：未受信时跳过去只会得到整页红色的证书警告）。
 
-### HTTPS 反向代理（Nginx / Caddy）
+浏览器只在安全上下文（HTTPS 或 localhost）开放部分能力。用内网 / 公网 IP 走 HTTP 打开时实测：
 
-面板自身只监听 HTTP（默认 25566），生产环境建议置于反向代理之后终止 TLS——PWA 安装、
-剪贴板等浏览器能力要求安全上下文（HTTPS 或 localhost），公网纯 HTTP 部署会缺失这些能力。
+| 能力 | HTTP 下 | 影响 |
+| --- | --- | --- |
+| 复制按钮 | 可用（降级 `execCommand`） | 无 |
+| 装到手机主屏（PWA） | **不可用**（非安全上下文下浏览器不暴露 `navigator.serviceWorker`） | 手机端只能当普通网页用 |
+| 登录密码与数据 | **明文过网** | 同网段可被嗅探 |
 
-**Nginx**（`/ws` 必须单独声明 upgrade 头，否则 WebSocket 握手失败）：
+### 前置反向代理
+
+已有域名与证书时，也可以照旧在前面终止 TLS。**`/ws` 必须单独声明 upgrade 头**，否则实时通道握手失败。
 
 ```nginx
 server {
     listen 443 ssl;
     server_name mc.example.com;
-    ssl_certificate     /etc/letsencrypt/live/mc.example.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/mc.example.com/privkey.pem;
-
+    # ssl_certificate / ssl_certificate_key 指向你的证书
     location /ws {
         proxy_pass http://127.0.0.1:25566;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
-        proxy_read_timeout 3600s;
-        proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     }
-
     location / {
         proxy_pass http://127.0.0.1:25566;
         proxy_set_header Host $host;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
     }
 }
 ```
 
-**Caddy v2**（自动申请证书，WebSocket 升级开箱可用）：
+Caddy 两行就够：`mc.example.com { reverse_proxy 127.0.0.1:25566 }`（自动申请证书，WebSocket 开箱可用）。反代后按层数调 `TRUST_PROXY`。
 
-```caddyfile
-mc.example.com {
-    reverse_proxy 127.0.0.1:25566
-}
+### 手动部署
+
+```bash
+git clone https://github.com/wyyfzb/mc-commander.git && cd mc-commander
+npm ci
+npm run build -w apps/schemas && npm run build -w apps/web
+mkdir -p apps/server/public && cp -r apps/web/dist/. apps/server/public/
+cd apps/server && cp .env.example .env
+# HOST 默认 127.0.0.1：远程浏览器打不开，必须在 .env 里改成 HOST=0.0.0.0
+npm start
 ```
 
-- 前端产物放进 `public/` 后与 API 同源托管在 25566，故**只需代理一个端口**。
-- `TRUST_PROXY`（默认 `1`）对应单层反代；多级代理（CDN + Nginx 等）按层数调大，设 `0`
-  则忽略转发头。该值只影响 `req.ip` 解析；**登录失败锁定键始终取直连 IP**（反代后即代理
-  自身地址），故建议在代理层再加一层登录限流。
+`API_KEY_HASH` 留空即可：首次启动会自己签发一把并写回 `.env`，明文只在启动横幅显示一次。云服务器同样要在控制台安全组放行 25566/TCP。
 
-## 创建 MC 实例
+### Windows / macOS
 
-### 方式一：面板一键部署（推荐）
+实验性支持：官方脚本与发布包面向 Linux，需按上面的手动部署自行构建前端产物、没有服务托管（Windows 建议 WSL2）。macOS 自带 rsync 是 openrsync，硬链接去重未验证；`brew install rsync` 后用 `RSYNC_BIN` 指向 GNU rsync 可恢复增量快照。
 
-在"创建实例"页面，选择服务端类型（Vanilla/Paper/Fabric/Forge/Purpur）、MC 版本、实例名称和内存，点击部署即可。系统会自动：
+### 环境变量
 
-1. 从各加载器官方源获取版本与下载地址（Piston / paper v3 / Fabric meta / Forge promotions / Purpur API）
-2. 下载 JAR 文件（流式下载并上报进度，经 WebSocket 推送部署进度）
-3. 自动检测并选择合适的 Java 版本（参考 HeadlessMC 版本矩阵）
-4. 生成 server.properties、eula.txt 等配置文件
-5. 执行首次启动生成完整配置
-6. 写入 SQLite 数据库并加载到管理面板
+完整清单见 [`apps/server/.env.example`](apps/server/.env.example)。最常用的 5 个（默认值）：`HOST`=`127.0.0.1`（公网部署必须改 `0.0.0.0`）· `PORT`=`25566` · `SERVERS_DIR`=`./var/servers` · `DATA_DIR`=`./var/data` · `BACKUPS_DIR`=`./var/backups`（后三者相对路径锚定服务端安装目录）。
 
-### 方式二：手动创建
+---
 
-在 `var/servers/` 目录下创建子目录，包含 `instance.json`：
+## 给贡献者
 
-```json
-{
-  "id": "my-server",
-  "name": "My Server",
-  "jarFile": "server.jar",
-  "maxMemory": "4G",
-  "minMemory": "2G"
-}
-```
+贡献流程与提交规范见 [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md)，工程纪律与 CI 检查项见 [AGENTS.md](AGENTS.md)。开发只需 Node.js 22+（三个包都声明并强制 `engines`），Java 只在真正跑 MC 实例时需要。
 
-然后将 `server.jar` 放入同一目录。服务端启动时自动迁移到 SQLite 数据库。
+### 提交与分支
 
-## 系统架构
+- 从 `main` 拉功能分支（`feat/<主题>` / `fix/<主题>` / `docs/<主题>`），改动走 PR 回到 `main`。
+- 提交信息用 Conventional Commits，描述用中文，scope 取 `web` / `server` / `schemas` / `ci` / `docs` 等。
+- PR 必须 6 项检查全绿（格式与门禁、契约包、服务端、前端 lint/test、前端构建与 e2e、生产依赖审计），合并用 squash。
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                     Web 前端（浏览器）                        │
-│        React 19 + TS + Vite + Tailwind v4 + shadcn/ui       │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────────┐   │
-│  │ 仪表盘    │ │ 玩家管理  │ │ 世界管理  │ │ 文件/任务/实例│   │
-│  └────┬─────┘ └────┬─────┘ └────┬─────┘ └──────┬───────┘   │
-│       │             │            │               │          │
-│  ┌────┴─────────────┴────────────┴───────────────┴──────┐   │
-│  │        zustand + TanStack Query + WebSocket 层        │   │
-│  └────────────────────────┬──────────────────────────────┘   │
-└───────────────────────────┼──────────────────────────────────┘
-                            │
-                  HTTP API + WebSocket
-                    (API Key 鉴权)
-                            │
-┌───────────────────────────┼──────────────────────────────────┐
-│  ┌────────────────────────┴──────────────────────────────┐   │
-│  │              Node.js 后端 (Express + ws)                │   │
-│  │  ┌────────┐ ┌──────────┐ ┌────────┐ ┌──────────────┐ │   │
-│  │  │ 路由层  │ │ 中间件层  │ │ 服务层  │ │ 数据库/WS    │ │   │
-│  │  └────────┘ └──────────┘ └────────┘ └──────────────┘ │   │
-│  └────────────────────────┬──────────────────────────────┘   │
-│                           │ RCON (TCP)                       │
-│  ┌────────────────────────┴──────────────────────────────┐   │
-│  │              Minecraft Java Server                      │   │
-│  │              (Vanilla / Paper / Fabric / Forge / Purpur)│  │
-│  └───────────────────────────────────────────────────────┘   │
-└───────────────────────────────────────────────────────────────┘
-```
+### 技术栈
 
-### 通信方式
+| 层 | 技术 |
+|---|---|
+| 前端 | React 19 + TypeScript strict + Vite + Tailwind v4 + shadcn/ui |
+| 状态 | TanStack Query + zustand |
+| 服务端 | Node.js 22+ · Express · ws |
+| 数据 | SQLite（better-sqlite3）+ zod 契约包 |
+| 测试 | Vitest + Testing Library · Playwright e2e |
+| 工程 | npm workspaces · Biome（格式化）· oxlint（lint） |
 
-| 方式 | 用途 | 频率 |
-|------|------|------|
-| **HTTP REST API** | 实例管理、玩家操作、文件操作 | 按需调用 |
-| **WebSocket** | 日志流、状态推送、玩家事件、性能数据 | 实时推送 |
-| **HTTP 保底轮询** | WebSocket 断开时的后备机制 | 可配置（默认 30s） |
-| **RCON (TCP)** | 向 MC 服务器发送命令、查询数据 | 串行队列 |
-
-### WebSocket 接入
-
-```javascript
-// 连接（通过 Subprotocol 鉴权）
-const ws = new WebSocket('ws://host:25566/ws', ['mc-commander-apikey.YOUR_KEY']);
-
-// 订阅实例（携带 lastEventId 可断线补齐：服务端重放其后遗漏的通知事件）
-ws.send(JSON.stringify({ type: 'subscribe', instanceId: 'my-server', lastEventId: 42 }));
-
-// 接收事件（通知类事件携带自增 id 字段，客户端记录以用于断线补齐）
-ws.onmessage = (event) => {
-  const { id, type, data } = JSON.parse(event.data);
-  // type: log / status / playerJoin / playerLeave / playerDeath / achievement / ...
-};
-```
-
-支持 **30 余种事件类型**，按域分组：日志/状态（`log`、`status`、`performanceUpdate`、`weatherUpdate`、`systemStatsUpdate`）、玩家（`playerJoin`、`playerLeave`、`playerDeath`、`playerRespawn`、`playerChat`、`playerSleep`、`achievement`、`playerStatsUpdate`）、备份/恢复（`backupStart`、`backupComplete`、`backupFailed`、`backupSkipped`、`restoreStart`、`restoreComplete`、`restoreFailed`）、任务/部署/升级（`taskExecute`、`taskFailed`、`deployProgress`、`deployComplete`、`deployFailed`、`upgradeProgress`、`upgradeComplete`、`upgradeFailed`）、可靠性（`webhookDeliveryFailed`、`circuit_breaker`、`error`）。完整清单以 [`websocket.js`](apps/server/websocket.js) 的 `WSEvents` 枚举为单一事实源。
-
-> `tpsUpdate` 已并入 `performanceUpdate`（payload 含 tps 字段，避免双广播冗余）；`playerDeath` 批量场景为聚合格式 `{players: [...], count: N}`（5s 窗口）；`deployProgress` 进度节流 ≥1% 才发射。
-
-> **只读凭据的 WS 边界**：用 `mcro-…` 只读凭据连接会成功，但**只收读数类事件**（`status`——崩溃与熔断也随它下发、
-> `performanceUpdate`、`weatherUpdate`、`playerStatsUpdate`、玩家进出/死亡/复活/入睡、`achievement`）
-> ——日志与命令原文、玩家聊天、备份/恢复、任务、Webhook 投递失败、部署/升级一律不下发
-> （与 HTTP 只读白名单同一口径：只读＝监控读数）。客户端→服务端方向没有写操作消息，只读连接不存在「借 WS 下命令」的通道。
-
-> **连接上限**：服务端最多同时接受 **32 个 WebSocket 连接**（`MAX_CONNECTIONS`），超过上限的新连接将被拒绝；单个连接最多订阅 64 个实例、每分钟 60 条消息（防滥用保护）。
-
-## Web 页面一览
-
-| 页面 | 功能 |
-|------|------|
-| **引导页** | 服务器连接配置（三种部署引导 + 手动配置）、API Key 校验、明文连接警告 |
-| **仪表盘** | 状态卡片、MC 时钟、实时日志流、公告/天气/时间按钮、快捷命令、命令补全、通知面板 |
-| **玩家管理** | 玩家列表（筛选/排序/分页）、批量操作栏、玩家详情 5-Tab 浮层（概览/物品栏/传送/给予物品/日志）、封禁记录、Excel 导出 |
-| **世界管理** | 世界信息、维度概览、server.properties 全表单（70 余项已知 + 未知自动追加，编辑守卫 + 30s 自动刷新）、游戏规则 |
-| **文件管理** | 三栏文件浏览、全屏编辑器（Monaco：语法高亮/撤销重做/Ctrl/⌘+S/CRLF 保真）、删除 |
-| **定时任务** | Cron 任务管理（5 类型 + 可视化编辑器 + 预设模板 + 立即执行 + 上次运行状态） |
-| **实例管理** | 一键部署（5 服务端类型/版本/内存）、实例卡片（启停/切换 + 操作菜单：实例设置/升级/卸载） |
-| **插件管理** | 插件列表（元数据/启停状态）、上传/删除/启停、**Modrinth 市场一键安装**与更新检测 |
-| **Webhook** | 飞书/钉钉/企微/Server酱/PushPlus 五渠道预设、签名与消息体自动构造、投递记录 |
-| **审计与命令历史** | 审计日志（操作记录）与命令历史双 Tab、时间筛选、Excel 导出 |
-| **设置** | 连接配置、账号与安全（改密 / 两步验证 / 只读监控凭据）、通用设置（自动重启等）、通知开关（30 余类型两组）、备份管理、关于 |
-
-## 环境变量
-
-| 变量 | 默认值 | 说明 |
-|------|--------|------|
-| `API_KEY_HASH` | （留空则由服务端签发） | API 认证密钥的 SHA-256 摘要（零明文落盘）。**留空时服务端首次启动自己签发 32 字节 CSPRNG Key 并写回本行**（明文只在启动横幅显示一次）；手动指定时须 ≥32 字节 CSPRNG（`printf '%s' "$(openssl rand -hex 32)" \| sha256sum`）。留空且写回失败时启动报错 `exit(1)` |
-| `SETUP_TOKEN` | （未配置） | 首访设密所有权证明（一次性）：配置后 `POST /auth/setup` 必须携带 `Authorization: SetupToken <token>`，校验通过立即作废（内存 + 本行移除）；部署脚本首次部署自动生成，未配置 = 不校验（仅建议本机/可信网络使用） |
-| `HOST` | `127.0.0.1` | 服务监听地址：公网部署需显式设 `0.0.0.0`（默认仅本机） |
-| `TRUST_PROXY` | `1` | 信任反向代理层数（Express trust proxy）：默认 1 兼容 nginx/CDN 反代，设 0 不信任代理头（`req.ip` = 直连 IP）；仅影响 `req.ip` 解析，登录锁定键始终取直连 IP |
-| `PORT` | `25566` | 服务端口 |
-| `SERVERS_DIR` | `./servers` | MC 实例数据目录（相对路径锚定服务端安装目录，不随启动 cwd 漂移；传绝对路径则以其为准） |
-| `DATA_DIR` | `./data` | SQLite 数据库目录（同上锚定安装目录） |
-| `BACKUPS_DIR` | `./backups` | 备份存储目录（同上锚定安装目录） |
-| `PUBLIC_DIR` | `./public` | 前端静态产物目录（同上锚定安装目录，一般无需修改） |
-| `BODY_LIMIT_JSON` | `1mb` | 认证前 JSON body 大小上限（body-parser limit 语法）；文件上传走 multipart 独立通道不受此值影响 |
-| `BACKUP_RETENTION_MAX` | `10` | 每实例保留备份数量上限（超出自动清理） |
-| `BACKUP_RETENTION_DAYS` | `30` | 备份最大保留天数（超出自动清理） |
-| `PANEL_BACKUP_ENABLED` | `true` | 面板自身数据每日快照开关（SQLite 在线快照至 `var/backups/panel/`） |
-| `PANEL_BACKUP_CRON` | `0 4 * * *` | 面板快照 cron 表达式 |
-| `PANEL_BACKUP_RETENTION_MAX` / `PANEL_BACKUP_RETENTION_DAYS` | 继承 `BACKUP_RETENTION_*` | 面板快照独立保留策略（数量/天数上限） |
-| `BACKUP_SPAWN_TIMEOUT_MS` | `3600000` | 备份/恢复子进程超时上限（默认按规模动态计算） |
-| `BACKUP_IN_PROGRESS_TIMEOUT_MS` | `3600000` | 进行中备份/恢复记录卡死判定阈值（崩溃后自动重置） |
-| `LOG_LEVEL` | `info` | 日志级别 (debug/info/warn/error) |
-| `ADMIN_SESSION_TTL_HOURS` | `168` | 管理员会话滑动有效期（小时）：每次认证触达续期，续期上限受 `ADMIN_SESSION_ABSOLUTE_TTL_DAYS` 约束 |
-| `ADMIN_SESSION_ABSOLUTE_TTL_DAYS` | `30` | 会话绝对存活期（天）：自创建起超过即强制重登（限制被窃取令牌的永久有效窗口）；设 0 关闭（不建议） |
-| `ADMIN_SESSION_MAX_SESSIONS` | `5` | 每用户会话并发上限：新登录挤掉最旧会话 |
-| `AUTH_LOGIN_MAX_FAILS` | `10` | 登录失败锁定阈值（按账号/来源 IP 内存级计数，重启即清零） |
-| `AUTH_LOGIN_LOCK_MS` | `300000` | 登录失败锁定时长（毫秒） |
-| `API_KEY_ENABLED` | `true` | 是否开放 API Key 通道：设 `false` 时 API Key 在 HTTP 与 WebSocket 上一律拒绝（403，提示改用管理员会话登录），`rotate-key` 同样 403 且不写 `.env`；`.env` 中的 `API_KEY_HASH` 保留不动——重新设回 `true` 即恢复。取值 `true`/`false`/`1`/`0`（大小写与首尾空格不敏感），其它取值启动报错 |
-| `RATE_LIMIT_WINDOW` | `60000` | 速率限制窗口（毫秒） |
-| `RATE_LIMIT_MAX` | `240` | 窗口内最大请求数（认证前按 IP 计数；默认兼顾前端多标签页轮询 ≈72-96 req/min 不误伤） |
-| `CRASH_LOOP_WINDOW_MS` | `300000` | 崩溃循环熔断滑动窗口（毫秒） |
-| `CRASH_LOOP_MAX_CRASHES` | `5` | 窗口内连续崩溃次数阈值：达到即自动禁用该实例 autoRestart |
-| `AUTO_START_DELAY_MS` | `3000` | 面板重启后自动恢复实例的间隔（毫秒） |
-| `DISK_WARNING_PERCENT` | `85` | 磁盘使用率告警阈值（百分比，warning 级通知） |
-| `DISK_ERROR_PERCENT` | `95` | 磁盘使用率告警阈值（百分比，error 级通知） |
-
-## 技术栈
-
-| 组件 | 技术 |
-|------|------|
-| 前端框架 | React 19 + TypeScript（strict）+ Vite |
-| UI | Tailwind CSS v4 + shadcn/ui（Radix） |
-| 状态管理 | zustand（含 persist）+ TanStack Query（服务端状态） |
-| 路由 | react-router |
-| 数据表格 | TanStack Table + Virtual |
-| 代码编辑器 | Monaco Editor |
-| 终端 | xterm.js |
-| 测试 | Vitest + Testing Library（单测）、Playwright（e2e）、MSW（mock） |
-| 后端框架 | Express.js (ESM) |
-| 数据库 | SQLite (better-sqlite3) |
-| 实时通信 | ws (WebSocket) |
-| HTTP 客户端 | 内置 fetch + 自建薄封装（服务端 JAR 下载、API 调用） |
-| MC 服务端下载 | 各加载器官方源直取（Piston / paper v3 / Fabric meta / Forge promotions / Purpur API），带下载域白名单与体积上限 |
-| Java 版本检测 | 自建版本矩阵（参考 HeadlessMC） |
-| RCON 协议 | rcon-client（零依赖、Promise API、串行队列） |
-| 定时任务 | croner（零依赖、DST 感知） |
-
-## 项目结构
+### 项目结构
 
 ```
 mc-commander/
-├── apps/web/                   # Web 前端（React 19 + vite）
-│   ├── src/                    # 纯源码：features/ components/ stores/ api/ lib/ hooks/ styles/
-│   ├── tests/{unit,support}/   # 镜像 src/ 的用例 + 测试基建（vitest）
-│   └── assets/fonts/           # 字体资产（参与打包）
-├── apps/server/                # Node.js 后端
-│   ├── src/                    # 交付源码：入口 / 配置 / WS 广播 / routes / services / middleware / db / utils
-│   ├── tests/                  # 服务端用例（vitest）
-│   ├── scripts/                # 一键部署脚本（用户经 raw/镜像 curl 获取，不进发布包）
-│   ├── var/                    # 运行期数据（不入库）：servers/ 实例 · data/ 库与日志 · backups/ 快照
-│   └── public/                 # 前端产物（release 打包注入，同源托管）
-├── apps/schemas/               # 共享契约包（zod）：src/ + tests/ + 入库的 dist/
-├── tools/                      # 维护者工具（不住包内）：gates/ 门禁 · e2e/ Playwright（19 spec + mock 后端）
-│   │                           #   · ci/ local-check · dev/ 生成器 · ops/ 运维 · vision/ 全站截图 · deploy/ 发布载荷
-├── docs/                       # 架构、用户指南、贡献与安全文档、配图（assets/screenshots/）
-├── .github/                    # CI 工作流 / Issue 与 PR 模板 / Dependabot
-└── AGENTS.md                   # AI 编码工具上手指南（人类贡献者同样适用）
+├── apps/web/       # 前端：React 19 + Vite
+├── apps/server/    # 服务端：Express + ws + SQLite，同源托管前端产物
+├── apps/schemas/   # 共享契约包（zod）：src/ + tests/；dist/ 是构建产物、不入库
+├── tools/          # 维护者工具：gates/ · e2e/ · ci/ · dev/ · ops/ · deploy/
+├── docs/           # 用户指南、架构、贡献与安全文档、截图
+└── AGENTS.md       # 工程纪律与提交规范
 ```
 
-## 环境要求
-
-| 依赖 | 版本要求 |
-|------|---------|
-| Node.js | 22+ |
-| Java | 17/21/25（部署脚本自动安装，按 MC 版本自动选择） |
-| 浏览器 | 现代浏览器（Chrome/Edge/Firefox） |
-| 操作系统 | 服务端: Linux / Windows / macOS；前端构建: 任意 |
-
-## 平台支持
-
-| 平台 | 支持状态 |
-|------|---------|
-| Linux | ✅ 全支持（推荐部署环境，一键部署脚本面向 Ubuntu/Debian） |
-| Windows | ⚠️ 实验性——官方部署脚本与发布包面向 Linux（脚本注册的 systemd 单元不覆盖 Windows），需手动部署并自行构建前端产物（better-sqlite3 13.x 已随包提供 win32 预编译产物，无需本机构建工具链）；未装 rsync 时备份降级为 robocopy 全量镜像；建议使用 WSL2 以获得与 Linux 一致体验 |
-| macOS | ⚠️ 实验性——与 Windows 同为手动部署：官方发布包面向 Linux、无服务托管，需自行构建前端产物（better-sqlite3 13.x 已随包提供 macOS 预编译产物）。系统自带 rsync 为 openrsync，`--link-dest` 硬链接去重未验证（面板会在每次快照后自动探测，未生效时记录警告——快照本身仍完整，只是退化为全量拷贝；大世界曾有 EMFILE 报告）。建议 `brew install rsync` 后以环境变量 `RSYNC_BIN` 指向 GNU rsync（如 `/opt/homebrew/bin/rsync`），即可获得与 Linux 一致的增量快照与恢复 |
-
-> 部署脚本（`方式一：Linux 一键部署`）仅面向 Linux；Windows / macOS 请走手动部署路径。
-
-## 开发与测试
+### 开发与测试
 
 ```bash
-# 依赖：仓库根一次装齐（npm workspaces）
-npm ci
-
-# 服务端（vitest，2200+ 用例；消费契约包 dist，故先 build）
-npm run build -w apps/schemas
-npm run dev -w apps/server     # 热重载开发
-npm test -w apps/server
-
-# Web 前端
-npm run dev -w apps/web        # 开发（默认 5173，代理指向 25566）
-
-# 前端单测（vitest，2000+ 用例）/ 类型检查 / lint / 生产构建
-npm test -w apps/web
-(cd apps/web && npx tsc -b --noEmit)
-npm run lint
-npm run build
-
-# E2E（住 tools/e2e/；自动起 mock 服务 + dev server；19 spec / 150 用例）
-npm run test:e2e
+npm ci                         # 仓库根一次装齐三个包
+npm run build -w apps/schemas  # 服务端消费契约包产物，先构建
+npm test -w apps/server        # 服务端用例
+npm run dev -w apps/web        # 前端开发服务器（5173，代理到 25566）
+npm run test -w apps/web       # 前端单测
+npm run test:e2e               # Playwright e2e
+bash tools/ci/local-check.sh   # 一键本地检查（格式 + lint + 类型 + 全量测试）
 ```
 
-### CI 与本地检查
+本地检查脚本支持 `--skip-frontend` 与 `--skip-schemas`，只改一个包时能省掉无关步骤；它和 CI 跑的是同一套检查，本地全绿基本就能过。测试与文档中一律使用虚构数据（`1.2.3.4`、TEST-NET 网段、Steve/Alex），禁止出现真实服务器 IP、API Key 与玩家数据。
 
-PR 会自动跑 GitHub Actions（lint / typecheck / 单测 / e2e / 密钥扫描，见 `.github/workflows/ci.yml`）。
-本地一键执行等价检查：
-
-```bash
-# 契约包 + 服务端 + 前端：lint / 类型检查 / 单测 / 设计与对比度守门（Git Bash / Linux / macOS）
-bash tools/ci/local-check.sh
-
-# 仅服务端（前端依赖未安装时适用）
-bash tools/ci/local-check.sh --skip-frontend
-
-# 跳过契约包（未改动 apps/schemas 时可省一步）
-bash tools/ci/local-check.sh --skip-schemas
-```
-
-详细贡献流程见 [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md)。
-
-## 常见问题
-
-### 连接失败
-- 检查服务端是否运行：`curl http://localhost:25566/health`（无需鉴权）
-- 检查 API 是否可访问：`curl -H "X-API-Key: YOUR_KEY" http://localhost:25566/api/v1/overview`
-- 检查防火墙是否开放端口（默认 25566）
-- 检查引导页填写的 `apiKey` 是否正确
-
-### MC 服务器启动失败
-- 检查 Java 是否安装：`java -version`
-- 检查 `server.jar` 是否存在于实例目录
-- 查看服务端日志输出
-
-### 统计信息不更新
-- 本项目的游戏时长由服务端自行追踪（不依赖 MC 的 `world/stats/` 文件），玩家进服游玩后离开即会记录
+架构与设计决策见 [docs/architecture.md](docs/architecture.md)，API 与事件清单见 [apps/server/README.md](apps/server/README.md)，CI 工作流见 [`.github/workflows/ci.yml`](.github/workflows/ci.yml)。
 
 ## License
 
-[AGPL-3.0](LICENSE)（GNU Affero General Public License v3.0）
-
-通过本项目建设修改版并提供网络服务时，同样需要以 AGPL-3.0 开源你的修改。
+[AGPL-3.0](LICENSE)（GNU Affero General Public License v3.0）。修改版通过网络提供服务时，同样需要以 AGPL-3.0 开源你的修改。
 
 ## 参与贡献
 
 - 贡献流程与开发环境：[docs/CONTRIBUTING.md](docs/CONTRIBUTING.md)
 - 安全问题报告：[docs/SECURITY.md](docs/SECURITY.md)
 - 行为准则：[docs/CODE_OF_CONDUCT.md](docs/CODE_OF_CONDUCT.md)
-- 架构与设计决策：[docs/](docs/)
-
----
-
-> 项目最初为自用开发的 Minecraft 服务器管理面板，现已开源。如有问题或建议，欢迎提交 Issue 或参与讨论。

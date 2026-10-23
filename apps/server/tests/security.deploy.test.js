@@ -1,10 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
-import { spawnSync } from 'node:child_process';
+import { readFileSync, mkdtempSync, writeFileSync, rmSync, mkdirSync, chmodSync } from 'node:fs';
+import { spawn, spawnSync } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isPrivateIp } from '../src/utils/url-guard.js';
+// 安装侧的唯一事实源：卸载清单要与之对拍，任一侧漂移都会红
+import { PAYLOAD } from '../../../tools/deploy/stage-payload.mjs';
 
 // 部署脚本安全回归测试（下载完整性 / systemd 低权限 / NODE_ENV 门控）
 // 部署脚本是 bash 发布脚本，不直接执行（避免真实安装副作用），
@@ -313,7 +315,7 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
 
   describe('Node.js 安装不执行未校验引导脚本', () => {
     it('优先使用发行版官方源安装 Node.js', () => {
-      expect(script).toContain('install_pkg nodejs npm');
+      expect(script).toContain('install_pkg_recorded nodejs npm');
       expect(script).toMatch(/先尝试发行版官方源/);
     });
 
@@ -327,9 +329,24 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
   });
 
   describe('systemd 低权限运行', () => {
-    it('systemd unit 不再以 root 运行', () => {
-      expect(script).not.toContain('User=root');
-      expect(script).toContain('User=mc-commander');
+    it('面板服务不以 root 运行', () => {
+      // 只判面板本体那个单元：删除执行单元必须以 root 运行才能删专用用户与系统单元，
+      // 它只能由面板经 sudoers 白名单触发，权限面由白名单收窄
+      // 面板单元的 User= 必须紧跟其后、且在删除执行单元定义之前
+      const at = script.indexOf('cat > /etc/systemd/system/mc-commander.service');
+      const removalAt = script.indexOf('mc-commander-removal.service <<EOF');
+      const panelUnit = script.slice(at, removalAt);
+      expect(panelUnit).toContain('User=mc-commander');
+      expect(panelUnit).not.toContain('User=root');
+    });
+
+    it('删除执行单元以 root 运行，但 sudoers 只放行启动它', () => {
+      const start = script.indexOf('mc-commander-removal.service <<EOF');
+      const removalUnit = script.slice(start, start + 400);
+      expect(removalUnit).toContain('User=root');
+      // 白名单只给 start，不给 stop/restart 等其它能力
+      expect(script).toContain('NOPASSWD: /usr/bin/systemctl start mc-commander-removal.service');
+      expect(script).not.toMatch(/NOPASSWD:.*systemctl (stop|restart|disable)/);
     });
 
     it('创建专用低权限用户并移交目录属主', () => {
@@ -366,11 +383,11 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
       expect(script).toContain('SETUP_TOKEN=$SETUP_TOKEN');
     });
 
-    it('部署完成输出展示 SETUP_TOKEN（与 API Key 同位置）并说明一次性语义', () => {
-      // 横幅里 token/Key 独占一行原样输出（值长 64/76 字符，塞不进带右边框的一行）
-      expect(script).toContain('► SETUP_TOKEN');
-      expect(script).toContain('echo "║     $SETUP_TOKEN"');
-      expect(script).toContain('用后作废');
+    it('部署完成输出展示 SETUP_TOKEN，并说明它是首访设密要粘的那串', () => {
+      // 横幅里 token 独占一行原样输出（64 位 hex，塞不进带右边框的一行）
+      expect(script).toContain('echo "    $SETUP_TOKEN"');
+      expect(script).toContain('首次进入要设管理员密码');
+      expect(script).toContain('粘到设密页');
     });
 
     it('令牌仅在本次生成时展示（更新部署不重复暴露一次性凭据）', () => {
@@ -380,17 +397,48 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
     });
   });
 
-  describe('API Key 日志掩码', () => {
-    it('首次部署 log 行不再完整打印 Key（掩码保留前 4 位）', () => {
-      // 「已生成 API Key」日志必须走掩码，防完整 Key 进入部署日志长期留存
-      expect(script).toMatch(/已生成 API Key: \$\{API_KEY:0:4\}\*\*\*\*/);
-      expect(script).not.toMatch(/已生成 API Key: \$API_KEY/);
+  describe('重装补齐 .env 缺失键', () => {
+    // 老 .env 缺 HOST 时面板只监听 127.0.0.1：用户重装后「看起来装好了」却打不开，
+    // 比直接报错更难查。补齐只写缺失的键，已有值一律不动。
+    const backfill = script.slice(
+      script.indexOf('ENV_ADDED=""'),
+      script.indexOf('log "已补齐 .env'),
+    );
+
+    it('补齐函数只在键缺失时追加', () => {
+      expect(backfill).toContain('grep -qE "^[[:space:]]*${key}=" .env');
+      expect(backfill).toContain('printf \'%s=%s\\n\' "$key" "$value" >> .env');
     });
 
-    it('完整 Key 仅在部署完成横幅一次性展示（交付通道保留）', () => {
-      // 横幅的独占行 echo 是唯一完整展示点（用户取 Key 的交付通道，有意保留）
-      expect(script).toContain('► API Key');
-      expect(script).toContain('echo "║     $API_KEY"');
+    it('覆盖会决定面板能否被远程访问的键', () => {
+      expect(backfill).toContain('env_backfill HOST 0.0.0.0');
+      expect(backfill).toContain('env_backfill PORT 25566');
+      expect(backfill).toContain('env_backfill SERVERS_DIR ./var/servers');
+      expect(backfill).toContain('env_backfill DATA_DIR ./var/data');
+      expect(backfill).toContain('env_backfill BACKUPS_DIR ./var/backups');
+    });
+
+    it('补齐发生在「.env 已存在」分支内，不覆盖首次生成', () => {
+      const firstBranch = script.slice(
+        script.indexOf('if [ ! -f .env ]'),
+        script.indexOf('else\n  log ".env 已存在'),
+      );
+      expect(firstBranch).not.toContain('env_backfill');
+    });
+  });
+
+  describe('API Key 不进终端交付面', () => {
+    it('部署日志不打印 Key 明文', () => {
+      // 日志长期留存；Key 面板内随时可重新生成，没必要在这里出现
+      expect(script).not.toMatch(/已生成 API Key: \$API_KEY/);
+      expect(script).not.toMatch(/已生成 API Key: \$\{API_KEY:0:4\}/);
+    });
+
+    it('完成横幅不打印 Key，改为指路面板内生成', () => {
+      // 浏览器走会话鉴权用不到它；印出来只会让用户多一个要保管的东西
+      expect(script).not.toContain('echo "    $API_KEY"');
+      expect(script).toContain('想接自动化工具');
+      expect(script).toContain('浏览器用不到它');
     });
   });
 
@@ -486,6 +534,759 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
       const byScript = classifyByScript(['100.64.0.1']);
       expect(byScript[0]).toBe('private');
       expect(isPrivateIp('100.64.0.1')).toBe(true);
+    });
+  });
+
+  // 就绪判定是「这次部署成没成」的唯一出口：判错会把崩溃重启中的服务报成部署完成。
+  // 这里不只断言脚本里有某段字符串——把函数原样抽出来灌响应真跑，否则逻辑写错照样全绿。
+  describe('就绪判定：认得出「这不是本次装的面板」', () => {
+    const fnSource = script.match(/wait_until_ready\(\) \{[\s\S]*?\n\}/);
+    if (!fnSource) throw new Error('未能在部署脚本中定位 wait_until_ready');
+
+    /**
+     * 灌入一次就绪判定的全部外部输入。
+     * 等待预算压到 1 秒：判据不成立的用例必须走完整条超时路径才算数，
+     * 而默认 30 秒会让几个用例白等一分钟以上。
+     */
+    function runReady({ body = '', curlExit = 0, hasPackage = true, svcState = 'active' } = {}) {
+      const dir = mkdtempSync(path.join(os.tmpdir(), 'mcs-ready-'));
+      try {
+        const stub = path.join(dir, 'bin');
+        mkdirSync(stub);
+        const curlStub =
+          '#!/bin/sh\nif [ "$FAKE_CURL_EXIT" -eq 0 ]; then printf "%s" "$FAKE_CURL_BODY"; fi\nexit "$FAKE_CURL_EXIT"\n';
+        writeFileSync(path.join(stub, 'curl'), curlStub);
+        // systemctl 必须也替身：判据里「unit 真的 active」这一路如果落到机器上的真 unit，
+        // 用例结果就跟着跑测试的机器漂移了
+        writeFileSync(
+          path.join(stub, 'systemctl'),
+          '#!/bin/sh\nprintf "%s\\n" "$FAKE_SVC_STATE"\n',
+        );
+        chmodSync(path.join(stub, 'curl'), 0o755);
+        chmodSync(path.join(stub, 'systemctl'), 0o755);
+        const appDir = path.join(dir, 'app');
+        mkdirSync(appDir);
+        if (hasPackage) {
+          writeFileSync(path.join(appDir, 'package.json'), JSON.stringify({ version: '0.9.0' }));
+        }
+        const prog = [
+          'MC_COMMANDER_DIR=' + appDir,
+          'SERVER_PORT=25566',
+          'READY_TIMEOUT=1',
+          fnSource[0],
+          'wait_until_ready; RC=$?; echo "SEEN=$SEEN_VERSION"; echo "STATE=$SERVICE_STATE"; exit $RC',
+        ].join('\n');
+        const r = spawnSync(BASH_BIN, ['-c', prog], {
+          encoding: 'utf8',
+          env: {
+            ...process.env,
+            PATH: stub + ':' + process.env.PATH,
+            FAKE_CURL_BODY: body,
+            FAKE_CURL_EXIT: String(curlExit),
+            FAKE_SVC_STATE: svcState,
+          },
+        });
+        expect(r.error).toBeUndefined();
+        return { status: r.status, stdout: r.stdout };
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    }
+
+    it('响应版本与本次安装一致 → 就绪', () => {
+      const r = runReady({ body: '{"status":"ok","data":{"version":"0.9.0"}}' });
+      expect(r.status).toBe(0);
+      expect(r.stdout).toContain('SEEN=0.9.0');
+    });
+
+    it('端口上有 2xx 但版本不符 → 判未就绪', () => {
+      // 旧版本面板、无关服务都能回 2xx：只判状态码就会把它们认成本次安装成功
+      const r = runReady({ body: '{"status":"ok","data":{"version":"9.9.9"}}' });
+      expect(r.status).toBe(1);
+      expect(r.stdout).toContain('SEEN=9.9.9');
+    });
+
+    it('响应里没有版本字段 → 判未就绪', () => {
+      const r = runReady({ body: '{"status":"ok"}' });
+      expect(r.status).toBe(1);
+    });
+
+    it('端口无人响应 → 判未就绪', () => {
+      const r = runReady({ curlExit: 7 });
+      expect(r.status).toBe(1);
+    });
+
+    it('磁盘读不到版本号时退回「有响应即就绪」', () => {
+      // 没有可比对的基准时判死，会把「面板其实好好的」装成失败
+      const r = runReady({ body: '{"data":{"version":"1.2.3"}}', hasPackage: false });
+      expect(r.status).toBe(0);
+    });
+
+    it('响应版本对得上、但 unit 正在崩溃重启 → 判未就绪', () => {
+      // 版本相符不等于本次启动成功：systemd 反复拉起时旧进程仍会答同一个端口
+      const r = runReady({
+        body: '{"status":"ok","data":{"version":"0.9.0"}}',
+        svcState: 'activating',
+      });
+      expect(r.status).toBe(1);
+      expect(r.stdout).toContain('STATE=activating');
+    });
+
+    it('版本相符且 unit active → 就绪', () => {
+      const r = runReady({ body: '{"data":{"version":"0.9.0"}}', svcState: 'active' });
+      expect(r.status).toBe(0);
+    });
+
+    it('等待请求带 --max-time：对端 accept 却不回包时不会卡死在第 1 轮', () => {
+      expect(fnSource[0]).toContain('--max-time');
+    });
+
+    it('就绪失败必须阻断：exit 1，且不再打印完成横幅', () => {
+      // 判据不可靠也不致命，致命的是判完还往下走
+      const after = script.split('if ! wait_until_ready; then')[1];
+      expect(after, '就绪失败分支未找到').toBeTruthy();
+      const branch = after.split('# 12.')[0];
+      expect(branch).toContain('exit 1');
+      expect(branch).not.toContain('部署完成');
+    });
+
+    it('失败分支只交付 SETUP_TOKEN（Key 面板内可重新生成）', () => {
+      const branch = script.split('if ! wait_until_ready; then')[1].split('# 12.')[0];
+      expect(branch).toContain('echo "  $SETUP_TOKEN"');
+      expect(branch).not.toContain('echo "  $API_KEY"');
+    });
+  });
+
+  // 失败兜底：脚本任何一步失败都要说人话。ERR trap 是这套兜底的唯一承重点，
+  // 而它很容易被后续改动破坏（漏 set -o errtrace、被 err 标志挡住、日志不留存）。
+  describe('失败兜底：任何一步失败都要说清卡在哪', () => {
+    const trapSource = script.match(/on_error\(\) \{[\s\S]*?\n\}/);
+    if (!trapSource) throw new Error('未能在部署脚本中定位 on_error');
+
+    /** 把 log/err/trap 三者原样抽出来，在隔离环境里跑一段会失败的脚本 */
+    function runWithTrap(steps) {
+      const dir = mkdtempSync(path.join(os.tmpdir(), 'mcs-trap-'));
+      try {
+        const logFn = script.match(/^log\(\) {2}\{[\s\S]*?^\}/m);
+        const errFn = script.match(/^err\(\) {2}\{[^\n]*\}/m);
+        const warnFn = script.match(/^warn\(\) \{[^\n]*\}/m);
+        if (!logFn || !errFn || !warnFn) throw new Error('未能在部署脚本中定位 log/err/warn');
+        const prog = [
+          'set -euo pipefail',
+          'set -o errtrace',
+          'LOG_LINES=()',
+          'LOG_LINES_MAX=200',
+          'ERR_SHOWN=0',
+          logFn[0],
+          warnFn[0],
+          errFn[0],
+          trapSource[0],
+          'trap on_error ERR',
+          steps,
+        ].join('\n');
+        const r = spawnSync(BASH_BIN, ['-c', prog], { encoding: 'utf8' });
+        expect(r.error).toBeUndefined();
+        return { status: r.status, stdout: r.stdout + r.stderr };
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    }
+
+    it('命令失败 → 打印中断块、回放进度、保留非 0 退出码', () => {
+      const r = runWithTrap('log "第一步完成"\nlog "第二步开始"\nfalse');
+      expect(r.status).toBe(1);
+      expect(r.stdout).toContain('安装中断');
+      expect(r.stdout).toContain('第一步完成');
+      expect(r.stdout).toContain('第二步开始');
+    });
+
+    it('函数内的失败同样被兜住（没有 errtrace 时函数内失败不会触发 ERR）', () => {
+      const r = runWithTrap('inner() { log "函数内一步"; false; }\ninner');
+      expect(r.status).toBe(1);
+      expect(r.stdout).toContain('安装中断');
+      expect(r.stdout).toContain('函数内一步');
+    });
+
+    it('已经用 err 给出专门解释的失败，不再叠一套通用文案', () => {
+      const r = runWithTrap('err "专门的失败说明"\nexit 1');
+      expect(r.status).toBe(1);
+      expect(r.stdout).toContain('专门的失败说明');
+      expect(r.stdout).not.toContain('安装中断');
+    });
+
+    it('正常退出不打印中断块', () => {
+      const r = runWithTrap('log "全部完成"');
+      expect(r.status).toBe(0);
+      expect(r.stdout).not.toContain('安装中断');
+    });
+
+    it('进度回放只取最近几行，不会把整段日志重打一遍', () => {
+      // 安装全程上百行；回放整段等于让用户在几百行里再找一次出错点
+      const r = runWithTrap('for i in $(seq 1 250); do log "第 $i 步"; done\nfalse');
+      expect(r.status).toBe(1);
+      const replay = r.stdout.split('最后几行进度：')[1].split('出错位置：')[0];
+      const bullets = replay.split('\n').filter((l) => l.trim().startsWith('·'));
+      expect(bullets).toHaveLength(3);
+      expect(bullets[2]).toContain('第 250 步');
+    });
+
+    it('脚本自身真的装了这套兜底：errtrace 已开、trap 已挂、err 短路在位', () => {
+      // 上面的用例跑的是抽出来的函数体，接线错了它们照样全绿（已用变异验证过）。
+      // 故接线本身必须单独锁：缺 errtrace 则函数内失败不触发，漏 trap 则整套失效。
+      expect(script).toMatch(/^set -o errtrace$/m);
+      expect(script).toMatch(/^trap on_error ERR$/m);
+      expect(script).toContain('[ "$ERR_SHOWN" -eq 1 ] && return 0');
+      // trap 必须在任何可能失败的步骤之前挂上：挂在文件末尾等于没挂
+      expect(script.indexOf('trap on_error ERR')).toBeLessThan(
+        script.indexOf('# 0. root 权限检查'),
+      );
+    });
+
+    it('apt 索引更新失败只降级为警告，不中止安装', () => {
+      // 已装的包不需要索引；真装不上时随后的 install 会失败并给出更准确的解释
+      expect(script).toMatch(/apt-get update \|\| warn/);
+      expect(script).not.toMatch(/^\s*apt\) apt-get update ;;$/m);
+    });
+
+    it('Java 25 装不上不中断安装，但完成横幅要写明影响', () => {
+      expect(script).toContain('JAVA25_MISSING=1');
+      expect(script).toContain('MC 26.x 及更新版本的实例将无法启动');
+      // 横幅里也必须出现：装完不看日志的人只读横幅
+      const banner = script.split('# 12. 输出部署信息')[1];
+      expect(banner).toContain('缺少 Java 25');
+    });
+  });
+
+  // 横幅是装完之后唯一的交付界面：说错一句，用户就照着错的去操作。
+  describe('完成横幅：每一句都要是真的', () => {
+    // 只取横幅本体（从第一条边框开始）：地址计算段在它之前，属另一件事
+    const banner = script.split('# 12. 输出部署信息')[1].split('echo "╔')[1].split('常用命令：')[0];
+
+    it('面板地址只在探测到公网地址时给出，否则让用户去控制台看', () => {
+      // localhost 指向用户自己的电脑，写成「在浏览器打开这个地址」他必然打不开
+      expect(script).not.toContain('PANEL_URL="http://localhost:$SERVER_PORT/"');
+      expect(script).toMatch(/if \[ -n "\$\{PUBLIC_IP_DETECTED:-\}" \] && ! is_private_ip/);
+      expect(banner).toContain('在浏览器里打开面板');
+      expect(banner).toContain('公网 IP 在云服务器控制台 → 实例列表里看');
+    });
+
+    it('不出现「客户端」——本项目是浏览器面板，没有客户端可输入', () => {
+      expect(banner).not.toContain('客户端');
+      expect(banner).toContain('在浏览器里打开');
+    });
+
+    it('明确交代游戏服务器地址不在这里', () => {
+      // 横幅里两个端口并排出现时，用户会拿 25566 去连 MC
+      expect(banner).toContain('游戏服务器地址不在这里');
+      expect(banner).toContain('默认端口 25565');
+    });
+
+    it('横幅每一行的显示宽度一致（中文字符按 2 列算）', () => {
+      // 宽度不齐时右边框参差，用户会以为输出被截断；中文占 2 列，按字符数算必错。
+      // 变量要按运行时实际值代入：按 $SERVER_PORT 字面量算会把 13 个字符当成实际宽度
+      const WIDE =
+        /[\u1100-\u115F\u2E80-\uA4CF\uAC00-\uD7A3\uF900-\uFAFF\uFE30-\uFE6F\uFF00-\uFF60\uFFE0-\uFFE6]/;
+      const width = (s) => [...s].reduce((n, c) => n + (WIDE.test(c) ? 2 : 1), 0);
+      const rows = script
+        .split('\n')
+        .filter((l) => l.startsWith('echo "║') && !l.includes('printf'))
+        .map((l) => l.slice(l.indexOf('║') + 1, l.lastIndexOf('║')))
+        .map((s) =>
+          s.replace(/\$SERVER_PORT/g, '25566').replace(/\$MC_COMMANDER_DIR/g, '/opt/mc-commander'),
+        );
+      expect(rows.length).toBeGreaterThan(10);
+      const widths = [...new Set(rows.map(width))];
+      expect(widths).toEqual([51]);
+    });
+
+    // printf 的 %-51s 按**字节**补齐，中文一个字 3 字节 ⇒ 用 printf 拼中文行必然错位
+    it('printf 边框行的实参必须是纯 ASCII', () => {
+      const bad = [];
+      for (const l of script.split('\n')) {
+        const m = l.match(/printf "║%-51s║\\n" "([^"]*)"/);
+        if (!m) continue;
+        if ([...m[1]].some((c) => c.charCodeAt(0) > 127)) bad.push(m[1]);
+      }
+      expect(bad).toEqual([]);
+    });
+
+    it('防火墙按实际状态说话，不把「跳过已有规则」说成「已开放」', () => {
+      expect(script).toContain('FIREWALL_STATE="ufw-inactive"');
+      expect(banner).toContain('本机未启用防火墙');
+      // 旧的「已通过 ufw 开放端口」是把 inactive 下的 0 返回当成功
+      expect(script).not.toContain('已通过 ufw 开放端口');
+    });
+
+    // 实测（腾讯云轻量）：ufw inactive 但安全组拦着，端口照样连不进来。
+    // 此时说「端口未被拦截」是假话，用户会转而去怀疑面板本身。
+    // 判据必须是实测可达性，不是「本机防火墙开没开」。
+    it('可达性按实测结果说话，不按本机防火墙状态推断', () => {
+      expect(script).toContain('REACHABLE="unknown"');
+      expect(script).toContain(
+        'curl -sf -o /dev/null --connect-timeout 5 --max-time 8 "$PANEL_URL"',
+      );
+      // 连不进来时必须明说「卡在云平台」，并给出放行位置
+      expect(banner).toContain('从外面还连不进来');
+      expect(banner).toContain('面板本身是好的');
+      // 说「端口未被拦截」在有安全组的情况下是假话
+      expect(banner).not.toContain('端口未被拦截');
+    });
+
+    it('确认可达时才说可以访问，且提示收紧来源', () => {
+      expect(banner).toContain('已确认可以从外网访问');
+      expect(banner).toContain('建议只放行你自己的 IP');
+    });
+  });
+
+  // 横幅是装完之后唯一的交付界面：用户照着它做，所以它必须给出可执行的动作。
+  describe('横幅对用户的实际可执行性', () => {
+    // 只取横幅本体（第一条边框到常用命令之间）
+    const banner = script.split('# 12. 输出部署信息')[1].split('echo "╔')[1].split('常用命令：')[0];
+
+    it('探测到公网地址时第①步给的是真链接，不是 localhost', () => {
+      // localhost 指向用户自己的电脑；写成「在浏览器打开这个地址」他必然打不开
+      expect(script).toContain('PANEL_URL="http://$PUBLIC_IP_DETECTED:$SERVER_PORT/"');
+      expect(banner).toContain('在浏览器里打开这个地址');
+    });
+
+    it('探测不到公网地址时指路控制台，不留一条打不开的链接', () => {
+      expect(banner).toContain('公网 IP 在云服务器控制台 → 实例列表里看');
+      expect(banner).not.toContain('localhost:25566');
+    });
+
+    it('API Key 不在终端出现，改为指路面板内生成', () => {
+      // 浏览器走会话鉴权用不到它；面板内「设置 → 连接设置」可随时重新生成
+      expect(banner).toContain('想接自动化工具');
+      expect(banner).toContain('浏览器用不到它');
+      expect(script).not.toContain('echo "    $API_KEY"');
+    });
+  });
+
+  describe('凭据交付：用户拿得走、丢了找得回', () => {
+    // 令牌行不套边框：三击选行会把两侧 ║ 一起复制（实测 70 字符），粘进设密页必失败
+    it('SETUP_TOKEN 独占行不带边框字符', () => {
+      const lines = script.split('\n');
+      const tokenLine = lines.find((l) => l.includes('echo "    $SETUP_TOKEN"'));
+      expect(tokenLine).toBeDefined();
+      expect(tokenLine).not.toContain('║');
+    });
+
+    it('横幅写明「没存下来就重跑同一条命令」', () => {
+      // 重跑是低代码用户唯一会想到的找回动作；sudo 读 .env 他做不到
+      expect(script).toContain('重新运行同一条安装命令即可再显示');
+    });
+
+    it('重跑时从 .env 读回未作废的令牌并再次展示', () => {
+      expect(script).toMatch(/SETUP_TOKEN=\$\(sed -n 's\/\^SETUP_TOKEN=\/\/p' \.env/);
+      expect(script).toContain('沿用 .env 里的 SETUP_TOKEN');
+    });
+
+    it('已设密的机器上重跑不会复活令牌', () => {
+      // 设密成功时服务端删除该行，故读回只可能发生在「还没设过密」的机器上
+      expect(script).not.toMatch(
+        /if \[ -f \.env \]; then[\s\S]*?SETUP_TOKEN=\$\(openssl rand -hex 32\)[\s\S]*?else/,
+      );
+    });
+  });
+
+  describe('服务器地址探测：先问权威源，再退猜测', () => {
+    const fn = script.match(/get_public_ip\(\) \{[\s\S]*?\n\}/);
+    if (!fn) throw new Error('未能在部署脚本中定位 get_public_ip');
+
+    it('云厂商元数据排在出口探测之前', () => {
+      // 元数据 public-ipv4 是入站地址；出口探测拿到的是出站地址，NAT 池下两者不等
+      const body = fn[0];
+      const metaAt = body.indexOf('metadata.tencentyun.com');
+      const egressAt = body.indexOf('ifconfig.me');
+      expect(metaAt).toBeGreaterThan(-1);
+      expect(egressAt).toBeGreaterThan(-1);
+      expect(metaAt).toBeLessThan(egressAt);
+    });
+
+    /**
+     * 把 get_public_ip 原样抽出来灌假 curl 跑：
+     * 只断言脚本里有 `[ -n "$ip" ]` 挡不住「把它删了照样通过」。
+     */
+    function runDetect({ meta = '', aliyun = '', egress = '', nic = '' } = {}) {
+      const dir = mkdtempSync(path.join(os.tmpdir(), 'mcs-detect-'));
+      try {
+        const stub = path.join(dir, 'bin');
+        mkdirSync(stub);
+        // 按 URL 分派：元数据空 body 也必须退出 0（真实腾讯云就是 200 + 空）
+        const curl = [
+          '#!/bin/sh',
+          'url=""',
+          'while [ $# -gt 0 ]; do case "$1" in http*) url="$1" ;; esac; shift; done',
+          'case "$url" in',
+          '  *metadata.tencentyun.com*) printf "%s" "$FAKE_META" ;;',
+          '  *100.100.100.200*) printf "%s" "$FAKE_ALIYUN" ;;',
+          '  *) printf "%s" "$FAKE_EGRESS" ;;',
+          'esac',
+          // 真实 curl 在 -f 下对空响应体仍退出 0，故这里也退 0：被测的正是「空 body」
+          'exit 0',
+        ].join('\n');
+        writeFileSync(path.join(stub, 'curl'), curl);
+        writeFileSync(path.join(stub, 'hostname'), `#!/bin/sh\nprintf '%s\\n' "$FAKE_NIC"\n`);
+        chmodSync(path.join(stub, 'curl'), 0o755);
+        chmodSync(path.join(stub, 'hostname'), 0o755);
+        // is_private_ip 与函数同源：一并抽出，避免测试里另写一份判据
+        const priv = script.match(/PRIVATE_IPV4_RE='[^']+'/)[0];
+        const isPriv = script.match(/is_private_ip\(\) \{[\s\S]*?\n\}/)[0];
+        // pipefail 必须带上：真实脚本是 set -euo pipefail，`curl | grep | head` 的空输入
+        // 靠它才会让整条管道返回非 0；缺了它测出来的行为与线上不一致
+        const prog = ['set -euo pipefail', priv, isPriv, fn[0], 'get_public_ip'].join('\n');
+        const r = spawnSync(BASH_BIN, ['-c', prog], {
+          encoding: 'utf8',
+          env: {
+            ...process.env,
+            PATH: stub + ':' + process.env.PATH,
+            FAKE_META: meta,
+            FAKE_ALIYUN: aliyun,
+            FAKE_EGRESS: egress,
+            FAKE_NIC: nic,
+          },
+        });
+        expect(r.error).toBeUndefined();
+        return r.stdout.trim();
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    }
+
+    it('元数据返回空时继续往下找，不拿空串当结果', () => {
+      // 腾讯云在「没有弹性公网 IP」时返回 200 + 空 body：只判 curl 退出码会返回空串
+      const out = runDetect({ meta: '', egress: '203.0.113.9', nic: '10.0.0.5' });
+      expect(out).toBe('203.0.113.9 egress');
+    });
+
+    it('元数据有值时优先采信，并标 metadata', () => {
+      const out = runDetect({ meta: '198.51.100.7', egress: '203.0.113.9' });
+      expect(out).toBe('198.51.100.7 metadata');
+    });
+
+    it('全部探测都失败时退回网卡地址', () => {
+      // 必须用真公网地址：TEST-NET 段（203.0.113.0/24 等）本身就在私网/保留表里，会被跳过
+      const out = runDetect({ nic: '1.2.3.4' });
+      expect(out).toBe('1.2.3.4 nic');
+    });
+
+    it('回显带来源标记，调用方据此决定能不能写进 .env', () => {
+      expect(fn[0]).toContain('echo "$ip metadata"');
+      expect(fn[0]).toContain('echo "$ip egress"');
+      expect(script).toContain('PUBLIC_IP_DETECTED=""');
+    });
+  });
+  // 卸载删目录前必须先把仍在跑的实例停干净：实例是 detached 进程，面板停了它们还在写世界。
+  // 直接 rm -rf 会把存档从进程底下抽走——进程不报错、文件已消失，玩家看到区块加载失败，
+  // 而存档已经救不回来。故这里把函数真的跑起来，用一个真进程冒充实例进程。
+  describe('卸载前停止运行中的实例', () => {
+    const fnSource = script.match(/stop_running_instances\(\) \{[\s\S]*?\n\}/);
+    if (!fnSource) throw new Error('未能在部署脚本中定位 stop_running_instances');
+
+    /**
+     * 进程是否真的还在跑。
+     * 不能用 kill(pid, 0)：被测进程是本测试的直接子进程，退出后变僵尸，
+     * 僵尸仍能通过 kill(pid,0) 探活 ⇒ 断言会假红。故读 /proc/<pid>/stat 的
+     * 状态字段，Z 与读不到都算「已不在运行」。
+     */
+    function isRunning(pid) {
+      try {
+        const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
+        // 状态是 comm 之后的第一个字段；comm 可能含空格，从最后一个 ')' 之后切
+        return stat.slice(stat.lastIndexOf(')') + 2).split(' ')[0] !== 'Z';
+      } catch {
+        return false;
+      }
+    }
+
+    /** 建一个假安装目录：var/servers/<name>/.mc-commander-pid 指向一个真在跑的进程 */
+    function setupInstance(dir, pid, name = 'inst1') {
+      const instDir = path.join(dir, 'var', 'servers', name);
+      mkdirSync(instDir, { recursive: true });
+      writeFileSync(
+        path.join(instDir, '.mc-commander-pid'),
+        JSON.stringify({ pid, startedAt: Date.now() }),
+      );
+      return instDir;
+    }
+
+    /**
+     * 起一个命令行里带 instDir 的进程，模拟 MC 实例。
+     * 用 node 而非 bash/sleep：bash 对单条命令会 exec 优化、把额外参数丢掉，
+     * 那样命令行里就没有实例目录，验活判定恒不命中（探针会假绿）。
+     * 形态对齐真实实例：命令行里带着自己实例目录下的 jar 路径。
+     */
+    function spawnFakeInstance(instDir) {
+      // 显式监听 TERM 并退出：默认 TERM 处理在 detached 子进程里不可靠，
+      // 探针会因为「信号发了但进程还在」而红，掩盖掉判定逻辑本身是对的这个事实
+      const child = spawn(
+        process.execPath,
+        [
+          '-e',
+          "process.on('SIGTERM', () => process.exit(0)); setTimeout(() => {}, 60000)",
+          path.join(instDir, 'server.jar'),
+        ],
+        { stdio: 'ignore', detached: true },
+      );
+      child.unref();
+      return child;
+    }
+
+    // log/warn 不在被抽取的函数体里，必须补桩：缺了它们，函数内的提示行会被
+    // 「command not found」吞到 stderr，断言 stdout 就永远看不到「已停止」。
+    // 函数体走环境变量传入而不是位置参数——位置参数在拼好的脚本里不会被再展开，
+    // 传进去的是一行字面量，函数根本不会被定义。
+    function runStop(dir) {
+      return spawnSync(BASH_BIN, ['-c', 'eval "$FN_SRC"\nstop_running_instances; echo DONE'], {
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          MC_COMMANDER_DIR: dir,
+          FN_SRC: 'log() { echo "[INFO] $*"; }\nwarn() { echo "[WARN] $*"; }\n' + fnSource[0],
+        },
+      });
+    }
+
+    it('实例在跑 → 发 TERM 并等它退出', () => {
+      const dir = mkdtempSync(path.join(os.tmpdir(), 'mcs-purge-'));
+      try {
+        const instDir = setupInstance(dir, 0);
+        const child = spawnFakeInstance(instDir);
+        // pid 文件写真实 pid
+        writeFileSync(
+          path.join(instDir, '.mc-commander-pid'),
+          JSON.stringify({ pid: child.pid, startedAt: Date.now() }),
+        );
+        const r = runStop(dir);
+        expect(r.status).toBe(0);
+        expect(r.stdout).toContain('停止仍在运行的实例进程');
+        expect(r.stdout).toContain('DONE');
+        // 进程必须真的停了。runStop 内的等待循环已保证这一点，这里只确认结果
+        expect(isRunning(child.pid)).toBe(false);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it('pid 已被复用给别的进程（命令行不含实例目录）→ 不误杀', () => {
+      const dir = mkdtempSync(path.join(os.tmpdir(), 'mcs-purge-'));
+      try {
+        // 指向一个真实存在、但命令行与实例目录无关的进程（本进程自己）
+        setupInstance(dir, process.pid);
+        const r = runStop(dir);
+        expect(r.status).toBe(0);
+        expect(r.stdout).not.toContain('停止仍在运行的实例进程');
+        expect(r.stdout).toContain('DONE');
+        // 自己还活着
+        expect(() => process.kill(process.pid, 0)).not.toThrow();
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it('没有 var/servers 目录 → 直接返回，不报错', () => {
+      const dir = mkdtempSync(path.join(os.tmpdir(), 'mcs-purge-'));
+      try {
+        const r = runStop(dir);
+        expect(r.status).toBe(0);
+        expect(r.stdout).toContain('DONE');
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it('卸载只在 --purge 时停实例，非 purge 保留数据不动实例', () => {
+      // 非 purge 分支删的是代码不是数据，实例还能被用户手工接管，不该被静默杀掉
+      const purgeBranch = script.slice(script.indexOf('if [ "$purge" -eq 1 ]'));
+      expect(purgeBranch).toContain('stop_running_instances');
+    });
+  });
+  // 卸载清单必须与安装时铺下的条目一一对应：漏一项就留下几十 MB 与含凭据的 .env，
+  // 而用户按「已卸载」理解。这里把清单与载荷白名单对拍，任一侧新增条目而另一侧没跟上都会红。
+  describe('非 purge 卸载的删除清单完整性', () => {
+    /** 从卸载分支里取出 for item in ... 的条目表 */
+    function uninstallItems() {
+      const m = script.match(/for item in ([^;]+); do/);
+      if (!m) throw new Error('未能在部署脚本中定位卸载删除清单');
+      return m[1].trim().split(/\s+/);
+    }
+
+    it('安装时铺到根目录的每一项都在删除清单里（漏一项即残留）', () => {
+      const items = uninstallItems();
+      // 载荷白名单是安装侧的唯一事实源：它铺什么，卸载就得删什么
+      for (const entry of PAYLOAD.serverFiles) expect(items, entry).toContain(entry);
+      for (const entry of PAYLOAD.serverDirs) expect(items, entry).toContain(entry);
+      expect(items).toContain(PAYLOAD.schemasDirName);
+      // 安装期现场生成的依赖树与 lock：不清掉就是几十 MB 残留
+      expect(items).toContain('node_modules');
+      expect(items).toContain('package-lock.json');
+    });
+
+    it('保留 .env 但必须提示它含凭据（不能静默留下也不提）', () => {
+      const items = uninstallItems();
+      // .env 刻意不删（用户可能留档），但绝不能悄悄留下
+      expect(items).not.toContain('.env');
+      expect(script).toContain('含 API Key 摘要');
+    });
+
+    it('三个数据目录一个都不在删除清单里（那是玩家的世界）', () => {
+      const items = uninstallItems();
+      for (const d of ['var', 'var/servers', 'var/data', 'var/backups']) {
+        expect(items, d).not.toContain(d);
+      }
+    });
+  });
+  // 端口只有一个事实源：.env 的 PORT。用户改过端口后，就绪检查与横幅地址必须跟着变，
+  // 否则「面板明明起来了」会被判成「部署未完成」——用户于是去修一个不存在的问题。
+  describe('端口取自 .env 而非写死', () => {
+    /** 取脚本里解析端口的片段，喂不同的 .env 看结果 */
+    function resolvePort(envContent) {
+      const lines = script.split('\n');
+      const idx = lines.findIndex((l) => l.includes('SERVER_PORT=$(sed -n'));
+      if (idx < 0) throw new Error('端口解析不是从 .env 读的');
+      const snippet = lines.slice(idx, idx + 2).join('\n');
+      const dir = mkdtempSync(path.join(os.tmpdir(), 'mcs-port-'));
+      try {
+        writeFileSync(path.join(dir, '.env'), envContent);
+        // 片段走环境变量传入：位置参数在拼好的脚本里不会被再展开，传进去的是一行字面量
+        const r = spawnSync(BASH_BIN, ['-c', 'eval "$SNIPPET"\necho "PORT=$SERVER_PORT"'], {
+          encoding: 'utf8',
+          env: { ...process.env, MC_COMMANDER_DIR: dir, SNIPPET: snippet },
+        });
+        return (r.stdout.match(/PORT=(\d+)/) || [])[1];
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    }
+
+    it('.env 里改过的端口被采信（不再判成部署未完成）', () => {
+      expect(resolvePort('PORT=3000\nHOST=0.0.0.0\n')).toBe('3000');
+    });
+
+    it('.env 里没有 PORT 时退回 25566（首装与老配置都覆盖）', () => {
+      expect(resolvePort('HOST=0.0.0.0\n')).toBe('25566');
+    });
+
+    it('端口解析不受注释行干扰', () => {
+      expect(resolvePort('# PORT=9999\nPORT=8080\n')).toBe('8080');
+    });
+  });
+  // 服务起不来时不能无限重试：3 秒间隔配 systemd 默认的「10 秒内 5 次」永远够不着额度，
+  // 于是每 3 秒重试一次、永不进入 failed——用户既看不到「它坏了」，也等不到它自己好。
+  describe('systemd 单元的重试上限', () => {
+    it('单元模板带 StartLimit，且间隔与次数能让失败态真的出现', () => {
+      expect(script).toContain('StartLimitIntervalSec=');
+      expect(script).toContain('StartLimitBurst=');
+      const interval = Number((script.match(/StartLimitIntervalSec=(\d+)/) || [])[1]);
+      const burst = Number((script.match(/StartLimitBurst=(\d+)/) || [])[1]);
+      const restartSec = Number((script.match(/RestartSec=(\d+)/) || [])[1]);
+      expect(interval).toBeGreaterThan(0);
+      expect(burst).toBeGreaterThan(0);
+      // 窗口内能容纳的重试次数必须真的耗尽额度，否则限制形同虚设
+      expect(Math.floor(interval / restartSec)).toBeGreaterThanOrEqual(burst);
+    });
+  });
+  // 反代/域名部署下，脚本探测到的 IP 与用户实际访问的入口不是一回事：
+  // 硬拼出来的链接必然打不开。PUBLIC_URL 让部署方给出真实入口。
+  describe('横幅地址：PUBLIC_URL 优先于探测结果', () => {
+    /** 取脚本里决定 PANEL_URL 的那段，喂不同环境变量看结果 */
+    function resolvePanelUrl(env) {
+      const lines = script.split('\n');
+      const start = lines.findIndex((l) => l.startsWith('PANEL_URL=""'));
+      if (start < 0) throw new Error('未能在部署脚本中定位 PANEL_URL 计算');
+      const end = lines.findIndex((l, i) => i > start && l === 'fi');
+      const snippet = lines.slice(start, end + 1).join('\n');
+      // 私网判定是这段逻辑的依赖，必须一并注入——缺了它，私网地址会被当成公网拼进链接
+      const privateFn = script.match(
+        /PRIVATE_IPV4_RE='[^']+'\n[\s\S]*?is_private_ip\(\) \{[\s\S]*?\n\}/,
+      );
+      if (!privateFn) throw new Error('未能在部署脚本中定位 is_private_ip');
+      const r = spawnSync(BASH_BIN, ['-c', 'eval "$SNIPPET"\necho "URL=$PANEL_URL"'], {
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          SNIPPET: privateFn[0] + '\n' + snippet,
+          SERVER_PORT: '25566',
+          ...env,
+        },
+      });
+      return (r.stdout.match(/URL=(.*)/) || [])[1] ?? '';
+    }
+
+    it('给了 PUBLIC_URL 就用它（反代/域名部署的唯一出路）', () => {
+      expect(
+        resolvePanelUrl({
+          PUBLIC_URL: 'https://mc.example.com',
+          PUBLIC_IP_DETECTED: '203.0.113.9',
+        }),
+      ).toBe('https://mc.example.com/');
+    });
+
+    it('PUBLIC_URL 末尾多写斜杠不产生双斜杠', () => {
+      expect(resolvePanelUrl({ PUBLIC_URL: 'https://mc.example.com/' })).toBe(
+        'https://mc.example.com/',
+      );
+    });
+
+    it('没给 PUBLIC_URL 时退回探测到的公网 IP', () => {
+      // 必须用真公网地址：TEST-NET 段（203.0.113.0/24）本身就在私网/保留表里，会被拦下
+      expect(resolvePanelUrl({ PUBLIC_IP_DETECTED: '1.2.3.4' })).toBe('http://1.2.3.4:25566/');
+    });
+
+    it('探测到的是私网地址时不拼链接（用户必然打不开）', () => {
+      expect(resolvePanelUrl({ PUBLIC_IP_DETECTED: '192.168.1.10' })).toBe('');
+    });
+  });
+  // TLS 起不来时服务端会退回纯明文（缺 openssl、证书生成失败等）。此时横幅若仍说
+  // 「面板已支持加密访问」，用户会照它去装根证书，装完发现还是 http。
+  // 判据必须是实测：能连上 https 才说支持。
+  describe('加密访问的承诺以实测为准', () => {
+    // 横幅本体（第一条边框到常用命令之间）
+    const tlsBanner = script.split('本机加密访问未能启动')[0].split('# 12. 输出部署信息')[1] ?? '';
+
+    it('横幅先探测 https 再决定说什么', () => {
+      expect(script).toContain(
+        'curl -skf -o /dev/null --connect-timeout 3 --max-time 6 "https://localhost:$SERVER_PORT/health"',
+      );
+      expect(tlsBanner).toContain('面板已支持加密访问');
+      // 降级分支必须存在且说清后果与原因
+      const fallback = script.split('本机加密访问未能启动')[1] ?? '';
+      expect(fallback).toContain('面板其余功能不受影响');
+      expect(fallback).toContain('常见原因：系统缺少 openssl 命令');
+    });
+
+    it('探测用的是本机 https，不是面板公网地址（安全组未放行时也要判得准）', () => {
+      // 用 $PANEL_URL 探 https 会在安全组未放行时恒失败，把「TLS 正常」误报成「未启动」
+      const httpsProbe = script.split('加密访问未能启动')[0].split('if curl -skf')[1] ?? '';
+      expect(httpsProbe).toContain('localhost');
+      expect(httpsProbe).not.toContain('$PANEL_URL');
+    });
+  });
+  /* 实例是 detached 进程，不随面板服务停止：只停面板时它们继续跑、继续写存档、
+     继续对外服务，且会让 userdel 必然失败。停实例必须排在停服务之前 */
+  describe('卸载先停实例并如实清点数据', () => {
+    it('停实例发生在停服务之前', () => {
+      const fnStart = script.indexOf('do_uninstall() {');
+      const body = script.slice(fnStart, script.indexOf('\n}\n', fnStart));
+      const stopInstancesAt = body.indexOf('stop_running_instances');
+      const stopServiceAt = body.indexOf('systemctl stop mc-commander');
+      expect(stopInstancesAt).toBeGreaterThan(0);
+      expect(stopInstancesAt).toBeLessThan(stopServiceAt);
+    });
+
+    it('数据清单逐项数文件，不按目录存在就说「仍然保留」', () => {
+      const fnStart = script.indexOf('do_uninstall() {');
+      const body = script.slice(fnStart, script.indexOf('\n}\n', fnStart));
+      // 空目录上说「数据仍然保留」等于告诉用户存档还在，他可能因此不去备份
+      expect(body).toMatch(/find[^\n]*wc -l/);
+      expect(body).toContain('已没有实例或备份数据');
+    });
+
+    it('删用户失败给出手动处置步骤', () => {
+      const fnStart = script.indexOf('do_uninstall() {');
+      const body = script.slice(fnStart, script.indexOf('\n}\n', fnStart));
+      expect(body).toContain('ps -u mc-commander');
+      expect(body).toContain('pkill -u mc-commander');
     });
   });
 });

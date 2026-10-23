@@ -1,9 +1,9 @@
 /**
  * NotificationsPanel 测试（通知设置子页）：
- * 两组渲染/行数与类型顺序/默认全开/单行切换落 store 并持久化/组级批量开关/持久化后重载回显
+ * 两组渲染/行数与类型顺序/默认全开/单行切换落 store 并写面板偏好/组级批量开关/偏好拉回后回显
  * mock 数据为虚构占位（类型 label 来自公开领域数据，无真实服务器/玩家信息）。
  */
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { NotificationsPanel } from '@/features/settings/components/notifications-panel'
@@ -14,8 +14,7 @@ import {
   type NotificationType,
 } from '@/lib/notifications'
 import { useNotificationPreferenceStore } from '@/stores/notification-preferences'
-
-const STORAGE_KEY = 'mcs-notification-preferences'
+import { usePanelPreferencesStore } from '@/stores/panel-preferences'
 
 /** 按分类取类型（保持 NOTIFICATION_TYPE_ORDER 声明序） */
 function typesOf(category: NotificationCategory): NotificationType[] {
@@ -23,8 +22,8 @@ function typesOf(category: NotificationCategory): NotificationType[] {
 }
 
 beforeEach(() => {
-  localStorage.clear()
   useNotificationPreferenceStore.setState({ prefs: {} })
+  usePanelPreferencesStore.setState({ remote: {}, saving: false })
 })
 
 describe('NotificationsPanel', () => {
@@ -75,7 +74,10 @@ describe('NotificationsPanel', () => {
     }
   })
 
-  it('单行切换：关闭「聊天」落 store 并持久化，组级开关保持 checked（半开态显示开，P4 配置可预期）', async () => {
+  it('单行切换：关闭「聊天」落 store 并写面板偏好，组级开关保持 checked（半开态显示开，P4 配置可预期）', async () => {
+    const saveSpy = vi
+      .spyOn(usePanelPreferencesStore.getState(), 'save')
+      .mockResolvedValue(undefined)
     const user = userEvent.setup()
     render(<NotificationsPanel />)
     await user.click(screen.getByRole('switch', { name: '聊天 开关' }))
@@ -88,13 +90,9 @@ describe('NotificationsPanel', () => {
       'data-state',
       'unchecked',
     )
-    // 持久化：仅写非默认（false）项
-    const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}') as Record<
-      string,
-      { toast: boolean }
-    >
-    expect(raw.chat?.toast).toBe(false)
-    expect(raw.join).toBeUndefined()
+    // 落盘：仅写非默认（false）项，且写的是服务端偏好（换设备一致）。
+    // 实际请求由偏好 store 单测覆盖，这里只断言交给它的载荷形状
+    expect(saveSpy).toHaveBeenCalledWith({ notificationPreferences: { chat: { toast: false } } })
     // 组级 checked 语义：至少一项开启 → checked，并带半开提示
     const gameGroupSwitch = screen.getByRole('switch', { name: '游戏通知 开关' })
     expect(gameGroupSwitch).toHaveAttribute('data-state', 'checked')
@@ -153,11 +151,8 @@ describe('NotificationsPanel', () => {
     )
   })
 
-  it('持久化后重载回显：localStorage 注入 → 关闭项回显关闭，其余默认开', () => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ chat: { toast: false } }))
-    // 模拟新会话：store 以持久化数据重建（等价于模块加载时 readStored）
-    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}')
-    useNotificationPreferenceStore.setState({ prefs: stored })
+  it('偏好拉回后回显：服务端有 chat 关闭 → 回显关闭，其余默认开', () => {
+    useNotificationPreferenceStore.getState().replaceAll({ chat: { toast: false } })
 
     render(<NotificationsPanel />)
     expect(screen.getByRole('switch', { name: '聊天 开关' })).toHaveAttribute(

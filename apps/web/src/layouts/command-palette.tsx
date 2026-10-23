@@ -43,6 +43,7 @@ import { usePlayers } from '@/features/players/queries'
 import { usePlayersUiStore } from '@/features/players/store'
 import { useCreateBackup } from '@/features/settings/queries'
 import { useStopInstance } from '@/hooks/use-instance-stop'
+import { usePanelPreferencesStore } from '@/stores/panel-preferences'
 import { apiPost } from '@/api/client'
 import { getFriendlyErrorText } from '@/api/errors'
 import { instanceLabel } from '@/lib/instance-label'
@@ -57,7 +58,6 @@ import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
  * / 实例操作（重启/备份/停止：破坏性操作二次确认，备份直接执行）
  */
 
-const PRESET_STORAGE_KEY = 'mcs-command-presets'
 const DEFAULT_PRESETS = [
   'give @p diamond 64',
   'gamemode creative',
@@ -65,19 +65,6 @@ const DEFAULT_PRESETS = [
   'tp @p 0 100 0',
   'kill @e[type=!player]',
 ]
-
-function readPresets(): string[] {
-  try {
-    const raw = localStorage.getItem(PRESET_STORAGE_KEY)
-    if (raw) {
-      const parsed = JSON.parse(raw) as string[]
-      if (Array.isArray(parsed)) return parsed
-    }
-  } catch {
-    // 回退默认
-  }
-  return DEFAULT_PRESETS
-}
 
 interface PaletteAction {
   label: string
@@ -262,8 +249,9 @@ export function CommandPalette() {
     },
   }
 
-  // 命令域：预设快捷命令
-  const presets = readPresets()
+  // 命令域：预设快捷命令。派生自面板偏好而非读一次快照——偏好是异步拉回的，
+  // 读一次会把「还没拉回来」的默认值当成用户配置
+  const presets = usePanelPreferencesStore((s) => s.remote?.commandPresets ?? DEFAULT_PRESETS)
 
   // 玩家域：搜索玩家（远程数据），点选打开玩家页详情；cmdk 按 value 过滤
   const playersQuery = usePlayers(instanceId)

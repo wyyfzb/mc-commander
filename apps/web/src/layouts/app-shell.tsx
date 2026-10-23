@@ -12,6 +12,7 @@ import { useServerStore } from '@/stores/server'
 import { useInstances } from '@/api/queries'
 import { useNotificationToasts } from '@/hooks/use-notification-toasts'
 import { useServerSocket } from '@/hooks/use-server-socket'
+import { usePanelPreferencesHydrate } from '@/hooks/use-panel-preferences-hydrate'
 
 /**
  * AppShell —— 主布局壳
@@ -48,6 +49,8 @@ export function AppShell() {
     }
   }, [instancesQuery.data, instanceId, setInstanceId])
 
+  // 面板偏好（跨设备一致的配置）：全站唯一拉取点，之后各消费方同步读内存
+  usePanelPreferencesHydrate()
   // WS 实时层（全局挂载：通知/状态/日志跨页面共享）
   useServerSocket(instanceId)
   // 游戏内事件 toast 播报（通知中心之外的一过性即时反馈）

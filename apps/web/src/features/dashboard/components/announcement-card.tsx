@@ -18,13 +18,14 @@ import { useSendCommand } from '@/hooks/use-send-command'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { Card, CardHeader, CardTitle } from '@/components/mcs/card'
 import { primaryModifierLabel } from '@/lib/platform'
+import { usePanelPreferencesStore, writePreference } from '@/stores/panel-preferences'
 
 /**
  * 公告发送卡
  * - say 全服广播：预设胶囊填充 → 发送 → 命令回显终端
  * - 多行文本域：Enter 换行，Ctrl/⌘+Enter 发送；多行公告用 tellraw（JSON 文本组件）
  * - 广播影响全体在线玩家：发送前 ConfirmDialog 二次确认（Tasteful Friction）
- * - 预设（名称+文案）localStorage 持久化，可增删改（与命令快捷指令同模式）
+ * - 预设（名称+文案）存面板偏好：换设备/换浏览器后仍是同一份（与命令快捷指令同模式）
  */
 
 /** 公告预设：胶囊显示名称，tooltip 显示文案 */
@@ -33,39 +34,24 @@ interface AnnouncementPreset {
   content: string
 }
 
-const PRESET_STORAGE_KEY = 'mcs-announcement-presets'
 const DEFAULT_PRESETS: AnnouncementPreset[] = [
   { name: '重启预告', content: '服务器将在 5 分钟后重启，请及时停靠' },
   { name: '维护结束', content: '维护结束，祝游玩愉快！' },
 ]
 
-function readPresets(): AnnouncementPreset[] {
-  try {
-    const raw = localStorage.getItem(PRESET_STORAGE_KEY)
-    if (raw) {
-      const parsed = JSON.parse(raw) as AnnouncementPreset[]
-      if (Array.isArray(parsed)) return parsed
-    }
-  } catch {
-    // 回退默认
-  }
-  return DEFAULT_PRESETS
-}
-
 function writePresets(presets: AnnouncementPreset[]) {
-  try {
-    localStorage.setItem(PRESET_STORAGE_KEY, JSON.stringify(presets))
-  } catch {
-    // localStorage 不可用时静默忽略
-  }
+  void writePreference('announcementPresets', presets).catch(() => {
+    toast.error('预设保存失败，请稍后重试')
+  })
 }
 
 export function AnnouncementCard() {
   const [text, setText] = useState('')
   const [confirmOpen, setConfirmOpen] = useState(false)
   const { send, isRunning, sending } = useSendCommand()
-  // 预设列表 + 编辑器状态（editIndex=null 新增，数字=编辑下标）
-  const [presets, setPresets] = useState<AnnouncementPreset[]>(readPresets)
+  // 预设列表直接派生自面板偏好：另存本地副本会在拉取完成前读到默认值，
+  // 此时保存会把默认值整份写回，覆盖用户已有预设
+  const presets = usePanelPreferencesStore((s) => s.remote?.announcementPresets ?? DEFAULT_PRESETS)
   const [editorOpen, setEditorOpen] = useState(false)
   const [editIndex, setEditIndex] = useState<number | null>(null)
   const [formName, setFormName] = useState('')
@@ -95,16 +81,13 @@ export function AnnouncementCard() {
       editIndex == null
         ? [...presets, { name, content }]
         : presets.map((p, i) => (i === editIndex ? { name, content } : p))
-    setPresets(next)
     writePresets(next)
     setEditorOpen(false)
     toast.success(`已保存预设: ${name}`)
   }
 
   const removePreset = (index: number) => {
-    const next = presets.filter((_, i) => i !== index)
-    setPresets(next)
-    writePresets(next)
+    writePresets(presets.filter((_, i) => i !== index))
     setDeleteIndex(null)
   }
 

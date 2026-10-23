@@ -12,6 +12,8 @@ import { useConnectionStore } from '@/stores/connection'
 import { useServerStore } from '@/stores/server'
 import { useTerminalStore } from '@/stores/terminal'
 import { useCommandBus } from '@/stores/command-bus'
+import { usePanelPreferencesStore, writePreference } from '@/stores/panel-preferences'
+import { useCommandHistory } from '@/api/queries'
 import {
   colorForCommand,
   completeCommands,
@@ -26,44 +28,16 @@ import { Card } from '@/components/mcs/card'
  * 命令输入行
  * - `>` 前缀 + 回车/按钮发送；RCON 响应非空时插入终端（INFO 级）
  * - / 开头触发补全（命令名前缀 / 参数子串，最多 10 条）
- * - ↑↓ 翻命令历史（localStorage 持久化；连续重复去重；导航中保留草稿）
- * - 快捷 chips：5 默认 + 持久化（localStorage），播放=立即发送，点主体=仅填充，X=删除
+ * - ↑↓ 翻命令历史（读服务端 command_history，与审计页同源；连续重复去重；导航中保留草稿）
+ * - 快捷 chips：5 默认 + 面板偏好，播放=立即发送，点主体=仅填充，X=删除
  * - RCON 未启用时显示降级横幅
  */
 
-const PRESET_STORAGE_KEY = 'mcs-command-presets'
-const HISTORY_STORAGE_KEY = 'mcs-command-history'
-const HISTORY_STATUS_KEY = 'mcs-command-history-status'
 const HISTORY_LIMIT = 50
 
 /** 命令历史条目状态 */
 type CommandStatus = 'sent' | 'failed'
 
-/** 命令历史状态映射（command → status/error） */
-function readCommandStatusMap(): Record<string, { status: CommandStatus; error?: string }> {
-  try {
-    const raw = localStorage.getItem(HISTORY_STATUS_KEY)
-    if (raw) return JSON.parse(raw)
-  } catch {
-    // 回退空
-  }
-  return {}
-}
-
-function writeCommandStatusMap(map: Record<string, { status: CommandStatus; error?: string }>) {
-  try {
-    // 只保留历史中存在的命令状态
-    const history = readCommandHistory()
-    const activeKeys = new Set(history)
-    const trimmed: Record<string, { status: CommandStatus; error?: string }> = {}
-    for (const [k, v] of Object.entries(map)) {
-      if (activeKeys.has(k)) trimmed[k] = v
-    }
-    localStorage.setItem(HISTORY_STATUS_KEY, JSON.stringify(trimmed))
-  } catch {
-    // localStorage 不可用时静默忽略
-  }
-}
 const DEFAULT_PRESETS = [
   'give @p diamond 64',
   'gamemode creative',
@@ -72,40 +46,6 @@ const DEFAULT_PRESETS = [
   'kill @e[type=!player]',
 ]
 
-function readPresets(): string[] {
-  try {
-    const raw = localStorage.getItem(PRESET_STORAGE_KEY)
-    if (raw) {
-      const parsed = JSON.parse(raw) as string[]
-      if (Array.isArray(parsed)) return parsed
-    }
-  } catch {
-    // 回退默认
-  }
-  return DEFAULT_PRESETS
-}
-
-function readCommandHistory(): string[] {
-  try {
-    const raw = localStorage.getItem(HISTORY_STORAGE_KEY)
-    if (raw) {
-      const parsed = JSON.parse(raw) as string[]
-      if (Array.isArray(parsed)) return parsed.slice(-HISTORY_LIMIT)
-    }
-  } catch {
-    // 回退空历史
-  }
-  return []
-}
-
-function writeCommandHistory(history: string[]) {
-  try {
-    localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(history.slice(-HISTORY_LIMIT)))
-  } catch {
-    // localStorage 不可用时静默忽略
-  }
-}
-
 export function CommandInput() {
   const config = useConnectionStore()
   const instanceId = useServerStore((s) => s.instanceId)
@@ -113,13 +53,39 @@ export function CommandInput() {
   const isRconConnected = useServerStore((s) => s.status?.capabilities.rcon ?? false)
   const pushEntry = useTerminalStore((s) => s.pushEntry)
   const [value, setValue] = useState('')
-  const [presets, setPresets] = useState<string[]>(readPresets)
+  /** 快捷指令列表直接派生自面板偏好：另存一份本地副本就会在拉取完成前读到默认值，
+   *  此时保存会把默认值整份写回，覆盖用户已有指令 */
+  const presets = usePanelPreferencesStore((s) => s.remote?.commandPresets ?? DEFAULT_PRESETS)
   const [sending, setSending] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
-  /** 持久化命令历史（localStorage；发送成功入列；连续重复合并） */
-  const historyRef = useRef<string[]>(readCommandHistory())
-  /** 历史条目状态映射（command → sent/failed + error） */
-  const statusMapRef = useRef(readCommandStatusMap())
+  /**
+   * 命令历史：服务端 command_history 是唯一事实源（审计页读同一张表）。
+   *
+   * 发送后不重取——重取会打乱用户正在导航的位置，且新命令可能还没落库。
+   * 本会话发过的命令另存一份，与最近一次服务端快照合并：服务端按 id 倒序返回，
+   * 导航要时间正序，故先反转再追加本地未回流的那些。
+   */
+  const historyQuery = useCommandHistory({ page: 1, pageSize: HISTORY_LIMIT })
+  const historyRef = useRef<string[]>([])
+  /** 本会话发送的命令及其状态（服务端快照里可能还没有，且失败原因只有这里有） */
+  const sessionStatusRef = useRef<Record<string, { status: CommandStatus; error?: string }>>({})
+  /** 导航时的状态查询表（服务端快照 + 本会话记录合并后的结果） */
+  const statusMapRef = useRef<Record<string, { status: CommandStatus; error?: string }>>({})
+  useEffect(() => {
+    const rows = historyQuery.data?.data
+    if (!rows) return
+    const ordered = [...rows].reverse().map((r) => r.command)
+    const fromServer = new Set(ordered)
+    const pending = Object.keys(sessionStatusRef.current).filter((c) => !fromServer.has(c))
+    historyRef.current = [...ordered, ...pending].slice(-HISTORY_LIMIT)
+    const map: Record<string, { status: CommandStatus; error?: string }> = {}
+    for (const row of rows) {
+      map[row.command] = row.success
+        ? { status: 'sent' }
+        : { status: 'failed', error: row.response ?? undefined }
+    }
+    statusMapRef.current = { ...map, ...sessionStatusRef.current }
+  }, [historyQuery.data])
   /** 历史导航态：index=当前条目、draft=进入导航前的未发送输入 */
   const navRef = useRef<{ index: number; draft: string } | null>(null)
   /** 导航中当前条目的状态（用于显示状态指示器） */
@@ -172,20 +138,14 @@ export function CommandInput() {
     mutation.mutate(trimmed, { onSettled: () => setSending(false) })
   }
 
-  /** 入列历史（shell 语义：与最近一条相同则跳过；超出上限裁头；同步写入 localStorage） */
+  /** 入列历史（shell 语义：与最近一条相同则跳过；超出上限裁头）——落库由服务端在命令执行处完成 */
   const pushHistory = (command: string, status: CommandStatus = 'sent', error?: string) => {
     const h = historyRef.current
-    if (h[h.length - 1] === command) {
-      // 重复命令仅更新状态
-      statusMapRef.current[command] = { status, error }
-      writeCommandStatusMap(statusMapRef.current)
-      return
+    if (h[h.length - 1] !== command) {
+      historyRef.current = [...h, command].slice(-HISTORY_LIMIT)
     }
-    const next = [...h, command].slice(-HISTORY_LIMIT)
-    historyRef.current = next
-    writeCommandHistory(next)
+    sessionStatusRef.current[command] = { status, error }
     statusMapRef.current[command] = { status, error }
-    writeCommandStatusMap(statusMapRef.current)
   }
 
   /** ↑↓ 历史导航：↑ 上移，↓ 下移；↓ 越过最新恢复草稿；任何编辑退出导航 */
@@ -226,26 +186,18 @@ export function CommandInput() {
       return
     }
     const next = [...presets, trimmed]
-    setPresets(next)
-    try {
-      localStorage.setItem(PRESET_STORAGE_KEY, JSON.stringify(next))
-      toast.success(`已保存快捷指令: ${trimmed}`)
-    } catch {
-      setPresets(presets)
-      toast.error('保存快捷指令失败')
-    }
+    void writePreference('commandPresets', next)
+      .then(() => toast.success(`已保存快捷指令: ${trimmed}`))
+      .catch(() => toast.error('保存快捷指令失败'))
   }
 
   const removePreset = (preset: string) => {
-    const next = presets.filter((p) => p !== preset)
-    setPresets(next)
-    try {
-      localStorage.setItem(PRESET_STORAGE_KEY, JSON.stringify(next))
-    } catch {
-      setPresets(presets)
-      toast.error('删除快捷指令失败')
-    }
-    setDeleteTarget(null)
+    void writePreference(
+      'commandPresets',
+      presets.filter((p) => p !== preset),
+    )
+      .catch(() => toast.error('删除快捷指令失败'))
+      .finally(() => setDeleteTarget(null))
   }
 
   return (

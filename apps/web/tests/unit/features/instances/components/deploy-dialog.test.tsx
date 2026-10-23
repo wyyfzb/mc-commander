@@ -130,7 +130,12 @@ describe('DeployDialog', () => {
     // 名称校验：空名点下一步 → 错误文案且不前进
     await user.click(screen.getByRole('button', { name: '下一步' }))
     expect(screen.getByText('请填写实例名称')).toBeInTheDocument()
-    expect(screen.getByLabelText('实例名称')).toBeInTheDocument()
+    const nameInput = screen.getByLabelText('实例名称')
+    // 焦点必须落到该填的框里：只显示一行小字时用户看不出哪里没填
+    expect(nameInput).toHaveFocus()
+    // 错误与输入框的关联不能只靠视觉相邻，读屏要能读出「这个框为什么错」
+    expect(nameInput).toHaveAttribute('aria-invalid', 'true')
+    expect(nameInput).toHaveAttribute('aria-describedby', 'deploy-instance-name-error')
 
     // 填写名称后错误消失，可前进
     await user.type(screen.getByLabelText('实例名称'), '我的生存服')
@@ -564,5 +569,21 @@ describe('DeployDialog 取消部署', () => {
     expect(screen.getByText(/收尾未完成：实例目录未能删除（EBUSY/)).toBeInTheDocument()
     // 反向断言：不得同时出现「已清理」的说法（两种口径同屏即自相矛盾）
     expect(screen.queryByText(/实例目录已清理/)).not.toBeInTheDocument()
+  })
+  /* 服务端类型 5 卡是 sr-only 单选钮 + 兄弟文本的形态：不给 aria-label 时
+     可访问名只能从 label 的文本节点取，而本结构把文本放在兄弟 span 里，
+     读屏会读出一个没有名字的单选钮——完全无法选择服务端类型 */
+  it('服务端类型每个选项都有可访问名称', () => {
+    renderDialog()
+    // 服务端类型在第①步，进入向导即可见
+    // 步骤① 的 5 个单选钮
+    const radios = screen.getAllByRole('radio')
+    expect(radios).toHaveLength(5)
+    for (const radio of radios) {
+      const name = radio.getAttribute('aria-label')
+      expect(name).toBeTruthy()
+      // 名称要能说清「是哪个服务端」，不能是空串或纯类型 id
+      expect(name).toMatch(/原版|Paper|Fabric|Forge|Purpur/)
+    }
   })
 })

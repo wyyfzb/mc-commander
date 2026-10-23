@@ -4,6 +4,8 @@
  * 命令一律不带前导 `/`（控制台/RCON 不接受）。
  * 约束：tp 不支持离线玩家——单个模式离线时整 Tab 显示离线提示；批量模式过滤在线目标执行。
  */
+import type { PanelPreferences } from '@mc-commander/schemas'
+import { writePreference } from '@/stores/panel-preferences'
 
 /** 坐标点 */
 export interface TeleportPoint {
@@ -27,8 +29,6 @@ export interface QuickTeleportSchema {
   hideOrigin: boolean
   items: QuickTeleportPoint[]
 }
-
-export const QUICK_TELEPORT_STORAGE_KEY = 'mc_commander_quick_teleports'
 
 /** 传送玩家到坐标（坐标取整） */
 export function buildTeleportToCoordsCommand(playerName: string, point: TeleportPoint): string {
@@ -56,43 +56,17 @@ export function resolveRespawnTarget(
   return respawnPoint ?? spawnPoint ?? worldSpawn
 }
 
-/** 从 localStorage 读取快捷传送点（损坏回退默认 schema） */
-export function loadQuickTeleports(storage: Storage): QuickTeleportSchema {
-  try {
-    const raw = storage.getItem(QUICK_TELEPORT_STORAGE_KEY)
-    if (raw === null || raw.length === 0) return { hideOrigin: false, items: [] }
-    const parsed: unknown = JSON.parse(raw)
-    if (typeof parsed !== 'object' || parsed === null) return { hideOrigin: false, items: [] }
-    const obj = parsed as Record<string, unknown>
-    const rawItems = Array.isArray(obj.items) ? obj.items : []
-    const items: QuickTeleportPoint[] = rawItems
-      .filter((e): e is Record<string, unknown> => typeof e === 'object' && e !== null)
-      .filter(
-        (e) =>
-          typeof e.name === 'string' &&
-          typeof e.x === 'number' &&
-          typeof e.y === 'number' &&
-          typeof e.z === 'number',
-      )
-      .map((e) => ({
-        name: e.name as string,
-        x: e.x as number,
-        y: e.y as number,
-        z: e.z as number,
-      }))
-    return { hideOrigin: obj.hideOrigin === true, items }
-  } catch {
-    return { hideOrigin: false, items: [] }
-  }
+/** 从未配置过快捷传送点时的默认形态 */
+export const DEFAULT_QUICK_TELEPORTS: QuickTeleportSchema = { hideOrigin: false, items: [] }
+
+/** 从偏好快照派生快捷传送点：渲染期直接订阅，不另存本地副本 */
+export function quickTeleportsFromPreferences(
+  remote: PanelPreferences | null,
+): QuickTeleportSchema {
+  return remote?.quickTeleports ?? DEFAULT_QUICK_TELEPORTS
 }
 
-/** 保存快捷传送点到 localStorage */
-export function saveQuickTeleports(storage: Storage, schema: QuickTeleportSchema): void {
-  storage.setItem(
-    QUICK_TELEPORT_STORAGE_KEY,
-    JSON.stringify({
-      hideOrigin: schema.hideOrigin,
-      items: schema.items.map((p) => ({ name: p.name, x: p.x, y: p.y, z: p.z })),
-    }),
-  )
+/** 写入快捷传送点（整份替换）；失败抛出，由调用方提示 */
+export function saveQuickTeleports(schema: QuickTeleportSchema): Promise<void> {
+  return writePreference('quickTeleports', schema)
 }

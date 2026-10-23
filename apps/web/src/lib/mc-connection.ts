@@ -3,13 +3,19 @@
  * - normalizeBaseUrl：默认 https 协议 + 去尾斜杠（单输入框语义）
  * - panelAddress / sessionAppliesToPanel：面板身份与「会话是否属于本面板」判定
  * - isInternalHost：本机/内网地址判断（localhost/::1/127.x/10.x/192.168.x/172.16-31.x）
+ * - isLoopbackHost：仅本机可达的环回地址判断（换设备访问是否可行）
+ * - panelShareAddress：换设备访问要展示的地址（环回地址不可用）
  * - needsHttpPlaintextWarning：公网 http 明文传输警告判定
  * - serialize/parseConnectionConfig：连接配置的文本互转（复制/粘贴导入）
  */
 
-/** 规范化面板地址：默认 https 协议 + 去尾斜杠（协议前缀大小写不敏感） */
+/**
+ * 规范化面板地址：默认 https 协议 + 去尾斜杠（协议前缀大小写不敏感）。
+ * 空串原样返回——它表示同源（请求走相对路径），补协议会拼出 `https:/` 这种非法地址。
+ */
 export function normalizeBaseUrl(input: string): string {
   let url = input.trim()
+  if (url === '') return ''
   if (!/^https?:\/\//i.test(url)) {
     url = `https://${url}`
   }
@@ -66,6 +72,27 @@ export function isInternalHost(host: string): boolean {
   if (a === 192 && b === 168) return true // 192.168.0.0/16
   if (a === 172 && b >= 16 && b <= 31) return true // 172.16.0.0/12
   return false
+}
+
+/**
+ * 主机是否只在本机可达（环回）。与 isInternalHost 的差别：局域网地址（192.168.x 等）
+ * 同网段的设备能访问，环回地址连同一台机器上的另一个浏览器都算不上——
+ * 判断「别的设备能不能用这个地址」只能看是否环回，不能看是否内网。
+ */
+export function isLoopbackHost(host: string): boolean {
+  const h = host.toLowerCase()
+  if (h === 'localhost' || h === '[::1]' || h === '::1') return true
+  return /^127\./.test(h)
+}
+
+/**
+ * 换设备访问要给的地址（同源部署下即当前站点根）。
+ * 环回地址只在本机可达，给出去等于让人在手机上打不开且看不出原因 ⇒ 返回 null，
+ * 由调用方改为指路到服务器的实际 IP。origin 取小写，与会话签发面板同一口径。
+ */
+export function panelShareAddress(location: { origin: string; hostname: string }): string | null {
+  if (isLoopbackHost(location.hostname)) return null
+  return location.origin.toLowerCase()
 }
 
 /**

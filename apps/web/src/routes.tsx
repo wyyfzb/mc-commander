@@ -5,6 +5,7 @@ import { hasUsableCredentials } from '@/stores/connection'
 import { installSessionExpiryHandler } from '@/lib/session-expiry'
 import {
   AboutSettingsPage,
+  DataSettingsPage,
   AccountSettingsPage,
   BackupSettingsPage,
   ConnectionSettingsPage,
@@ -101,6 +102,7 @@ export const router = createBrowserRouter([
           { path: 'notifications', Component: NotificationsSettingsPage },
           { path: 'backup', Component: BackupSettingsPage },
           { path: 'about', Component: AboutSettingsPage },
+          { path: 'data', Component: DataSettingsPage },
         ],
       },
       { path: '*', loader: () => redirect('/dashboard') },

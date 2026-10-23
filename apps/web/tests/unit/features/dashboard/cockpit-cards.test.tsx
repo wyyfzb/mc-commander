@@ -18,6 +18,7 @@ import { useTerminalStore } from '@/stores/terminal'
 import { useUiStore } from '@/stores/ui'
 import { useNotificationStore } from '@/stores/notifications'
 import { mockInstanceStatus } from '@tests/support/handlers'
+import { usePanelPreferencesStore } from '@/stores/panel-preferences'
 
 /**
  * 驾驶舱右栏三卡组件测试：MC 时钟（纯函数 + 联动发送）/ 事件与待办（抽屉深链）/ 公告发送
@@ -43,6 +44,8 @@ function renderWithProviders(ui: ReactNode) {
 
 beforeEach(() => {
   localStorage.clear()
+  // 偏好已拉回：未拉回时写入会被拒绝（该边界由偏好 store 单测覆盖）
+  usePanelPreferencesStore.setState({ remote: {}, saving: false })
   // 占位凭据动态生成（mimosa 硬编码凭据规则对 apiKey 字面量告警，测试值虽虚构仍按源消除）
   useConnectionStore.setState({
     baseUrl: '',
@@ -134,7 +137,7 @@ describe('AnnouncementCard 公告发送', () => {
     )
   })
 
-  it('预设管理：添加 → 胶囊与持久化；删除 → 胶囊消失', () => {
+  it('预设管理：添加 → 胶囊与写入面板偏好；删除 → 胶囊消失', async () => {
     renderWithProviders(<AnnouncementCard />)
     // 添加预设（名称+文案）
     fireEvent.click(screen.getByRole('button', { name: '添加预设' }))
@@ -142,10 +145,11 @@ describe('AnnouncementCard 公告发送', () => {
     fireEvent.change(screen.getByLabelText('公告文案'), { target: { value: '周末活动即将开始' } })
     fireEvent.click(screen.getByRole('button', { name: '保存' }))
     expect(screen.getByRole('button', { name: '活动预告' })).toBeInTheDocument()
-    const stored = JSON.parse(localStorage.getItem('mcs-announcement-presets') ?? '[]') as {
-      name: string
-    }[]
-    expect(stored.some((p) => p.name === '活动预告')).toBe(true)
+    // 落点是服务端偏好（换设备一致），不是本机 localStorage
+    await waitFor(() => {
+      const saved = usePanelPreferencesStore.getState().remote?.announcementPresets ?? []
+      expect(saved.some((p) => p.name === '活动预告')).toBe(true)
+    })
     // 删除预设：经二次确认
     fireEvent.click(screen.getByRole('button', { name: '删除预设 活动预告' }))
     fireEvent.click(screen.getByRole('button', { name: /^删除$/ }))

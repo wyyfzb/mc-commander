@@ -448,8 +448,8 @@ describe('DiagnosticsPanel：走真实 mock 端点', () => {
     const text = copyText.mock.calls[0]![0]
     expect(text).toContain('MC_Commander 自检结果')
     expect(text).toContain('- 实例运行：')
-    // 版本取自既有 check-update 契约（夹具 current: '0.1.0'），不为它新增接口
-    expect(text).toContain('面板版本：0.1.0')
+    // 版本取构建期常量（与「关于」页同一来源），不再依赖更新检查是否成功
+    expect(text).toContain(`面板版本：${__APP_VERSION__}`)
   })
 
   it('面板错误日志读不到（文件在但读不到）⇒ 卡内警示，不退化成「没有读到错误」空态', async () => {

@@ -24,6 +24,7 @@ import { isPathContained } from '../utils/fs-utils.js';
 // 地址「能不能发给玩家」与「能不能作为出站目标」用的是同一套可达性语义，
 // 各写一份正则会漂移（如漏掉 100.64.0.0/10 这类 CGNAT 段）
 import { addressReachability } from '../utils/url-guard.js';
+import { checkInstanceReachability } from './port-reachability.js';
 import * as levelDat from './mc-server/level-dat.js';
 import * as outputParser from './mc-server/output-parser.js';
 import * as statsCollector from './mc-server/stats-collector.js';
@@ -1319,6 +1320,21 @@ export class MCServerInstance extends EventEmitter {
     // 事件（避免 websocket 双消息冗余）
   }
 
+  /**
+   * 刷新玩家连接可达性缓存。实例没在运行时直接归 null：那时端口本来就不监听，
+   * 探出来的「连不上」是「没启动」而不是「端口没放行」，报给用户只会误导。
+   */
+  async refreshReachability() {
+    if (!this.isRunning) {
+      this._reachability = null;
+      return null;
+    }
+    const port = parseInt(this.properties['server-port'] || '0', 10);
+    const result = await checkInstanceReachability({ port, publicHost: this._publicIp });
+    this._reachability = result.state;
+    return this._reachability;
+  }
+
   toStatus() {
     const props = this.properties;
     const uptimeMs = this.isRunning && this.startTime ? Date.now() - this.startTime : 0;
@@ -1346,6 +1362,9 @@ export class MCServerInstance extends EventEmitter {
       uptime: Math.floor(uptimeMs / 1000),
       address,
       addressType,
+      // 异步探测的结果缓存在实例上：toStatus 是同步方法且会被列表接口逐实例调用，
+      // 在里面直接探端口会让一次列表请求退化成 N 次超时等待
+      reachability: this._reachability ?? null,
       players: Array.from(this.players.values()),
       playerCount: this.players.size,
       maxPlayers: parseInt(props['max-players'] || '20'),

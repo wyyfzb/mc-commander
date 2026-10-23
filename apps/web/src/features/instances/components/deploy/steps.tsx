@@ -75,7 +75,14 @@ export function DeployStepServer({
                     : 'border-mcs-border-default text-mcs-text-muted hover:bg-mcs-state-hover',
                 )}
               >
-                <RadioGroupItem value={type} className="sr-only" />
+                {/* sr-only 让 RadioGroupItem 的文本不可见，但它仍是读屏与键盘的唯一落点：
+                    不显式给 aria-label 时可访问名只取自 label 里的文本节点，
+                    而本结构把文本放在兄弟 span 里，读屏会读出一个没有名字的单选钮 */}
+                <RadioGroupItem
+                  value={type}
+                  aria-label={`${SERVER_TYPE_LABELS[type]}：${SERVER_TYPE_DESCRIPTIONS[type]}`}
+                  className="sr-only"
+                />
                 {/* 选中态不能只靠描边色差：色弱用户与「悬停高亮」都难以区分，
                     故补一个显式的对勾标记，让「当前选的是哪个」可以被扫读到 */}
                 {selected && (
@@ -201,8 +208,14 @@ export function DeployStepConfig({
           onChange={(e) => onNameChange(e.target.value)}
           placeholder="例如: 我的生存服"
           maxLength={50}
+          aria-invalid={nameError !== ''}
+          aria-describedby={nameError !== '' ? 'deploy-instance-name-error' : undefined}
         />
-        {nameError !== '' && <p className="text-mcs-xs text-mcs-error-fg">{nameError}</p>}
+        {nameError !== '' && (
+          <p id="deploy-instance-name-error" role="alert" className="text-mcs-xs text-mcs-error-fg">
+            {nameError}
+          </p>
+        )}
       </div>
 
       {/* 内存档位：分母是本机「还能分配的量」而非整机内存——整机数字对多实例场景

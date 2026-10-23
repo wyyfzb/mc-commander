@@ -1,6 +1,7 @@
 import express from 'express';
 import { WebSocketServer } from 'ws';
 import http from 'http';
+import https from 'https';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -31,6 +32,13 @@ import { BackupService } from './services/backup.service.js';
 import { initDatabase, getDb, InstanceModel, AdminAccountModel } from './db/index.js';
 import { bootstrapApiKey, isPublicBind } from './utils/credentials.js';
 import { logger } from './utils/logger.js';
+import { createProtocolMux } from './services/tls/mux.js';
+import {
+  ensureServerCert,
+  isOpensslAvailable,
+  loadCertMaterial,
+  readCaCert,
+} from './services/tls/cert.js';
 
 // ── 启动时 .env 权限检查 ────────────
 // 路径取 config.envFilePath（与 dotenv 加载、凭据写回同一个来源），避免两处各自推导
@@ -100,14 +108,55 @@ function warnIfPublicBindWithoutSetupToken() {
   logger.warn('──────────────────────────────────────────────────────────');
 }
 
+/**
+ * 准备 TLS 材料。失败一律降级为「只跑明文」而不是拒绝启动：
+ * 面板起不来等于用户连修的机会都没有，而明文通道本身是可用状态。
+ * 返回 material 与未启用的原因，后者要原样进设置页——用户需要知道
+ * 「为什么没有 HTTPS」，而不是面对一个永久灰着的开关。
+ */
+function prepareTls() {
+  if (!isOpensslAvailable()) {
+    return { material: null, reason: '系统缺少 openssl 命令，无法生成证书' };
+  }
+  try {
+    ensureServerCert();
+    const material = loadCertMaterial();
+    if (!material) {
+      logger.warn('[TLS] 证书文件读取失败，本次只提供明文访问');
+      return { material: null, reason: '证书文件读取失败，请查看面板日志' };
+    }
+    return { material, reason: null };
+  } catch (err) {
+    logger.warn(`[TLS] 证书准备失败，本次只提供明文访问：${err.message}`);
+    return { material: null, reason: `证书准备失败：${err.message}` };
+  }
+}
+
 initDatabase();
 warnIfPublicBindWithoutSetupToken();
 
 const app = express();
-const server = http.createServer(app);
+// 明文与 TLS 各一个 http(s) 服务器，由 mux 在同一个端口上按首字节分流。
+// 两个服务器共享同一份 express app 与同一个 WebSocketServer（WS 升级请求
+// 走各自 server 的 upgrade 事件，故 wss 不能绑定单一 server）。
+const plainServer = http.createServer(app);
+const tls = config.tls.enabled
+  ? prepareTls()
+  : { material: null, reason: '已在 .env 关闭（TLS_ENABLED=false）' };
+const secureServer = tls.material ? https.createServer(tls.material, app) : null;
+// 对外声明的 TLS 状态：与真实监听保持一致，供设置页判断「能不能给引导」
+const tlsState = {
+  enabled: Boolean(secureServer),
+  disabledReason: secureServer ? null : tls.reason,
+};
+const server = secureServer
+  ? createProtocolMux(
+      (socket) => plainServer.emit('connection', socket),
+      (socket) => secureServer.emit('connection', socket),
+    )
+  : plainServer;
 const wss = new WebSocketServer({
-  server,
-  path: '/ws',
+  noServer: true,
   // 限制单条 WS 消息大小（客户端仅 subscribe/unsubscribe/ping，
   // 1MB 足够），防止恶意客户端发送超大消息导致服务端内存膨胀
   maxPayload: 1024 * 1024,
@@ -130,6 +179,18 @@ const wss = new WebSocketServer({
     return true;
   },
 });
+
+// WS 升级请求在两个 server 上各接一次：/ws 之外一律 destroy——noServer 模式下
+// wss 不再自行按路径拒绝握手，路径判定必须在这里做
+for (const s of secureServer ? [plainServer, secureServer] : [plainServer]) {
+  s.on('upgrade', (req, socket, head) => {
+    if (req.url?.split('?')[0] !== '/ws') {
+      socket.destroy();
+      return;
+    }
+    wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
+  });
+}
 
 // 信任反向代理（nginx/CDN）：层数可通过 TRUST_PROXY 环境变量配置，默认 1
 app.set('trust proxy', config.trustProxy);
@@ -211,11 +272,28 @@ app.use('/api/', rateLimit());
 app.use('/api/', authMiddleware);
 app.use('/api/', apiKeyRateLimit());
 
+// 根证书下载：必须免认证——用户导入根证书时还没登录，登录页本身也可能
+// 因证书未受信而不可用。证书是公开信息（私钥不在此端点），分发它不降低安全性；
+// 真正的风险是明文下载被中间人换成攻击者的 CA，故面板在下载页与设置页都展示
+// 指纹，用户导入后可与设备证书列表里的指纹核对。
+app.get('/ca.crt', (req, res) => {
+  const pem = readCaCert();
+  if (!pem) {
+    res.status(404).type('text/plain; charset=utf-8').send('内置 HTTPS 未启用');
+    return;
+  }
+  res.type('application/x-x509-ca-cert');
+  // inline 而非 attachment：iOS 需要浏览器直接打开证书页才会弹出「安装描述文件」，
+  // 强制下载会落进文件 App，用户还得自己找到并点开——多两步就多一批放弃的人
+  res.setHeader('Content-Disposition', 'inline; filename="mc-commander-ca.crt"');
+  res.send(pem);
+});
+
 // 静态托管：必须挂 setupRoutes 之前（其内部 notFoundHandler 直接收尾，
 // 挂其后静态请求无法命中）；未部署前端时不挂载，非 /api 仍走 JSON 404
 setupStaticServe(app, config.publicDir);
 
-setupRoutes(app, serverManager, taskScheduler);
+setupRoutes(app, serverManager, taskScheduler, tlsState);
 
 app.use(errorHandler);
 
@@ -299,6 +377,12 @@ server.listen(config.port, config.host, () => {
   logger.banner(`  Data Dir: ${config.dataDir}`);
   logger.banner(`  API Endpoint: http://localhost:${config.port}/api/v1`);
   logger.banner(`  WebSocket: ws://localhost:${config.port}/ws`);
+  // 同一端口两种协议：列出来是为了让排障的人知道 https/wss 也是通的，
+  // 不必去猜证书是否生效
+  if (secureServer) {
+    logger.banner(`  HTTPS: https://localhost:${config.port}/`);
+    logger.banner(`  Secure WebSocket: wss://localhost:${config.port}/ws`);
+  }
   logger.banner(`========================================`);
 
   taskScheduler.start();
@@ -374,11 +458,18 @@ async function shutdown(signal) {
     } catch (e) {
       logger.error('Failed to close database:', e.message);
     }
-    server.close(() => {
+    // 每个监听器都要关：mux 只负责分流，已分出去的连接由各自的
+    // http/https.Server 持有，漏关任何一个都会让进程带着监听句柄退出。
+    // 无 TLS 时 server 就是 plainServer 本身，按集合去重后逐个关
+    const closables = secureServer ? [server, plainServer, secureServer] : [plainServer];
+    let pending = closables.length;
+    const done = () => {
+      if (--pending > 0) return;
       logger.info('Server closed');
       process.exit(0);
-    });
-    // 兜底：server.close 回调未触发也强制退出
+    };
+    for (const s of closables) s.close(done);
+    // 兜底：close 回调未触发也强制退出
     setTimeout(() => process.exit(0), 3000).unref();
   });
 }

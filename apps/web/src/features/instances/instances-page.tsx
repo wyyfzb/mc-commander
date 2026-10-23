@@ -11,6 +11,7 @@ import { useMutation, useQueries, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, Loader2, Rocket } from 'lucide-react'
 import { toast } from 'sonner'
 import { apiGet, apiPost, ApiError } from '@/api/client'
+import { apiCheckReachability } from '@/api/instances'
 import { FALLBACK_POLL_INTERVAL_MS, queryKeys, useInstances, useOverview } from '@/api/queries'
 import { ErrorCode, getFriendlyErrorText } from '@/api/errors'
 import { queryFailed, queryPhase } from '@/lib/query-phase'
@@ -224,6 +225,18 @@ export function InstancesPage() {
   })
 
   /** 重试某实例的详情查询（失败卡的重试入口；index 由上面的遍历建立） */
+  /* 现测玩家可达性：面板放行不了云安全组，只能测出来并让用户据此去控制台放行。
+     结果落回详情查询缓存，卡片据此显示「玩家还连不进来」 */
+  const reachabilityMutation = useMutation({
+    mutationFn: (instanceId: string) => apiCheckReachability(config, instanceId),
+    onSuccess: (_data, instanceId) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.instance(instanceId) })
+    },
+  })
+  const handleCheckReachability = (instanceId: string) => {
+    reachabilityMutation.mutate(instanceId)
+  }
+
   const handleRetryDetail = (instanceId: string) => {
     const idx = detailIndexById.get(instanceId)
     if (idx != null) void detailsQueries[idx]?.refetch()
@@ -409,6 +422,10 @@ export function InstancesPage() {
             onStart={handleStart}
             onStop={setStopTarget}
             onRestart={handleRestart}
+            onCheckReachability={handleCheckReachability}
+            checkingReachabilityId={
+              reachabilityMutation.isPending ? (reachabilityMutation.variables ?? null) : null
+            }
             busyId={
               (startPending ? pendingStartId : null) ??
               (stopMutation.isPending ? (stopMutation.variables ?? null) : null)

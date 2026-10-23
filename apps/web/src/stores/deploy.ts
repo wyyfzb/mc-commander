@@ -15,6 +15,9 @@ export const DEPLOY_STAGE_LABELS: Record<string, string> = {
   download_complete: '下载完成，正在准备…',
   forge_install: '正在安装 Forge…',
   first_launch: '首次启动生成配置…',
+  // 自动启动要等 JVM 起来（实测约 2 分钟），期间没有别的进度来源，
+  // 不给这条文案时界面会静默到 complete，看起来像卡死
+  starting: '正在启动服务器…',
   complete: '部署完成',
   error: '部署失败',
   cancelled: '部署已取消',

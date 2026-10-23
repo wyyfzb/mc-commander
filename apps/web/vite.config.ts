@@ -73,6 +73,9 @@ export default defineConfig({
         theme_color: '#0A0E1A',
         background_color: '#0A0E1A',
         display: 'standalone',
+        // 面板界面是中文：装到主屏后系统按 lang 决定字体回退与朗读语言，
+        // 缺省 en 会让中文按拉丁字体渲染、读屏也按英文发音
+        lang: 'zh-CN',
         // PWA 主屏直达完整面板
         start_url: '/dashboard',
         // 图标用相对路径：随 base 解析（根部署 /pwa-icon.svg；子路径部署

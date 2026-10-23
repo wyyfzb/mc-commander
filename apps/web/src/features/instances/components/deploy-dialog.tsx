@@ -225,6 +225,9 @@ export function DeployDialog({ open, onOpenChange, onDeployed }: DeployDialogPro
   const handleNext = () => {
     if (step === 1 && form.name.trim() === '') {
       setNameError('请填写实例名称')
+      // 只显示一行小字时，用户点完「下一步」看不出哪里没填（焦点仍在按钮上，
+      // 视线上移才看得见）。把焦点送到该填的框里，键盘用户也能直接开始输入
+      document.getElementById('deploy-instance-name')?.focus()
       return
     }
     // 内存不够时不放行：服务端不校验总量，放过去就是一个必然与已有实例抢内存的实例，

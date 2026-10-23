@@ -1,13 +1,16 @@
 /**
  * mc-connection 单测：normalizeBaseUrl / panelAddress / sessionAppliesToPanel /
- * isInternalHost / needsHttpPlaintextWarning / serialize·parseConnectionConfig
+ * isInternalHost / isLoopbackHost / panelShareAddress / needsHttpPlaintextWarning /
+ * serialize·parseConnectionConfig
  */
 import { describe, expect, it } from 'vitest'
 import {
   isInternalHost,
+  isLoopbackHost,
   needsHttpPlaintextWarning,
   normalizeBaseUrl,
   panelAddress,
+  panelShareAddress,
   parseConnectionConfig,
   serializeConnectionConfig,
   sessionAppliesToPanel,
@@ -36,6 +39,11 @@ describe('normalizeBaseUrl', () => {
 
   it('trim 首尾空白', () => {
     expect(normalizeBaseUrl('  https://example.com  ')).toBe('https://example.com')
+  })
+
+  it('空串保持空串（同源）：补协议会拼出 https:/ 这种非法地址', () => {
+    expect(normalizeBaseUrl('')).toBe('')
+    expect(normalizeBaseUrl('   ')).toBe('')
   })
 })
 
@@ -67,6 +75,42 @@ describe('isInternalHost', () => {
 
   it('非 IPv4 主机名（域名）为 false', () => {
     expect(isInternalHost('mc.example.com')).toBe(false)
+  })
+})
+
+describe('isLoopbackHost', () => {
+  it('localhost 与 127.0.0.0/8 为 true', () => {
+    expect(isLoopbackHost('localhost')).toBe(true)
+    expect(isLoopbackHost('127.0.0.1')).toBe(true)
+    expect(isLoopbackHost('127.1.2.3')).toBe(true)
+    expect(isLoopbackHost('::1')).toBe(true)
+  })
+
+  it('局域网与公网地址为 false——同网段设备能访问它们，只是不出公网', () => {
+    expect(isLoopbackHost('192.168.1.100')).toBe(false)
+    expect(isLoopbackHost('10.0.0.1')).toBe(false)
+    expect(isLoopbackHost('203.0.113.5')).toBe(false)
+    expect(isLoopbackHost('mc.example.com')).toBe(false)
+  })
+})
+
+describe('panelShareAddress（换设备访问的地址）', () => {
+  it('非环回地址原样给出（小写）', () => {
+    expect(panelShareAddress({ origin: 'http://1.2.3.4:25566', hostname: '1.2.3.4' })).toBe(
+      'http://1.2.3.4:25566',
+    )
+    expect(
+      panelShareAddress({ origin: 'https://MC.example.com', hostname: 'MC.example.com' }),
+    ).toBe('https://mc.example.com')
+  })
+
+  it('环回地址返回 null——别的设备打不开，给出去只会误导', () => {
+    expect(
+      panelShareAddress({ origin: 'http://localhost:25566', hostname: 'localhost' }),
+    ).toBeNull()
+    expect(
+      panelShareAddress({ origin: 'http://127.0.0.1:25566', hostname: '127.0.0.1' }),
+    ).toBeNull()
   })
 })
 

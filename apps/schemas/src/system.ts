@@ -100,3 +100,32 @@ export type SystemStats = z.infer<typeof systemStatsSchema>
 export type UpdateCheckResult = z.infer<typeof updateCheckResultSchema>
 export type PanelErrorEntry = z.infer<typeof panelErrorEntrySchema>
 export type PanelErrors = z.infer<typeof panelErrorsSchema>
+
+// ---------------------------------------------------------------------------
+// 内置 HTTPS
+//
+// 面板在同一端口同时提供明文与 TLS，故「是否启用」与「当前设备是否已信任
+// 本地面板 CA」是两件事：前者是部署能力（服务端决定），后者是设备状态
+// （只有浏览器自己知道）。两者都要下发给设置页，否则用户看到的永远是
+// 一句「请安装证书」，装完也无从确认成功。
+//
+// 指纹进响应面是刻意的：它是用户核对「装进去的是不是这个面板的 CA」的唯一
+// 手段，而根证书是公开信息（私钥不在响应里）。不给指纹，用户在系统证书
+// 列表里看到的那串字符就无从对照，装错 CA 会表现为「装完还是不受信」。
+// ---------------------------------------------------------------------------
+
+/** 内置 HTTPS 状态（认证域内） */
+export const httpsStatusSchema = z.object({
+  /** 服务端是否在监听 TLS（openssl 缺失或证书签发失败时为 false） */
+  enabled: z.boolean(),
+  /** 未启用时的原因（设置页直接展示，不让用户自己猜） */
+  disabledReason: z.string().nullable(),
+  /** CA 证书 SHA-256 指纹（大写冒号分隔，与各平台证书查看界面同格式） */
+  caFingerprint: z.string().nullable(),
+  /** 服务端证书覆盖的地址：用户据此确认当前访问地址是否在覆盖范围内 */
+  serverNames: z.array(z.string()),
+  /** 服务端证书到期时间（ISO8601） */
+  expiresAt: z.string().nullable(),
+})
+
+export type HttpsStatus = z.infer<typeof httpsStatusSchema>

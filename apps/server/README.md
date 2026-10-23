@@ -27,20 +27,8 @@
 
 ### 一键部署（推荐）
 
-在目标 Linux 服务器上执行（**复制整段**，两源任一成功即可；都失败则不会执行任何脚本）：
-
-```bash
-rm -f /tmp/deploy-mc-commander.sh && \
-( curl -fsSL --connect-timeout 10 --max-time 60 -o /tmp/deploy-mc-commander.sh https://raw.githubusercontent.com/wyyfzb/mc-commander/main/apps/server/scripts/deploy-mc-commander.sh || \
-  curl -fsSL --connect-timeout 10 --max-time 60 -o /tmp/deploy-mc-commander.sh https://gitee.com/wyyfzb/mc-commander/raw/main/apps/server/scripts/deploy-mc-commander.sh ) && \
-sudo bash /tmp/deploy-mc-commander.sh
-```
-
-> 先下载脚本再执行，便于执行前审阅；`--max-time 60` 让 GitHub 源在长期无响应时快速失败并
-> 自动换 gitee 镜像（分支 `main`，无 `master`，与 GitHub 等价），不会无限期卡住。
-> **发布产物也会同步到 gitee 的 Release**，脚本先探测 GitHub、不通则自动改用 gitee，
-> 无需额外参数。两个源都拉不动时，自行取到 `mc-commander-server.tar.gz` 解压进安装目录后执行
-> `sudo SKIP_DOWNLOAD=1 bash deploy-mc-commander.sh`（详见根 README「快速开始」）。
+安装命令与两种部署方式的完整说明见根 README 的「快速开始」与「进阶部署」——命令只在那里维护一份，
+避免两处漂移。
 
 脚本会自动安装 Java 17/21/25 / Node.js 22+、下载代码、生成 API Key 与一次性 SETUP_TOKEN、注册 systemd 服务并启动（代码包下载带 sha256 强校验，且每处下载都有停滞中止与断点续传）。
 
@@ -52,6 +40,7 @@ npm install
 
 # 配置环境变量
 cp .env.example .env
+# HOST 默认 127.0.0.1（仅本机）：要从别的机器访问面板，必须改成 HOST=0.0.0.0
 # API_KEY_HASH 留空即可：首次启动由服务端签发 32 字节 CSPRNG Key，
 # 摘要自动写回 .env，明文在启动横幅里显示一次（想自己指定请见 .env.example 的生成命令）
 
@@ -71,14 +60,8 @@ npm start
 
 ### 一键部署：重跑脚本原地升级
 
-部署脚本幂等，发布新版本后重新执行同一脚本即完成升级：
-
-```bash
-rm -f /tmp/deploy-mc-commander.sh && \
-( curl -fsSL --connect-timeout 10 --max-time 60 -o /tmp/deploy-mc-commander.sh https://raw.githubusercontent.com/wyyfzb/mc-commander/main/apps/server/scripts/deploy-mc-commander.sh || \
-  curl -fsSL --connect-timeout 10 --max-time 60 -o /tmp/deploy-mc-commander.sh https://gitee.com/wyyfzb/mc-commander/raw/main/apps/server/scripts/deploy-mc-commander.sh ) && \
-sudo bash /tmp/deploy-mc-commander.sh
-```
+部署脚本幂等，发布新版本后重新执行根 README「快速开始」里的同一条命令即完成升级
+（命令只在那里维护一份，避免两处漂移）。
 
 **升级时自动保留**（脚本同步代码但不覆盖以下内容）：
 

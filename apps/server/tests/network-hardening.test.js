@@ -9,30 +9,25 @@ import path from 'path';
 
 // ── ① rcon.port 派生 ──
 
-describe('rcon.port 按实例配置派生', () => {
+describe('rcon.port 与 server-port 的分配', () => {
   const src = fs.readFileSync(path.join(__dirname, '../src/routes/server-jar.js'), 'utf-8');
 
   it('硬编码 rcon.port=25575 已消除', () => {
     expect(src).not.toMatch(/\brcon\.port=25575\b/);
   });
 
-  it('rcon.port 使用与 server-port 同款的派生规则', () => {
-    expect(src).toMatch(/rcon\.port=\$\{25575.*parseInt.*instanceId.*slice.*16.*%/);
+  it('两个端口都取自分配器，不再按 instanceId 哈希抽签', () => {
+    // 哈希取模会撞车：100 个槽位里第 101 个实例必然与别人同端口
+    expect(src).not.toMatch(/parseInt\(instanceId\.slice\(-4\), 16\)/);
+    expect(src).toMatch(/server-port=\$\{gamePort\}/);
+    expect(src).toMatch(/rcon\.port=\$\{rconPortFor\(gamePort\)\}/);
   });
 
-  it('派生公式基值差 10（保证不冲突）', () => {
-    expect(src).toMatch(/server-port.*25565/);
-    expect(src).toMatch(/rcon\.port.*25575/);
+  it('写入 properties 的端口与写入 DB 的端口同源', () => {
+    // 两处各算一次会出现「实例跑在 A 端口、面板显示 B 端口」
+    expect(src).toMatch(/generateServerProperties\(instanceId, mcVersion, gamePort\)/);
+    expect(src).toMatch(/port: gamePort/);
   });
-
-  const derive = (base, id) => base + (parseInt(id.slice(-4), 16) % 100);
-
-  it.each([['inst-0001'], ['inst-00ff'], ['inst-abcd']])(
-    'rcon.port 比对应 server-port 大 10（%s）',
-    (id) => {
-      expect(derive(25575, id)).toBe(derive(25565, id) + 10);
-    },
-  );
 });
 
 // ── ② HOST 可配 ──

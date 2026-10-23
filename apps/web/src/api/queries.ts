@@ -7,6 +7,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { apiGet } from './client'
 import { fetchAuthCapabilities } from './auth'
+import { fetchHttpsStatus } from './https'
 import { useConnectionStore } from '@/stores/connection'
 import { useAuthStore } from '@/stores/auth'
 import type {
@@ -92,6 +93,8 @@ export const queryKeys = {
     [...queryKeys.all, 'auth-capabilities', baseUrl, credential] as const,
   /** 归档快照清点（全局面：不属于某个实例，卸载实例后遗留的快照都在这里） */
   archivedSnapshots: () => [...queryKeys.all, 'archived-snapshots'] as const,
+  /** 内置 HTTPS 状态（传输加密面板） */
+  httpsStatus: () => [...queryKeys.all, 'https-status'] as const,
 }
 
 /** 面板概览（含云服务器系统级资源；未配置连接时禁用） */
@@ -292,4 +295,19 @@ function isFetchableBaseUrl(baseUrl: string): boolean {
   } catch {
     return false
   }
+}
+
+/**
+ * 内置 HTTPS 状态（传输加密面板）。
+ * 只有认证通道可用时才发请求：未登录时该端点必然 401，而面板此时渲染的是
+ * 登录页，取不到也不影响任何展示。
+ */
+export function useHttpsStatus(baseUrl: string, apiKey: string, enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.httpsStatus(),
+    queryFn: () => fetchHttpsStatus({ baseUrl, apiKey }),
+    enabled,
+    staleTime: 60_000,
+    retry: false,
+  })
 }

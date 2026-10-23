@@ -23,6 +23,16 @@ export function apiGetServerVersions(config: ConnectionConfig, type: string) {
   return apiGet<VersionsResponse>(`/api/v1/versions?type=${encodeURIComponent(type)}`, config)
 }
 
+/** 实测玩家能否连进实例（POST /instances/:id/reachability）；探测含 4s 超时，故放宽到 30s */
+export function apiCheckReachability(config: ConnectionConfig, instanceId: string) {
+  return apiPost<{ state: string | null }>(
+    `/api/v1/instances/${encodeURIComponent(instanceId)}/reachability`,
+    config,
+    {},
+    { timeoutMs: 30_000 },
+  )
+}
+
 /** 部署新实例（POST /instances/deploy）；同步长请求（jar 下载数分钟），超时放大到 10 分钟 */
 export function apiDeployInstance(config: ConnectionConfig, payload: DeployRequest) {
   return apiPost<DeployResult>('/api/v1/instances/deploy', config, payload, {

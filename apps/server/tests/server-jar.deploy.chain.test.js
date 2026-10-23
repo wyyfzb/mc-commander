@@ -36,6 +36,7 @@ vi.mock('../src/db/index.js', () => ({
     create: vi.fn(() => {
       if (testState.dbCreateError) throw testState.dbCreateError;
     }),
+    update: vi.fn(),
   },
   AuditLogModel: { create: vi.fn() },
 }));
@@ -170,7 +171,18 @@ const JAR_SHA256 = crypto.createHash('sha256').update(JAR_BYTES).digest('hex');
 function buildApp() {
   const app = express();
   app.use(express.json());
-  const mockManager = { activeDeploys: new Map(), emit: vi.fn(), loadInstances: vi.fn() };
+  // getInstance 供部署后的自动启动使用；按 id 返回同一个实例对象，
+  // 否则断言拿到的不是被调用过的那一个
+  const instanceById = new Map();
+  const mockManager = {
+    activeDeploys: new Map(),
+    emit: vi.fn(),
+    loadInstances: vi.fn(),
+    getInstance: vi.fn((id) => {
+      if (!instanceById.has(id)) instanceById.set(id, { start: vi.fn() });
+      return instanceById.get(id);
+    }),
+  };
   app.use('/api', createServerJarRoutes(mockManager));
   app.use(errorHandler);
   return { app, manager: mockManager };
@@ -898,7 +910,7 @@ describe('POST /instances/deploy · 下载异常与核心回退', () => {
 });
 
 describe('generateServerProperties 落盘契约', () => {
-  it('rcon.port/server-port 按 instanceId 后 4 位 hex 偏移 + enable-rcon + 16 位随机密码', async () => {
+  it('server-port 取自分配器首个空闲端口，rcon.port 落在独立段 + 16 位随机密码', async () => {
     testState.latestBuild = {
       downloads: { application: { url: 'https://piston-data.mojang.com/jar/server.jar' } },
     };
@@ -910,14 +922,15 @@ describe('generateServerProperties 落盘契约', () => {
 
     expect(res.status).toBe(200);
     const instanceId = res.body.data.id;
-    const offset = parseInt(instanceId.slice(-4), 16) % 100;
     const props = fs.readFileSync(
       `${testState.serversDir}/${instanceId}/server.properties`,
       'utf8',
     );
 
-    expect(props).toContain(`rcon.port=${25575 + offset}`);
-    expect(props).toContain(`server-port=${25565 + offset}`);
+    // 首个实例拿段内第一个端口；rcon 在独立段，与 game 端口不重叠
+    const gamePort = 25567;
+    expect(props).toContain(`server-port=${gamePort}`);
+    expect(props).toContain(`rcon.port=${35575}`);
     expect(props).toContain('enable-rcon=true');
     expect(props).toContain('online-mode=true');
     // 白名单默认值与 MC 26.3 上游默认一致（true），与其余键同源
@@ -1075,5 +1088,103 @@ describe('runFirstLaunch 首启行为', () => {
     } finally {
       Object.defineProperty(process, 'platform', origPlatform);
     }
+  });
+  /* 勾了 EULA 就是「我要开服」，不是「我要生成世界」：首启只生成配置就退出，
+     部署完停在「已停止」会让用户以为已经开好、去发地址，结果没人连得上 */
+  describe('勾选 EULA 后部署完成即启动', () => {
+    it('已同意 EULA：部署结束后实例进入运行态', async () => {
+      testState.latestBuild = {
+        downloads: { application: { url: 'https://piston-data.mojang.com/jar/server.jar' } },
+      };
+      const { app, manager } = buildApp();
+
+      const res = await request(app)
+        .post('/api/instances/deploy')
+        .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Auto Start', eula: true });
+
+      expect(res.status).toBe(200);
+      const inst = manager.getInstance(res.body.data.id);
+      expect(inst.start).toHaveBeenCalled();
+      expect(InstanceModel.update).toHaveBeenCalledWith(res.body.data.id, { status: 'running' });
+    });
+
+    it('未同意 EULA：不启动（不能替用户表达同意）', async () => {
+      testState.latestBuild = {
+        downloads: { application: { url: 'https://piston-data.mojang.com/jar/server.jar' } },
+      };
+      const { app, manager } = buildApp();
+
+      const res = await request(app)
+        .post('/api/instances/deploy')
+        .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'No Auto', eula: false });
+
+      expect(res.status).toBe(200);
+      const inst = manager.getInstance(res.body.data.id);
+      expect(inst.start).not.toHaveBeenCalled();
+    });
+
+    it('自动启动失败不阻断部署（实例已建好，可手动点启动）', async () => {
+      testState.latestBuild = {
+        downloads: { application: { url: 'https://piston-data.mojang.com/jar/server.jar' } },
+      };
+      const { app, manager } = buildApp();
+      // 让启动抛错
+      const origGet = manager.getInstance.bind(manager);
+      manager.getInstance = (id) => {
+        const inst = origGet(id);
+        if (inst)
+          inst.start = () => {
+            throw new Error('boom');
+          };
+        return inst;
+      };
+
+      const res = await request(app)
+        .post('/api/instances/deploy')
+        .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Boom', eula: true });
+
+      expect(res.status).toBe(200);
+    });
+  });
+  /* 自动启动要等 JVM 起来（实测约 2 分钟）。排在 complete 之后会让进度条先消失、
+     界面静默一两分钟，用户以为卡死 */
+  describe('自动启动的进度阶段', () => {
+    it('发出 starting 且排在 complete 之前', async () => {
+      testState.latestBuild = {
+        downloads: { application: { url: 'https://piston-data.mojang.com/jar/server.jar' } },
+      };
+      const { app, manager } = buildApp();
+
+      const res = await request(app)
+        .post('/api/instances/deploy')
+        .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Stage Order', eula: true });
+
+      expect(res.status).toBe(200);
+      const stages = manager.emit.mock.calls
+        .filter((c) => c[0] === 'deployProgress')
+        .map((c) => c[1].stage);
+      const startingAt = stages.indexOf('starting');
+      const completeAt = stages.indexOf('complete');
+      expect(startingAt).toBeGreaterThanOrEqual(0);
+      expect(completeAt).toBeGreaterThan(startingAt);
+    });
+
+    it('未同意 EULA 时不发 starting（不会启动，就没有启动阶段）', async () => {
+      testState.latestBuild = {
+        downloads: { application: { url: 'https://piston-data.mojang.com/jar/server.jar' } },
+      };
+      const { app, manager } = buildApp();
+
+      const res = await request(app)
+        .post('/api/instances/deploy')
+        .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'No Stage', eula: false });
+
+      expect(res.status).toBe(200);
+      const stages = manager.emit.mock.calls
+        .filter((c) => c[0] === 'deployProgress')
+        .map((c) => c[1].stage);
+      expect(stages).not.toContain('starting');
+      expect(stages).toContain('complete');
+    });
   });
 });

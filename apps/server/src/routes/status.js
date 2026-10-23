@@ -33,6 +33,7 @@ import {
   systemStatsSchema,
   updatePropertiesResponseSchema,
   worldInfoSchema,
+  reachabilitySchema,
 } from '@mc-commander/schemas';
 import { validateBody, validateQuery, validatedSuccess } from '../middleware/validate.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
@@ -315,6 +316,20 @@ export function createStatusRoutes(serverManager) {
       validatedSuccess(statusSchemaForRole(req, false), statusForRole(req, instance.toStatus())),
     );
   });
+
+  // POST /api/v1/instances/:id/reachability - 实测玩家能不能连进来
+  // 面板放行不了云平台安全组，只能测出来并指路；用户点「检测」时现测，不等缓存
+  router.post(
+    '/instances/:id/reachability',
+    asyncHandler(async (req, res) => {
+      const instance = serverManager.getInstance(req.params.id);
+      if (!instance) {
+        return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND));
+      }
+      const state = await instance.refreshReachability();
+      res.json(validatedSuccess(reachabilitySchema, { state }, 'Reachability checked'));
+    }),
+  );
 
   // PUT /api/instances/:id - 更新实例配置（启动命令/JVM 参数等）
   // 同步更新数据库持久化记录与内存中运行实例的字段，下次 start() 生效

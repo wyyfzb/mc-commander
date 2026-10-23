@@ -5,7 +5,15 @@
  * - 设计纪律：设置页内容区实底（风格 A 玻璃禁区）；子侧栏同实底卡
  */
 import { Link, Outlet, useLocation } from 'react-router'
-import { BellRing, DatabaseBackup, Info, Link2, ShieldCheck, SlidersHorizontal } from 'lucide-react'
+import {
+  BellRing,
+  DatabaseBackup,
+  HardDrive,
+  Info,
+  Link2,
+  ShieldCheck,
+  SlidersHorizontal,
+} from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { TONE_SELECTED_CLASSES } from '@/components/mcs/tone'
@@ -17,6 +25,7 @@ import { GeneralPanel } from './components/general-panel'
 import { NotificationsPanel } from './components/notifications-panel'
 import { BackupPanel } from './components/backup-panel'
 import { AboutPanel } from './components/about-panel'
+import { DataPanel } from './components/data-panel'
 import { UpdateCheckSection } from './components/update-check-section'
 
 /** 子导航项（六项） */
@@ -26,6 +35,7 @@ const SUB_NAV: { to: string; label: string; icon: LucideIcon }[] = [
   { to: '/settings/general', label: '通用设置', icon: SlidersHorizontal },
   { to: '/settings/notifications', label: '通知设置', icon: BellRing },
   { to: '/settings/backup', label: '备份管理', icon: DatabaseBackup },
+  { to: '/settings/data', label: '数据与卸载', icon: HardDrive },
   { to: '/settings/about', label: '关于', icon: Info },
 ]
 
@@ -108,6 +118,11 @@ export function NotificationsSettingsPage() {
 export function BackupSettingsPage() {
   const instanceId = useServerStore((s) => s.instanceId)
   return <BackupPanel instanceId={instanceId} />
+}
+
+/** 数据与卸载子页（面板自身去留） */
+export function DataSettingsPage() {
+  return <DataPanel />
 }
 
 /** 关于子页（静态面板 + 更新检查） */

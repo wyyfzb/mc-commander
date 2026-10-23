@@ -43,7 +43,6 @@ import { useNow } from '@/hooks/use-now'
 import {
   useCrashArtifact,
   useCrashHistory,
-  useCheckUpdate,
   useInstanceStatus,
   useSystemErrors,
   useSystemStats,
@@ -517,9 +516,8 @@ const KIND_LABEL: Record<string, string> = {
  */
 function CrashArtifactDetail({ instanceId, fileName }: { instanceId: string; fileName: string }) {
   const query = useCrashArtifact(instanceId, fileName)
-  const updateQuery = useCheckUpdate()
   const nowMs = useNow()
-  const panelVersion = updateQuery.data?.current
+  const panelVersion = __APP_VERSION__
 
   if (query.isLoading) {
     return <p className="text-mcs-xs text-mcs-text-muted">读取中…</p>
@@ -683,8 +681,7 @@ export function panelErrorsCopyText(data: PanelErrors, panelVersion?: string): s
 
 function PanelErrorsCard() {
   const errorsQuery = useSystemErrors()
-  const updateQuery = useCheckUpdate()
-  const panelVersion = updateQuery.data?.current
+  const panelVersion = __APP_VERSION__
   const nowMs = useNow()
   const data = errorsQuery.data
   const [expanded, setExpanded] = useState(false)
@@ -804,7 +801,6 @@ export function DiagnosticsPanel(): ReactNode {
   const statsQuery = useSystemStats()
   const historyQuery = useCrashHistory(instanceId)
   const errorsQuery = useSystemErrors()
-  const updateQuery = useCheckUpdate()
 
   const nowMs = useNow()
   const checks = buildChecks({
@@ -822,7 +818,7 @@ export function DiagnosticsPanel(): ReactNode {
         checks={checks}
         instanceName={statusQuery.data?.name}
         mcVersion={statusQuery.data?.mcVersion}
-        panelVersion={updateQuery.data?.current}
+        panelVersion={__APP_VERSION__}
         nowMs={nowMs}
       />
       <CrashHistorySection />

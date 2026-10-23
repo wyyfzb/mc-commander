@@ -18,7 +18,8 @@ import {
   type PotionConfig,
 } from '@/lib/mc-potions'
 import { buildGiveCommand, type Enchantment } from '@/lib/mc-enchantments'
-import { loadKitsFromStorage, saveKitsToStorage, type KitPreset } from '@/lib/mc-kits'
+import { kitsFromPreferences, saveKits, type KitPreset } from '@/lib/mc-kits'
+import { usePanelPreferencesStore } from '@/stores/panel-preferences'
 import { formatBatchSummary, formatFailureDetails, runBatchForTargets } from '@/lib/mc-batch'
 import type { Player } from '@/api/types'
 import type { PlayerActionRequest } from '../mutations'
@@ -61,7 +62,8 @@ export function GiveItemPanel({
   const [expandedEnchantId, setExpandedEnchantId] = useState<string | null>(null)
   const [expandedPotionId, setExpandedPotionId] = useState<string | null>(null)
   const [running, setRunning] = useState(false)
-  const [kits, setKits] = useState<KitPreset[]>(() => loadKitsFromStorage(window.localStorage))
+  // 礼包列表由偏好快照派生：删除/新增按当前最新列表整份覆盖，避免陈旧副本回写
+  const kits = kitsFromPreferences(usePanelPreferencesStore((s) => s.remote))
   const [editing, setEditing] = useState<{ index: number | null; kit: KitPreset } | null>(null)
   const [deleteIndex, setDeleteIndex] = useState<number | null>(null)
   const [confirmBatchOpen, setConfirmBatchOpen] = useState(false)
@@ -180,37 +182,39 @@ export function GiveItemPanel({
 
   // ── 礼包操作 ──
 
-  const persistKits = (next: KitPreset[]) => {
+  /**
+   * 礼包整份写服务端：列表只在写入成功后由偏好快照重新派生，故失败时界面停在原状。
+   * 偏好尚未拉回时 store 会拒绝写入，此处按失败提示——否则默认礼包会被整份覆盖上去。
+   */
+  const persistKits = async (next: KitPreset[]): Promise<boolean> => {
     try {
-      saveKitsToStorage(window.localStorage, next)
+      await saveKits(next)
       return true
     } catch {
       return false
     }
   }
 
-  const saveKit = (draft: KitPreset, index: number | null) => {
+  const saveKit = async (draft: KitPreset, index: number | null) => {
     const next = [...kits]
     if (index === null) {
       next.push(draft)
     } else {
       next[index] = draft
     }
-    const ok = persistKits(next)
+    const ok = await persistKits(next)
     if (ok) {
-      setKits(next)
       toast.success(index === null ? `已添加礼包「${draft.name}」` : `已更新礼包「${draft.name}」`)
     } else toast.error('礼包保存失败，请重试')
     setEditing(null)
   }
 
-  const doDeleteKit = (index: number) => {
+  const doDeleteKit = async (index: number) => {
     const kit = kits[index]
     if (!kit) return
     const next = kits.filter((_, i) => i !== index)
-    const ok = persistKits(next)
+    const ok = await persistKits(next)
     if (ok) {
-      setKits(next)
       toast.info(`已删除礼包「${kit.name}」`)
     } else toast.error('礼包保存失败，请重试')
     setDeleteIndex(null)
@@ -393,7 +397,7 @@ export function GiveItemPanel({
         <KitEditorDialog
           initial={editing.kit}
           isNew={editing.index === null}
-          onSave={(draft) => saveKit(draft, editing.index)}
+          onSave={(draft) => void saveKit(draft, editing.index)}
           onClose={() => setEditing(null)}
         />
       )}
@@ -425,7 +429,7 @@ export function GiveItemPanel({
         confirmText="删除"
         danger
         onConfirm={() => {
-          if (deleteIndex !== null) doDeleteKit(deleteIndex)
+          if (deleteIndex !== null) void doDeleteKit(deleteIndex)
         }}
       />
     </div>
