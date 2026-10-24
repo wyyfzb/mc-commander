@@ -459,6 +459,11 @@ do_uninstall() {
     fi
   fi
 
+  # 清单是安装目录里的文件，--purge 的 rm -rf 会连它一起删掉；第 4 步再判清单存在
+  # 永远为假，整段系统回滚成了死代码——脚本报「已无残留」而包还在机器上。
+  local manifest_lines=""
+  [ -f "$MANIFEST" ] && manifest_lines=$(cat "$MANIFEST")
+
   # 3. 目录处理：默认保留数据，--purge 才整体删除
   #
   # 运行中的 MC 实例不会随面板停止（面板停机不停实例，实例是 detached 进程）。
@@ -527,8 +532,7 @@ do_uninstall() {
   #
   # 只动清单里记过的条目：用户机器原有的 Java/Node 不能碰（他别的程序要用），
   # 本项目没加过的东西也不能碰。没有清单时退化为「只做确定安全的那几项」。
-  local mf="$MC_COMMANDER_DIR/.install-manifest"
-  if [ "$purge" -eq 1 ] && [ -f "$mf" ]; then
+  if [ -n "$manifest_lines" ]; then
     log "回滚安装时记录的系统改动..."
 
     # 4a. 防火墙：只撤本项目加的那条规则
@@ -563,7 +567,7 @@ do_uninstall() {
           fi
           ;;
       esac
-    done < "$mf"
+    done <<< "$manifest_lines"
 
     # 4b. 系统包：只卸「装之前不存在」的那些
     # 清单在面板可写的安装目录内，包名拼成字符串再裸展开，一个空格就多出一个包管理器参数
@@ -577,7 +581,7 @@ do_uninstall() {
         # 截断再回显：清单可被写坏，原样回显一个超长值会把终端刷屏
         warn "  忽略非法包名：${value:0:40}"
       fi
-    done < "$mf"
+    done <<< "$manifest_lines"
     # 按命令探测而不是读 $PKG_MANAGER：卸载在安装流程之前分派，那时该变量还没赋值，
     # 依赖它会让这一段恒不执行——脚本报「已卸载」而系统包全在
     if [ "${#pkgs[@]}" -gt 0 ]; then
@@ -606,7 +610,7 @@ do_uninstall() {
       else
         warn "  忽略清单外路径的软件源记录：${value:0:60}"
       fi
-    done < "$mf"
+    done <<< "$manifest_lines"
 
     # 4d. Node 软链：只在它们指向本项目装的 /opt/node-* 时才删
     while IFS=$'\t' read -r key value; do
@@ -619,7 +623,7 @@ do_uninstall() {
             ;;
         esac
       fi
-    done < "$mf"
+    done <<< "$manifest_lines"
   elif [ "$purge" -eq 1 ]; then
     warn "未找到安装清单，跳过系统包与防火墙回滚（无法判断哪些是本项目装的）"
   fi
