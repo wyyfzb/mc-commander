@@ -29,7 +29,7 @@ REPO_FILE_ROOTS="${REPO_FILE_ROOTS:-/etc/apt/sources.list.d /etc/yum.repos.d /us
 log() { echo "[$(date '+%H:%M:%S')] $*"; }
 warn() { echo "[$(date '+%H:%M:%S')] [WARN] $*"; }
 
-# 值是否落在软件源/密钥目录内，且不含上跳段
+# 前缀匹配挡不住 <root>/../../etc/shadow，故显式拒绝上跳段
 repo_file_allowed() {
   case "$1" in ''|*/../*|*/..|../*|..) return 1 ;; esac
   local root
