@@ -177,7 +177,7 @@ warn() { echo "[WARN] $*"; }
 # 可注入是为了让用例在沙箱里验证同一条判定（生产环境不需要改它）
 REPO_FILE_ROOTS="${REPO_FILE_ROOTS:-/etc/apt/sources.list.d /etc/yum.repos.d /usr/share/keyrings}"
 
-# 值是否落在软件源/密钥目录内，且不含上跳段
+# 前缀匹配挡不住 <root>/../../etc/shadow，故显式拒绝上跳段
 repo_file_allowed() {
   case "$1" in ''|*/../*|*/..|../*|..) return 1 ;; esac
   local root
@@ -459,8 +459,7 @@ do_uninstall() {
     fi
   fi
 
-  # 清单是安装目录里的文件，--purge 的 rm -rf 会连它一起删掉；第 4 步再判清单存在
-  # 永远为假，整段系统回滚成了死代码——脚本报「已无残留」而包还在机器上。
+  # 清单是安装目录里的文件，--purge 的 rm -rf 会连它一起删掉，故回滚必须读这份内存副本。
   local manifest_lines=""
   [ -f "$MANIFEST" ] && manifest_lines=$(cat "$MANIFEST")
 
