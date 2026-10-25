@@ -1390,6 +1390,20 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
       expect(helper).toContain('*/../*');
     });
 
+    it('清单在删目录之前读进内存，--purge 也能回滚', () => {
+      // 清单是安装目录里的文件：--purge 的 rm -rf 会连它一起删掉。等删完再判清单存在，
+      // 整段回滚就是死代码——脚本报「已无残留」，系统包与软件源却全在机器上
+      const at = script.indexOf('do_uninstall() {');
+      const body = script.slice(at, script.indexOf('\n}\n', at));
+      const snapshot = body.indexOf('manifest_lines=$(cat "$MANIFEST")');
+      const purgeRm = body.indexOf('rm -rf "$MC_COMMANDER_DIR"');
+      const rollback = body.indexOf('if [ -n "$manifest_lines" ]; then');
+      expect(snapshot).toBeGreaterThan(0);
+      expect(snapshot).toBeLessThan(purgeRm);
+      expect(rollback).toBeGreaterThan(purgeRm);
+      expect(body).not.toContain('done < "$mf"');
+    });
+
     it('防火墙值只接受端口号，清单里塞的非数字一律跳过', () => {
       const fnStart = script.indexOf('do_uninstall() {');
       const body = script.slice(fnStart, script.indexOf('\n}\n', fnStart));
