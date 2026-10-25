@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.2](https://github.com/wyyfzb/mc-commander/compare/v0.10.1...v0.10.2) (2026-10-25)
+
+
+### Bug Fixes
+
+* **server:** 卸载真正执行系统回滚，并修掉两个生产依赖漏洞 ([#683](https://github.com/wyyfzb/mc-commander/issues/683)) ([71d3b7a](https://github.com/wyyfzb/mc-commander/commit/71d3b7a83d659cce5a9d72847d6396e40a8df10b))
+
 ## [0.10.1](https://github.com/wyyfzb/mc-commander/compare/v0.10.0...v0.10.1) (2026-10-23)
 
 
