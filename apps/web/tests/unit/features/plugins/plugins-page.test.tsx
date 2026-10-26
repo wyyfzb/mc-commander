@@ -112,6 +112,7 @@ const PLUGINS_FIXTURE: PluginInfo[] = [
 
 const CHECK_UPDATES_FIXTURE = {
   checkedAt: '2026-01-01T00:00:00Z',
+  skipped: { disabled: 0, overLimit: 0, noMeta: 0 },
   results: [
     {
       file: 'EssentialsX-2.21.0.jar',
@@ -381,6 +382,33 @@ describe('PluginsPage 空态与更新检测', () => {
     expect(await screen.findByTestId('update-badge')).toBeInTheDocument()
     expect(screen.getByText(/可更新 → 2\.22\.0/)).toBeInTheDocument()
     expect(screen.getByText(/检测到 1 个插件有新版本/)).toBeInTheDocument()
+  })
+
+  it('有插件没被检测时必须点名，不能把「没查」说成「已是最新」', async () => {
+    server.use(
+      http.post('/api/v1/instances/demo/plugins/check-updates', () =>
+        HttpResponse.json({
+          status: 'ok',
+          code: 0,
+          message: 'ok',
+          data: {
+            checkedAt: '2026-01-01T00:00:00Z',
+            skipped: { disabled: 2, overLimit: 3, noMeta: 1 },
+            results: [],
+          },
+        }),
+      ),
+    )
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText('EssentialsX')
+    await user.click(screen.getByTestId('check-updates'))
+    // 一条都没查成时说「均为最新」是零样本结论
+    expect(await screen.findByText(/没有可检测的插件/)).toBeInTheDocument()
+    expect(await screen.findByText(/2 个已停用/)).toBeInTheDocument()
+    expect(await screen.findByText(/3 个超出单次上限/)).toBeInTheDocument()
+    expect(await screen.findByText(/1 个读不出插件名/)).toBeInTheDocument()
+    expect(screen.queryByText(/均为最新版本/)).not.toBeInTheDocument()
   })
 })
 

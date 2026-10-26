@@ -27,7 +27,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { toast } from 'sonner'
-import { apiPost, ApiError } from '@/api/client'
+import { ApiError } from '@/api/client'
 import { getFriendlyErrorText, ErrorCode } from '@/api/errors'
 import { useConnectionStore } from '@/stores/connection'
 import { FALLBACK_VERSIONS, type ServerType } from '@/lib/mc-deploy'
@@ -267,17 +267,22 @@ export function DeployDialog({ open, onOpenChange, onDeployed }: DeployDialogPro
       const deployed = await deployMutation.mutateAsync(payload)
       setResult(deployed)
       finishDeploy({ ok: true, instanceId: deployed.id })
-      // 首启闭环：EULA 已随部署请求写入，这里只需发启动指令（启动异步，状态在仪表盘/终端可见）
+      // 启动由服务端在部署收尾时完成（勾了 EULA 才做），结果随响应回来。
+      // 不能再发一次 start：服务端此时已置 isRunning，第二个请求必然撞上
+      // 「already running」→ 每次勾 EULA 的成功部署都会闪一次假的「自动启动失败」。
       if (eulaAgreed) {
-        setAutoStart('pending')
-        try {
-          await apiPost(`/api/v1/instances/${deployed.id}/start`, config)
-          setAutoStart('ok')
+        setAutoStart(deployed.started ? 'ok' : 'failed')
+        if (deployed.started) {
           toast.success('部署完成，服务器开始启动')
-        } catch (e) {
-          setAutoStart('failed')
-          toast.error(`自动启动失败：${getFriendlyErrorText(e)}`)
+        } else {
+          toast.error('服务器未能自动启动，请到实例页手动启动')
         }
+      }
+      if (deployed.warnings.length > 0) {
+        // 部署本身成功，但收尾有未完成项：逐条说清，别让「部署成功」盖过去
+        toast.warning('部署已完成，但有以下未完成项', {
+          description: deployed.warnings.join('；'),
+        })
       }
     } catch (e) {
       // 取消的回声（服务端以 409 TASK_CANCELLED 结束部署请求）：用户动作不能被

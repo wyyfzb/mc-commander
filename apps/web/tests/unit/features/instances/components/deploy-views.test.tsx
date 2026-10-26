@@ -19,7 +19,12 @@ const RESULT: DeployResult = {
   name: '测试生存服',
   type: 'fabric',
   mcVersion: '1.21.4',
-} as DeployResult
+  javaVersion: '21',
+  path: '/opt/mc/instances/inst-deploy-001',
+  maxMemory: '2G',
+  warnings: [],
+  started: true,
+}
 
 /** 找承载 autoStart 文案的那条横幅（role=status） */
 function autoStartBanner(container: HTMLElement): HTMLElement {

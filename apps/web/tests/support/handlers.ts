@@ -603,11 +603,17 @@ export const deployMock: {
   cancelEcho: boolean
   /** 取消回声携带的收尾明细（服务端 details.cleanup；null = 收尾正常） */
   cancelEchoDetails: unknown
+  /** 服务端回报的自动启动结果（部署收尾由服务端负责，前端只消费） */
+  started: boolean
+  /** 服务端回报的收尾未完成项 */
+  warnings: string[]
   lastBody: { eula?: boolean } | null
 } = {
   shouldFail: false,
   cancelEcho: false,
   cancelEchoDetails: null,
+  started: true,
+  warnings: [],
   lastBody: null,
 }
 
@@ -1154,6 +1160,8 @@ export const handlers = [
       javaVersion: '21',
       path: '/opt/mc/instances/inst-deploy-001',
       maxMemory: body.maxMemory ?? '2G',
+      warnings: deployMock.warnings,
+      started: deployMock.started,
     })
   }),
   // ── 升级域──

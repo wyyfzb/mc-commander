@@ -165,14 +165,33 @@ export function PluginsPage() {
       setUpdateMap(new Map(result.results.map((r) => [r.file, r])))
       const outdated = result.results.filter((r) => r.hasNewer)
       const mismatched = result.results.filter((r) => r.matched && !r.hasNewer && r.updateAvailable)
+      // 没被检测的插件必须点名：只说「全部最新」等于把「没查」说成「查过且最新」，
+      // 用户会据此认为停用插件、第 21 个起的插件也都没问题
+      const { disabled, overLimit, noMeta } = result.skipped
+      const reasons = [
+        disabled > 0 ? `${disabled} 个已停用` : '',
+        overLimit > 0 ? `${overLimit} 个超出单次上限` : '',
+        noMeta > 0 ? `${noMeta} 个读不出插件名` : '',
+      ].filter(Boolean)
+      const skipNote = reasons.length > 0 ? `另有 ${reasons.join('、')}未检测` : ''
+      const withSkip = (text: string) => (skipNote ? `${text}；${skipNote}` : text)
       if (outdated.length > 0) {
-        toast.info(`检测到 ${outdated.length} 个插件有新版本`, {
+        toast.info(withSkip(`检测到 ${outdated.length} 个插件有新版本`), {
           description: outdated.map((r) => `${r.name} → ${r.latestVersion}`).join('、'),
         })
       } else if (mismatched.length > 0) {
-        toast.info(`${mismatched.length} 个插件版本号与 Modrinth 不一致（可能为自定义构建）`)
+        toast.info(
+          withSkip(`${mismatched.length} 个插件版本号与 Modrinth 不一致（可能为自定义构建）`),
+        )
       } else {
-        toast.success('所有已收录插件均为最新版本')
+        // 一条都没查成时不能说「均为最新」：那是零样本结论
+        toast.success(
+          withSkip(
+            result.results.length > 0
+              ? '已收录插件均为最新版本'
+              : '没有可检测的插件（均为停用或缺插件名）',
+          ),
+        )
       }
     } catch (err) {
       toast.error(`更新检测失败：${getFriendlyErrorText(err)}`)
