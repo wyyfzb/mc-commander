@@ -724,6 +724,11 @@ export function createServerJarRoutes(serverManager) {
           generateServerProperties(instanceId, mcVersion, gamePort),
         );
 
+        // 收尾阶段的失败都不会让部署本身失败，但会让「部署成功」变成假承诺：
+        // 没入库的实例重启后消失、没启动起来的服务器谁也连不上。逐条记下来随响应回报。
+        const deployWarnings = [];
+        let autoStarted = false;
+
         try {
           InstanceModel.create({
             id: instanceId,
@@ -741,6 +746,9 @@ export function createServerJarRoutes(serverManager) {
           instanceCreatedInDb = true;
         } catch (dbErr) {
           logger.warn(`Failed to write instance to DB:`, dbErr.message);
+          deployWarnings.push(
+            `实例未能写入数据库（${dbErr.message}）：重启面板后该实例会从列表消失`,
+          );
         }
 
         // 首启用于生成世界与校验 jar，而 MC 首启强制要求 eula=true；
@@ -761,6 +769,7 @@ export function createServerJarRoutes(serverManager) {
             // 否则「取消」会走到下面的 complete 分支，用户看到的是部署成功
             if (e.cancelled) throw e;
             logger.warn('First launch failed (may require manual setup):', e.message);
+            deployWarnings.push(`首次启动失败（${e.message}）：世界可能未生成，需手动启动一次`);
           }
         }
 
@@ -785,10 +794,14 @@ export function createServerJarRoutes(serverManager) {
             try {
               launched.start();
               InstanceModel.update(instanceId, { status: 'running' });
+              autoStarted = true;
               logger.info(`Instance ${instanceId} auto-started after deploy`);
             } catch (e) {
               logger.warn(`Auto-start after deploy failed: ${e.message}`);
+              deployWarnings.push(`服务器未能自动启动（${e.message}）：请到实例页手动启动`);
             }
+          } else {
+            deployWarnings.push('服务器未能自动启动（实例未注册到运行管理器）：请到实例页手动启动');
           }
         }
 
@@ -812,6 +825,8 @@ export function createServerJarRoutes(serverManager) {
               javaVersion,
               path: instancePath,
               maxMemory: ramSize,
+              warnings: deployWarnings,
+              started: autoStarted,
             },
             'Instance deployed successfully',
           ),

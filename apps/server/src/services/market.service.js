@@ -598,16 +598,22 @@ function matchProjectByPluginName(hits, pluginName) {
  * 名称命中后取最新版本号（getMarketProjectVersions 缓存复用）→ 版本比对。
  * 单个插件失败（上游错误/无结果）不拖垮整批：该插件 matched:false。
  *
- * @returns {{ checkedAt: string, results: Array<{
- *   file, name, installedVersion, enabled,
- *   matched, slug, title, iconUrl, latestVersion, updateAvailable, hasNewer
- * }> }}
+ * 三类插件不参与检测：已停用、读不出名称、超出单次上限。调用方要能说清「这次查了哪些、
+ * 漏了哪些」——只回 results 会让界面把「没查」说成「已是最新」。
+ *
+ * @returns {{ checkedAt: string, skipped: { disabled: number, overLimit: number, noMeta: number },
+ *   results: Array<{ file, name, installedVersion, enabled,
+ *   matched, slug, title, iconUrl, latestVersion, updateAvailable, hasNewer }> }}
  */
 export async function checkPluginUpdates(serverPath) {
   const { plugins } = listPlugins(serverPath);
-  const candidates = plugins
-    .filter((p) => p.meta?.name && p.enabled)
-    .slice(0, UPDATE_CHECK_MAX_PLUGINS);
+  const eligible = plugins.filter((p) => p.meta?.name && p.enabled);
+  const candidates = eligible.slice(0, UPDATE_CHECK_MAX_PLUGINS);
+  const skipped = {
+    disabled: plugins.filter((p) => !p.enabled).length,
+    overLimit: Math.max(0, eligible.length - UPDATE_CHECK_MAX_PLUGINS),
+    noMeta: plugins.filter((p) => p.enabled && !p.meta?.name).length,
+  };
 
   const results = new Map();
   for (const p of candidates) {
@@ -653,6 +659,7 @@ export async function checkPluginUpdates(serverPath) {
 
   return {
     checkedAt: new Date().toISOString(),
+    skipped,
     results: [...results.values()],
   };
 }

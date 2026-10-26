@@ -1144,6 +1144,40 @@ describe('runFirstLaunch 首启行为', () => {
         .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Boom', eula: true });
 
       expect(res.status).toBe(200);
+      // 不阻断部署 ≠ 可以假装启动成功：用户必须知道要去手动点一次
+      expect(res.body.data.started).toBe(false);
+      expect(res.body.data.warnings.join()).toContain('未能自动启动');
+      expect(res.body.data.warnings.join()).toContain('手动启动');
+    });
+
+    it('启动成功时 started 为 true 且没有启动相关警告', async () => {
+      testState.latestBuild = {
+        downloads: { application: { url: 'https://piston-data.mojang.com/jar/server.jar' } },
+      };
+      const { app } = buildApp();
+
+      const res = await request(app)
+        .post('/api/instances/deploy')
+        .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'OK', eula: true });
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.started).toBe(true);
+      expect(res.body.data.warnings).toEqual([]);
+    });
+
+    it('未同意 EULA 时 started 为 false 且不编造启动警告（本来就没打算启动）', async () => {
+      testState.latestBuild = {
+        downloads: { application: { url: 'https://piston-data.mojang.com/jar/server.jar' } },
+      };
+      const { app } = buildApp();
+
+      const res = await request(app)
+        .post('/api/instances/deploy')
+        .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'NoEula', eula: false });
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.started).toBe(false);
+      expect(res.body.data.warnings).toEqual([]);
     });
   });
   /* 自动启动要等 JVM 起来（实测约 2 分钟）。排在 complete 之后会让进度条先消失、
