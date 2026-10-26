@@ -71,7 +71,15 @@ export DEBIAN_FRONTEND=noninteractive
 # 让 needrestart 自动重启使用旧库的服务，不再提示 "Which services should be restarted?"
 export NEEDRESTART_MODE=a
 
+# 归一化到规范形态：/opt/x/ 与 /opt/x 是同一条路径，但单元里写的是哪一种取决于
+# 当次调用，而卸载要拿 WorkingDirectory 与它逐字比对、安装互斥也靠同一比对。
+# 带尾斜杠时不归一化会让卸载静默跳过停服务/删单元/删用户却照删代码——
+# 服务仍 enabled 且 Restart=always，每 3 秒拉起一个没有 node_modules 的进程。
 MC_COMMANDER_DIR="${MC_COMMANDER_DIR:-/opt/mc-commander}"
+while [ "${MC_COMMANDER_DIR}" != "/" ] && [ "${MC_COMMANDER_DIR%/}" != "$MC_COMMANDER_DIR" ]; do
+  MC_COMMANDER_DIR="${MC_COMMANDER_DIR%/}"
+done
+[ -n "$MC_COMMANDER_DIR" ] || MC_COMMANDER_DIR="/"
 # root 执行的删除脚本必须与面板可写目录分离：装一份只读副本，单元只认它
 REMOVAL_LIB_DIR="/usr/local/lib/mc-commander"
 REMOVAL_SCRIPT="$REMOVAL_LIB_DIR/panel-removal.sh"
@@ -109,15 +117,38 @@ record_change() {
   fi
 }
 
+# 包是否已安装：按实际包管理器判断，不用别家的工具探测
+pkg_installed() {
+  case "$PKG_MANAGER" in
+    apt) dpkg -s "$1" &>/dev/null 2>&1 ;;
+    yum | dnf) rpm -q "$1" &>/dev/null 2>&1 ;;
+    apk) apk info -e "$1" &>/dev/null 2>&1 ;;
+    *) return 1 ;;
+  esac
+}
+
 # 装包前记下「装之前有没有」：已存在的不能算本项目的，卸载时跳过
 install_pkg_recorded() {
   local existed=""
   for pkg in "$@"; do
-    if dpkg -s "$pkg" &>/dev/null 2>&1 || rpm -q "$pkg" &>/dev/null 2>&1; then
+    # 判据必须跟着 PKG_MANAGER 走：Alpine 上没有 dpkg/rpm，恒假会让每个包都被记成
+    # 「本项目装的」，卸载时 apk del 把用户原本就有的包一起删掉
+    if pkg_installed "$pkg"; then
       existed="$existed $pkg"
     fi
   done
-  install_pkg "$@"
+  # 返回值必须如实反映装包结果：调用点写的是 `install_pkg_recorded x || warn ...`，
+  # 而 `cmd || handler` 的左侧会抑制 set -e 对整个函数的生效。若这里恒返回 0，
+  # 那些告警与 JAVA25_MISSING=1 全是死代码——Java 25 装不上时用户得不到任何提示，
+  # 部署 MC 26.x 实例起不来还找不到原因。
+  local rc=0
+  install_pkg "$@" || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    for pkg in "$@"; do
+      record_change "pkg-failed" "$pkg"
+    done
+    return "$rc"
+  fi
   for pkg in "$@"; do
     case " $existed " in
       *" $pkg "*) record_change "pkg-preexisting" "$pkg" ;;
@@ -276,13 +307,31 @@ uninstall_usage() {
 USAGE
 }
 
+# 数据目录的唯一口径：以安装目录 .env 里实际生效的值为准。
+#
+# 服务端把相对路径锚定包根解析（不是 cwd），故这里同样拼安装目录；用户换大盘、
+# 挂到独立分区时会把它指到别处。按 var/ 硬编码的后果是「停错了目录里的实例」与
+# 「把真实存档报成空目录」——卸载时据此说「数据已保留」，用户可能不去备份就重装系统。
+resolve_data_dir() {
+  local key="$1" fallback="$2" value
+  value=$(sed -n "s/^${key}=//p" "$MC_COMMANDER_DIR/.env" 2>/dev/null | tail -1)
+  value="${value%\"}"
+  value="${value#\"}"
+  [ -n "$value" ] || value="$fallback"
+  case "$value" in
+    /*) printf '%s\n' "$value" ;;
+    *) printf '%s\n' "$MC_COMMANDER_DIR/${value#./}" ;;
+  esac
+}
+
 # 停掉仍在运行的 MC 实例（按各实例目录下的 pid 文件，逐个验活后 TERM→KILL）。
 #
 # 实例是 detached 进程，面板停了它们还在跑。删目录前必须让它们先退出：
 # 世界存档正在被写入时被 rm -rf，进程不会自己发现，玩家看到区块加载失败，
 # 而存档已经找不回来了。
 stop_running_instances() {
-  local servers_dir="$MC_COMMANDER_DIR/var/servers"
+  local servers_dir
+  servers_dir=$(resolve_data_dir SERVERS_DIR ./var/servers)
   [ -d "$servers_dir" ] || return 0
 
   local pidfile pid found=0
@@ -342,20 +391,42 @@ stop_orphan_instances() {
   local servers_dir="$1"
   [ -d "$servers_dir" ] || return 0
   local pids
-  pids=$(pgrep -f "$servers_dir/[^/]*/server.jar" 2>/dev/null || true)
+  pids=$(instance_java_pids "$servers_dir")
   [ -n "$pids" ] || return 0
   log "停止无 pidfile 的实例进程..."
   echo "$pids" | xargs -r kill -TERM 2>/dev/null || true
   local waited=0
   while [ "$waited" -lt 30 ]; do
-    pids=$(pgrep -f "$servers_dir/[^/]*/server.jar" 2>/dev/null || true)
+    pids=$(instance_java_pids "$servers_dir")
     [ -z "$pids" ] && return 0
     sleep 2
     waited=$((waited + 2))
   done
-  pids=$(pgrep -f "$servers_dir/[^/]*/server.jar" 2>/dev/null || true)
+  pids=$(instance_java_pids "$servers_dir")
   [ -n "$pids" ] && echo "$pids" | xargs -r kill -KILL 2>/dev/null || true
   return 0
+}
+
+# 找出「正在跑某个实例 jar」的 java 进程 pid。
+#
+# 判据必须是「可执行文件是 java，且命令行里带着实例目录下的 jar」：只按路径子串匹配
+# 会误杀 tail -f 日志、rsync 备份该目录这类无关进程，而按 server.jar 写死名字又会
+# 漏掉面板自己生成的 server-<版本>.jar 与 forge-<版本>.jar。
+instance_java_pids() {
+  local servers_dir="$1" pid exe args
+  for pid in $(pgrep -f "$servers_dir/[^/]*/[^/]*\.jar" 2>/dev/null || true); do
+    # /proc/PID 可能刚消失：先判可读再读，避免重定向报错漏到 stderr
+    [ -r "/proc/$pid/cmdline" ] || continue
+    exe=$(readlink "/proc/$pid/exe" 2>/dev/null || true)
+    case "${exe##*/}" in
+      java) ;;
+      *) continue ;;
+    esac
+    args=$(tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null || true)
+    case "$args" in
+      *"$servers_dir"/*.jar*) printf '%s\n' "$pid" ;;
+    esac
+  done
 }
 
 do_uninstall() {
@@ -400,15 +471,16 @@ do_uninstall() {
   # 继续对外提供服务。用户看到「面板已卸载」，玩家却还能连进来。而且这些进程以
   # mc-commander 用户运行，留着它们会让下一步的 userdel 必然失败。
   # 先停实例再动服务与用户，顺序不能反。
-  if [ -d "$MC_COMMANDER_DIR/var/servers" ]; then
-    local running
-    running=$(find "$MC_COMMANDER_DIR/var/servers" -maxdepth 2 -name server.jar 2>/dev/null | wc -l)
-    if [ "$running" -gt 0 ]; then
-      log "停止运行中的服务器实例..."
-      stop_running_instances
-    fi
+  local servers_dir
+  servers_dir=$(resolve_data_dir SERVERS_DIR ./var/servers)
+  if [ -d "$servers_dir" ]; then
+    # 不做「有没有 jar」的前置计数：面板自己生成的 jar 名是 server-<版本>.jar
+    # 或 forge-<版本>.jar，按 server.jar 数会数到 0 而整段跳过，实例继续写存档。
+    # 两个停止函数各自按 pidfile / 进程命令行逐个验活，目录空时本就空转。
+    log "停止运行中的服务器实例..."
+    stop_running_instances
     # pidfile 覆盖不到的（手工起过、面板异常退出留下的）单独清一遍
-    stop_orphan_instances "$MC_COMMANDER_DIR/var/servers"
+    stop_orphan_instances "$servers_dir"
   fi
 
   # 1. 停服务并禁止开机自启（先停再删单元，否则 systemd 可能残留 failed 状态）
@@ -419,12 +491,15 @@ do_uninstall() {
   # 不一致就只卸目录内容、不动全局的服务与用户（否则会误伤同一个机器上的另一套部署）。
   local unit_path=/etc/systemd/system/mc-commander.service
   local unit_matches=0
+  # 单元存在但指向别的安装目录 ⇒ 那套部署还认领这个全局唯一的用户，本次不动它
+  local unit_owned_by_other=0
   if [ -f "$unit_path" ]; then
     local unit_dir
     unit_dir=$(sed -n 's/^[[:space:]]*WorkingDirectory=//p' "$unit_path" | head -1)
     if [ "$unit_dir" = "$MC_COMMANDER_DIR" ]; then
       unit_matches=1
     else
+      unit_owned_by_other=1
       warn "发现已存在的 mc-commander.service 指向 $unit_dir（不是本次的 $MC_COMMANDER_DIR）"
       warn "将保留该服务与用户 mc-commander，只卸载 $MC_COMMANDER_DIR 里的内容"
     fi
@@ -446,9 +521,13 @@ do_uninstall() {
     log "未发现 systemd 服务（可能当初以非 root 部署）"
   fi
 
-  # 2. 删除专用用户（仅在确认单元归属本目录、或压根没有单元时）
-  # 家目录就是安装目录，先删用户不影响后续 rm
-  if [ "$unit_matches" -eq 1 ] && id -u mc-commander &>/dev/null; then
+  # 2. 删除专用用户。
+  #
+  # 判据是「这台机器上还有没有另一份安装认领这个用户」，不是「本次有没有见到单元」：
+  # 上一次卸载删掉单元后 userdel 可能因实例还占着而失败，重跑时单元已不在，
+  # 若还要求见到单元就再也不会尝试删用户，机器上永远留着一个删不掉的系统用户。
+  # 用户的家目录就是安装目录，故只有「单元存在且指向别的目录」才算被别的部署占用。
+  if [ "${unit_owned_by_other:-0}" -eq 0 ] && id -u mc-commander &>/dev/null; then
     # 实例已在上一步停掉，仍失败多半是还有残留进程（手工起过的实例、残留子进程）
     if userdel mc-commander 2>/dev/null; then
       log "已删除系统用户 mc-commander"
@@ -456,6 +535,7 @@ do_uninstall() {
       warn "未能删除系统用户 mc-commander（仍有进程以它运行）"
       warn "查看占用：ps -u mc-commander"
       warn "停掉后再删：sudo pkill -u mc-commander && sudo userdel mc-commander"
+      warn "处理完重跑同一条卸载命令即可，不必先手动删单元"
     fi
   fi
 
@@ -474,7 +554,7 @@ do_uninstall() {
     if [ "$assume_yes" -ne 1 ]; then
       echo ""
       warn "即将永久删除：$MC_COMMANDER_DIR"
-      warn "其中 var/servers/ 下的每个实例都是**完整的 Minecraft 世界存档**，删掉无法恢复。"
+      warn "其中 $servers_dir 下的每个实例都是**完整的 Minecraft 世界存档**，删掉无法恢复。"
       printf "确认删除请输入 yes："
       read -r answer
       if [ "$answer" != "yes" ]; then
@@ -488,7 +568,7 @@ do_uninstall() {
     # 只删面板自己的代码与依赖，保留三个数据目录。
     # 清单必须覆盖安装时铺下的**全部**条目：漏一项就留下几十 MB 与含凭据的 .env，
     # 用户按「已卸载」理解、实际机器上还躺着一份能用的部署
-    log "保留数据目录（var/ 下的 servers/ data/ backups/）"
+    log "保留数据目录（servers/ data/ backups/，位置以 .env 为准）"
     for item in src public mc-schemas node_modules package.json package-lock.json .env.example; do
       [ -e "$MC_COMMANDER_DIR/$item" ] && rm -rf "${MC_COMMANDER_DIR:?}/$item"
     done
@@ -503,23 +583,27 @@ do_uninstall() {
     if [ -d "$MC_COMMANDER_DIR" ]; then
       echo ""
       # 逐项核实是否真有内容：只按目录存在与否就说「数据仍然保留」，
-      # 在空目录上等于告诉用户「你的存档还在」——他可能因此不去备份就重装系统
+      # 在空目录上等于告诉用户「你的存档还在」——他可能因此不去备份就重装系统。
+      # 路径取 .env 实际生效值：数据目录可以被用户改到别的分区，按 var/ 报会指错地方。
       local kept=0
       local kept_lines=""
-      for d in var/servers var/data var/backups; do
-        if [ -d "$MC_COMMANDER_DIR/$d" ]; then
+      local d
+      for d in "$(resolve_data_dir SERVERS_DIR ./var/servers)" \
+        "$(resolve_data_dir DATA_DIR ./var/data)" \
+        "$(resolve_data_dir BACKUPS_DIR ./var/backups)"; do
+        if [ -d "$d" ]; then
           local n
-          n=$(find "$MC_COMMANDER_DIR/$d" -type f 2>/dev/null | wc -l)
+          n=$(find "$d" -type f 2>/dev/null | wc -l)
           if [ "$n" -gt 0 ]; then
             kept=1
-            kept_lines="$kept_lines"$'\n'"  - $d/（$n 个文件）"
+            kept_lines="$kept_lines"$'\n'"  - $d（$n 个文件）"
           fi
         fi
       done
       if [ "$kept" -eq 1 ]; then
-        log "面板已卸载。以下数据**仍然保留**在 $MC_COMMANDER_DIR："
+        log "面板已卸载。以下数据**仍然保留**："
         echo "$kept_lines"
-        log "确认不再需要时，可手动删除整个目录：sudo rm -rf $MC_COMMANDER_DIR"
+        log "确认不再需要时，可手动删除：sudo rm -rf $MC_COMMANDER_DIR"
       else
         log "面板已卸载。$MC_COMMANDER_DIR 下已没有实例或备份数据，无需另外备份。"
         log "残留的只有程序文件与配置，可手动删除：sudo rm -rf $MC_COMMANDER_DIR"
@@ -686,6 +770,8 @@ case "$PKG_MANAGER" in
   apt) apt-get update || warn "软件包索引更新失败，继续尝试安装（已安装的包不受影响）" ;;
   yum) yum makecache || warn "软件包索引更新失败，继续尝试安装" ;;
   dnf) dnf makecache || warn "软件包索引更新失败，继续尝试安装" ;;
+  # apk add --no-cache 自带索引，但索引过期时会报 package not found 而不是自动重取
+  apk) apk update || warn "软件包索引更新失败，继续尝试安装" ;;
 esac
 
 install_pkg() {
@@ -1103,6 +1189,11 @@ esac
 SKIP_DOWNLOAD="${SKIP_DOWNLOAD:-0}"
 cd "$MC_COMMANDER_DIR"
 
+# 升级前记下旧版本：用户重跑脚本的诉求是「换到新版」，若全程只有 VERSION=latest，
+# 他既不知道装的是什么、也不知道这次到底有没有升上去。必须在覆盖代码之前读。
+PREVIOUS_VERSION=$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
+  "$MC_COMMANDER_DIR/package.json" 2>/dev/null | head -1 || true)
+
 if [ "$SKIP_DOWNLOAD" = "1" ]; then
   if [ -f "$MC_COMMANDER_DIR/package.json" ] && [ -f "$MC_COMMANDER_DIR/src/index.js" ]; then
     log "SKIP_DOWNLOAD=1 且已检测到代码（package.json + src/index.js），跳过下载"
@@ -1425,10 +1516,53 @@ else
 fi
 # 注意：云服务器（阿里云/腾讯云/华为云等）还需在控制台安全组中手动放行 25566 端口
 
+# 起服务前先确认端口能绑：占着的话 node 会 EADDRINUSE 退出，而 systemd 的
+# Restart=always 会让它每 3 秒重试一次，就绪检查空等满 30 秒才报「未就绪」——
+# 用户看到的是「面板坏了」，真因是「端口被别的程序占着」，两者处置完全不同。
+# 位置选在停掉旧面板之后：升级时面板本就占着这个端口，提前查会把自己判成占用者。
+#
+# 要等一小段再下结论：旧进程收到 SIGTERM 后最多还要 3 秒才真正退出（它要关 WS 与
+# 数据库，兜底定时器就是 3 秒），立刻判会把「正在正常退出」误报成「端口被占」。
+check_port_free() {
+  local port="$1" waited=0 line pid cmd
+  command -v ss &>/dev/null || return 0
+  while [ "$waited" -lt "${PORT_FREE_WAIT:-6}" ]; do
+    line=$(ss -ltnp "sport = :$port" 2>/dev/null | tail -n +2 | head -1 || true)
+    [ -n "$line" ] || return 0
+    sleep 1
+    waited=$((waited + 1))
+  done
+  pid=$(printf '%s' "$line" | sed -n 's/.*pid=\([0-9]*\).*/\1/p' | head -1 || true)
+  cmd=$(printf '%s' "$line" | sed -n 's/.*users:(("\([^"]*\)".*/\1/p' | head -1 || true)
+  err "端口 $port 已被占用，面板起不来。"
+  err "占用它的进程：${cmd:-未知}（PID ${pid:-未知}）"
+  err "处置：先停掉该进程再重跑同一条安装命令。若它是上一版面板的残留，"
+  err "用 sudo systemctl stop mc-commander 停掉；其它程序占用则改 .env 里的 PORT 后重跑。"
+  return 1
+}
+
 # 10. 启动后端服务
 log "启动 MC_Commander 后端..."
+check_port_free "$SERVER_PORT"
 
 if [ "$SKIP_SYSTEMD" -eq 0 ] && command -v systemctl &>/dev/null; then
+  # 同机第二份安装会静默顶掉第一份：unit 名与专用用户都是全局唯一的，而安装目录可覆盖。
+  # 直接覆盖会让上一份部署变成「目录还在、服务已指向别处」的孤儿，用户以为两份都在跑。
+  # 判据取 unit 的 WorkingDirectory（不是「目录是否存在」——同一目录重装/升级是正常路径）。
+  EXISTING_UNIT=/etc/systemd/system/mc-commander.service
+  if [ -f "$EXISTING_UNIT" ]; then
+    EXISTING_DIR=$(sed -n 's/^[[:space:]]*WorkingDirectory=//p' "$EXISTING_UNIT" | head -1)
+    if [ -n "$EXISTING_DIR" ] && [ "$EXISTING_DIR" != "$MC_COMMANDER_DIR" ]; then
+      err "这台机器上已有一套 MC_Commander 部署在 $EXISTING_DIR"
+      err "再装一份会顶掉它（服务名与运行用户都是全局唯一的），故本次已中止。"
+      err "要继续，请二选一："
+      err "  1) 先卸载旧的那套：sudo MC_COMMANDER_DIR=$EXISTING_DIR bash $0 --uninstall"
+      err "  2) 换一个安装目录并显式指定：sudo MC_COMMANDER_DIR=$MC_COMMANDER_DIR bash $0"
+      err "     （仍需先卸载旧的：服务名不随目录变）"
+      exit 1
+    fi
+  fi
+
   # 创建专用低权限运行用户（服务以 mc-commander 身份运行而非 root；25566 高位端口无需 root 权限）
   if ! id -u mc-commander &>/dev/null; then
     log "创建专用低权限用户 mc-commander..."
@@ -1444,6 +1578,13 @@ if [ "$SKIP_SYSTEMD" -eq 0 ] && command -v systemctl &>/dev/null; then
 [Unit]
 Description=MC_Commander Server
 After=network.target
+# 起不来时不要无限重试：默认 10 秒窗口内允许 5 次，而 3 秒间隔下永远够不着这个额度，
+# 结果是每 3 秒重试一次、永不进入 failed，用户既看不到「它坏了」也等不到它自己好。
+# 收紧到 5 分钟内 5 次，超出即停在 failed 并保留日志供排查。
+# 必须留在 [Unit] 段：systemd 只在该段解析这两个键，写进 [Service] 会被当作未知键
+# 静默忽略（日志仅一行 Unknown key name），限流形同未设。
+StartLimitIntervalSec=300
+StartLimitBurst=5
 
 [Service]
 Type=simple
@@ -1458,11 +1599,6 @@ WorkingDirectory=$MC_COMMANDER_DIR
 ExecStart=$(which node) src/index.js
 Restart=always
 RestartSec=3
-# 起不来时不要无限重试：默认 10 秒窗口内允许 5 次，而 3 秒间隔下永远够不着这个额度，
-# 结果是每 3 秒重试一次、永不进入 failed，用户既看不到「它坏了」也等不到它自己好。
-# 收紧到 5 分钟内 5 次，超出即停在 failed 并保留日志供排查。
-StartLimitIntervalSec=300
-StartLimitBurst=5
 
 [Install]
 WantedBy=multi-user.target
@@ -1508,10 +1644,13 @@ ExecStart=/bin/bash $REMOVAL_SCRIPT --keep-data
 EOF
   record_change "systemd-unit" "/etc/systemd/system/mc-commander-removal-keep.service"
 
-  # sudoers 白名单：只放行启动这两个单元，面板拿不到任何其它 root 能力。
+  # sudoers 白名单：只放行启动两个删除单元 + 停止面板自身，面板拿不到任何其它 root 能力。
   # 必须带 --no-block：sudoers 按完整参数序列匹配，面板用别的形态调用一律不匹配。
+  # stop 必须显式授权：面板以 mc-commander 身份运行，systemctl stop 默认要交互式认证，
+  # 面板内点「停用面板」会以退出码 1 失败（Interactive authentication required），
+  # 而 API 早已回了成功——用户以为停了，实际还在跑。
   cat > /etc/sudoers.d/mc-commander <<EOF
-mc-commander ALL=(root) NOPASSWD: /usr/bin/systemctl start --no-block mc-commander-removal.service, /usr/bin/systemctl start --no-block mc-commander-removal-keep.service
+mc-commander ALL=(root) NOPASSWD: /usr/bin/systemctl start --no-block mc-commander-removal.service, /usr/bin/systemctl start --no-block mc-commander-removal-keep.service, /usr/bin/systemctl stop mc-commander.service
 EOF
   chmod 440 /etc/sudoers.d/mc-commander
   record_change "sudoers" "/etc/sudoers.d/mc-commander"
@@ -1632,6 +1771,16 @@ if ! wait_until_ready; then
   exit 1
 fi
 log "服务已就绪（端口 $SERVER_PORT，版本 $SEEN_VERSION）"
+
+# 版本跃迁要说出来：用户重跑安装命令的目的就是换版本，只说「服务已就绪」等于
+# 让他自己去关于页核对。首次安装与同版本重跑分别有各自的说法。
+if [ -z "$PREVIOUS_VERSION" ]; then
+  log "本次为首次安装，版本 v$SEEN_VERSION"
+elif [ "$PREVIOUS_VERSION" = "$SEEN_VERSION" ]; then
+  log "版本未变（v$SEEN_VERSION），本次只重装了运行环境"
+else
+  log "版本已从 v$PREVIOUS_VERSION 升级到 v$SEEN_VERSION"
+fi
 
 # 12. 输出部署信息
 # 用户在自己电脑的浏览器里打开面板，故 localhost 对他无意义（那指向他自己的电脑）。

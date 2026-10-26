@@ -321,6 +321,98 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
     });
   });
 
+  /* 装包函数恒返回 0 时，调用点的 `|| warn ...` 与 JAVA25_MISSING=1 全是死代码：
+     Java 25 装不上用户得不到任何提示，部署 MC 26.x 实例起不来还找不到原因。 */
+  describe('装包失败必须能被调用点看见', () => {
+    const fnSrc = script.match(/install_pkg_recorded\(\) \{[\s\S]*?\n\}/);
+    if (!fnSrc) throw new Error('未能在部署脚本中定位 install_pkg_recorded');
+    const pkgSrc = script.match(/pkg_installed\(\) \{[\s\S]*?\n\}/);
+    if (!pkgSrc) throw new Error('未能在部署脚本中定位 pkg_installed');
+
+    /** 用桩跑一遍装包：FAKE_RC 控制 install_pkg 的退出码 */
+    function runRecorded(rc) {
+      const staging = path.join(mkdtempSync(path.join(os.tmpdir(), 'mcs-pkg-')), 'staging');
+      const r = spawnSync(
+        BASH_BIN,
+        ['-c', 'eval "$FN"\ninstall_pkg_recorded nodejs; echo "RC=$?"; cat "$STAGING"'],
+        {
+          encoding: 'utf8',
+          env: {
+            ...process.env,
+            STAGING: staging,
+            FAKE_RC: String(rc),
+            FN: [
+              'MANIFEST=/nonexistent/.install-manifest',
+              'MANIFEST_STAGING="$STAGING"',
+              'MC_COMMANDER_DIR=/nonexistent',
+              'PKG_MANAGER=apt',
+              'record_change() { printf "%s\t%s\n" "$1" "$2" >> "$MANIFEST_STAGING"; }',
+              'install_pkg() { return "$FAKE_RC"; }',
+              pkgSrc[0],
+              fnSrc[0],
+              // 桩必须排在真实定义之后：同名的后定义者生效
+              'pkg_installed() { return 1; }',
+            ].join('\n'),
+          },
+        },
+      );
+      rmSync(path.dirname(staging), { recursive: true, force: true });
+      return r.stdout;
+    }
+
+    it('装包成功：返回 0 且清单记 pkg-installed', () => {
+      const out = runRecorded(0);
+      expect(out).toContain('RC=0');
+      expect(out).toContain('pkg-installed\tnodejs');
+    });
+
+    it('装包失败：返回非 0 且清单记 pkg-failed（不冒充已装）', () => {
+      const out = runRecorded(100);
+      expect(out).toContain('RC=100');
+      expect(out).toContain('pkg-failed\tnodejs');
+      expect(out).not.toContain('pkg-installed');
+    });
+
+    it('失败经 || 分叉能置位 JAVA25_MISSING（否则该告警是死代码）', () => {
+      const r = spawnSync(
+        BASH_BIN,
+        [
+          '-c',
+          'eval "$FN"\ninstall_pkg_recorded java-25 || JAVA25_MISSING=1; echo "MISSING=${JAVA25_MISSING:-0}"',
+        ],
+        {
+          encoding: 'utf8',
+          env: {
+            ...process.env,
+            FAKE_RC: '100',
+            FN: [
+              'MANIFEST=/nonexistent/.install-manifest',
+              'MANIFEST_STAGING=/tmp/mcs-pkg-unused',
+              'MC_COMMANDER_DIR=/nonexistent',
+              'PKG_MANAGER=apt',
+              'record_change() { :; }',
+              'install_pkg() { return "$FAKE_RC"; }',
+              pkgSrc[0],
+              fnSrc[0],
+              'pkg_installed() { return 1; }',
+            ].join('\n'),
+          },
+        },
+      );
+      expect(r.stdout).toContain('MISSING=1');
+    });
+
+    it('预装判定跟着包管理器走：Alpine 不能用 dpkg/rpm 探测', () => {
+      // Alpine 上 dpkg/rpm 不存在，恒假会把每个包都记成「本项目装的」，
+      // 卸载时 apk del 把用户原本就有的 openjdk/nodejs 一起删掉
+      expect(pkgSrc[0]).toContain('apk info -e');
+      expect(pkgSrc[0]).toContain('dpkg -s');
+      expect(pkgSrc[0]).toContain('rpm -q');
+      // apk 也要更新索引，否则全新 Alpine 上 apk add 报 package not found
+      expect(script).toMatch(/apk\) apk update/);
+    });
+  });
+
   describe('Node.js 安装不执行未校验引导脚本', () => {
     it('优先使用发行版官方源安装 Node.js', () => {
       expect(script).toContain('install_pkg_recorded nodejs npm');
@@ -357,13 +449,35 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
       expect(script).toContain(
         'NOPASSWD: /usr/bin/systemctl start --no-block mc-commander-removal.service',
       );
-      expect(script).not.toMatch(/NOPASSWD:.*systemctl (stop|restart|disable)/);
+      // 判据只针对删除单元：stop/restart/disable 若落在它身上，面板就能绕过删除流程。
+      // 停面板自身是另一条白名单项（面板以非 root 身份运行，不授权就必然停不掉）
+      const removalEntries = script
+        .split('\n')
+        .filter((l) => /NOPASSWD:/.test(l))
+        .join('\n');
+      expect(removalEntries).not.toMatch(/systemctl (stop|restart|disable) mc-commander-removal/);
       // 面板发的命令必须与白名单里的参数序列逐字一致，否则线上永远匹配不上
       const panelRoute = readFileSync(
         path.resolve(import.meta.dirname, '../src/routes/panel.js'),
         'utf8',
       );
       expect(panelRoute).toContain("'start', '--no-block', unit");
+    });
+
+    it('停面板自身在 sudoers 白名单内，且面板调用序列逐字一致', () => {
+      // 面板以 mc-commander 身份运行：不授权时 systemctl stop 要交互式认证，
+      // 面板内点「停用面板」必然失败（实测退出码 1），而 API 却回成功
+      const sudoersLine = script.split('\n').find((l) => /NOPASSWD:/.test(l)) ?? '';
+      expect(sudoersLine).toContain('/usr/bin/systemctl stop mc-commander.service');
+      const panelRoute = readFileSync(
+        path.resolve(import.meta.dirname, '../src/routes/panel.js'),
+        'utf8',
+      );
+      // 权限校验与真正执行必须是同一串参数，否则线上匹配不上
+      expect(panelRoute).toContain("'stop', 'mc-commander.service'");
+      expect(panelRoute).toContain(
+        "'-n', '-l', '/usr/bin/systemctl', 'stop', 'mc-commander.service'",
+      );
     });
 
     /* root 执行的脚本若留在面板可写目录里，面板拿到任意写文件能力就等于拿到 root */
@@ -400,6 +514,23 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
 
     it('安装完成后给出降权说明', () => {
       expect(script).toContain('服务以专用低权限用户 mc-commander 运行');
+    });
+
+    it('同机已有另一份部署时中止，不静默顶掉它', () => {
+      // unit 名与专用用户全局唯一，覆盖写入会让上一份部署变成「目录还在、服务没了」的孤儿。
+      // 判据取 WorkingDirectory 而不是「目录是否存在」：同一目录重装/升级是正常路径。
+      const fnStart = script.indexOf('if [ "$SKIP_SYSTEMD" -eq 0 ]');
+      const body = script.slice(fnStart, fnStart + 1200);
+      expect(body).toContain('WorkingDirectory=');
+      expect(body).toContain('EXISTING_DIR" != "$MC_COMMANDER_DIR"');
+      expect(body).toContain('exit 1');
+    });
+
+    it('互斥判定发生在写 unit 之前（否则覆盖已经发生，检查没有意义）', () => {
+      const guardAt = script.indexOf('EXISTING_DIR" != "$MC_COMMANDER_DIR"');
+      const writeAt = script.indexOf('cat > /etc/systemd/system/mc-commander.service <<EOF');
+      expect(guardAt).toBeGreaterThan(0);
+      expect(guardAt).toBeLessThan(writeAt);
     });
   });
 
@@ -905,6 +1036,60 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
     });
   });
 
+  /* 用户重跑安装命令的诉求就是「换到新版」；全程只有 VERSION=latest 的话，
+     他既不知道装的是什么、也不知道这次到底有没有升上去。 */
+  describe('版本跃迁要说出来', () => {
+    /** 在假安装目录上跑一遍版本播报，看它怎么描述这次安装 */
+    function runVersionReport(previous, seen) {
+      const dir = mkdtempSync(path.join(os.tmpdir(), 'mcs-ver-'));
+      try {
+        if (previous) writeFileSync(path.join(dir, 'package.json'), `{"version":"${previous}"}\n`);
+        const lines = script.split('\n');
+        const prevAt = lines.findIndex((l) => l.startsWith('PREVIOUS_VERSION='));
+        if (prevAt < 0) throw new Error('未能在部署脚本中定位 PREVIOUS_VERSION 读取');
+        const prevSrc = lines.slice(prevAt, prevAt + 2).join('\n');
+        const reportAt = lines.findIndex((l) => l.includes('本次为首次安装'));
+        if (reportAt < 0) throw new Error('未能在部署脚本中定位版本播报');
+        const reportSrc = lines.slice(reportAt - 5, reportAt + 6).join('\n');
+        const r = spawnSync(BASH_BIN, ['-c', `eval "$PREV_SRC"\neval "$REPORT_SRC"`], {
+          encoding: 'utf8',
+          env: {
+            ...process.env,
+            MC_COMMANDER_DIR: dir,
+            SEEN_VERSION: seen,
+            PREV_SRC: `log() { echo "[INFO] $*"; }\n${prevSrc}`,
+            REPORT_SRC: reportSrc,
+          },
+        });
+        return r.stdout;
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    }
+
+    it('首次安装：说清是首次，并给出装上的版本', () => {
+      expect(runVersionReport('', '0.10.3')).toContain('首次安装，版本 v0.10.3');
+    });
+
+    it('版本变了：报出从 X 到 Y', () => {
+      const out = runVersionReport('0.10.0', '0.10.3');
+      expect(out).toContain('从 v0.10.0 升级到 v0.10.3');
+    });
+
+    it('版本没变：如实说没变，不伪装成升级', () => {
+      const out = runVersionReport('0.10.3', '0.10.3');
+      expect(out).toContain('版本未变（v0.10.3）');
+      expect(out).not.toContain('升级到');
+    });
+
+    it('旧版本号在覆盖代码之前读取（覆盖后再读只能读到新版本）', () => {
+      const readAt = script.indexOf('PREVIOUS_VERSION=');
+      const copyAt = script.indexOf('cp -rf "$TMP_EXTRACT/."');
+      expect(readAt).toBeGreaterThan(0);
+      expect(readAt).toBeLessThan(copyAt);
+    });
+  });
+
   describe('凭据交付：用户拿得走、丢了找得回', () => {
     // 令牌行不套边框：三击选行会把两侧 ║ 一起复制（实测 70 字符），粘进设密页必失败
     it('SETUP_TOKEN 独占行不带边框字符', () => {
@@ -1025,6 +1210,14 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
   describe('卸载前停止运行中的实例', () => {
     const fnSource = script.match(/stop_running_instances\(\) \{[\s\S]*?\n\}/);
     if (!fnSource) throw new Error('未能在部署脚本中定位 stop_running_instances');
+    // 数据目录由 .env 决定（用户可能把它指到别的分区），抽取函数时一并带上解析器
+    const dirResolverSource = script.match(/resolve_data_dir\(\) \{[\s\S]*?\n\}/);
+    if (!dirResolverSource) throw new Error('未能在部署脚本中定位 resolve_data_dir');
+    // 无 pidfile 的实例靠进程命令行识别，该判据也是被抽取函数的一部分
+    const orphanFn = script.match(/stop_orphan_instances\(\) \{[\s\S]*?\n\}/);
+    if (!orphanFn) throw new Error('未能在部署脚本中定位 stop_orphan_instances');
+    const javaPidFn = script.match(/instance_java_pids\(\) \{[\s\S]*?\n\}/);
+    if (!javaPidFn) throw new Error('未能在部署脚本中定位 instance_java_pids');
 
     /**
      * 进程是否真的还在跑。
@@ -1059,7 +1252,7 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
      * 那样命令行里就没有实例目录，验活判定恒不命中（探针会假绿）。
      * 形态对齐真实实例：命令行里带着自己实例目录下的 jar 路径。
      */
-    function spawnFakeInstance(instDir) {
+    function spawnFakeInstance(instDir, jarName = 'server.jar') {
       // 显式监听 TERM 并退出：默认 TERM 处理在 detached 子进程里不可靠，
       // 探针会因为「信号发了但进程还在」而红，掩盖掉判定逻辑本身是对的这个事实
       const child = spawn(
@@ -1067,7 +1260,7 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
         [
           '-e',
           "process.on('SIGTERM', () => process.exit(0)); setTimeout(() => {}, 60000)",
-          path.join(instDir, 'server.jar'),
+          path.join(instDir, jarName),
         ],
         { stdio: 'ignore', detached: true },
       );
@@ -1085,9 +1278,38 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
         env: {
           ...process.env,
           MC_COMMANDER_DIR: dir,
-          FN_SRC: 'log() { echo "[INFO] $*"; }\nwarn() { echo "[WARN] $*"; }\n' + fnSource[0],
+          FN_SRC:
+            'log() { echo "[INFO] $*"; }\nwarn() { echo "[WARN] $*"; }\n' +
+            dirResolverSource[0] +
+            '\n' +
+            javaPidFn[0] +
+            '\n' +
+            orphanFn[0] +
+            '\n' +
+            fnSource[0],
         },
       });
+    }
+
+    /** 跑「无 pidfile 实例」那条路径（卸载里与 pidfile 停止并列调用） */
+    function runStopOrphans(dir) {
+      return spawnSync(
+        BASH_BIN,
+        ['-c', 'eval "$FN_SRC"\nstop_orphan_instances "$DIR"; echo DONE'],
+        {
+          encoding: 'utf8',
+          env: {
+            ...process.env,
+            MC_COMMANDER_DIR: dir,
+            DIR: path.join(dir, 'var', 'servers'),
+            FN_SRC:
+              'log() { echo "[INFO] $*"; }\nwarn() { echo "[WARN] $*"; }\n' +
+              javaPidFn[0] +
+              '\n' +
+              orphanFn[0],
+          },
+        },
+      );
     }
 
     it('实例在跑 → 发 TERM 并等它退出', () => {
@@ -1138,10 +1360,136 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
       }
     });
 
+    it('卸载前无条件尝试停实例：不按 server.jar 计数做前置门禁', () => {
+      // 面板自己生成的 jar 叫 server-<版本>.jar / forge-*.jar，按 server.jar 数会数到 0
+      // 而整段跳过——实例继续写存档，userdel 也必然失败
+      const fnStart = script.indexOf('do_uninstall() {');
+      const body = script.slice(fnStart, script.indexOf('\n}\n', fnStart));
+      expect(body).not.toMatch(/-name server\.jar/);
+      expect(body).toContain('stop_running_instances');
+      expect(body).toContain('stop_orphan_instances');
+    });
+
     it('卸载只在 --purge 时停实例，非 purge 保留数据不动实例', () => {
       // 非 purge 分支删的是代码不是数据，实例还能被用户手工接管，不该被静默杀掉
       const purgeBranch = script.slice(script.indexOf('if [ "$purge" -eq 1 ]'));
       expect(purgeBranch).toContain('stop_running_instances');
+    });
+
+    /**
+     * 起一个真 java 进程（命令行带 -jar <实例目录>/<jar 名>）。
+     * 不能用改名过的 bash 冒充：判定读 /proc/<pid>/exe，而 bash 执行脚本时
+     * exe 会指回 /usr/bin/bash，桩会假绿。
+     */
+    function spawnJavaInstance(instDir, jarName) {
+      const jarPath = path.join(instDir, jarName);
+      const work = mkdtempSync(path.join(os.tmpdir(), 'java-stub-'));
+      writeFileSync(
+        path.join(work, 'Main.java'),
+        'public class Main { public static void main(String[] a) throws Exception { Thread.sleep(60000); } }\n',
+      );
+      const built = spawnSync('javac', ['-d', work, path.join(work, 'Main.java')], {
+        encoding: 'utf8',
+      });
+      if (built.status !== 0) return null;
+      writeFileSync(path.join(work, 'MANIFEST.MF'), 'Main-Class: Main\n');
+      const jarred = spawnSync(
+        'jar',
+        ['cfm', jarPath, path.join(work, 'MANIFEST.MF'), '-C', work, 'Main.class'],
+        { encoding: 'utf8' },
+      );
+      if (jarred.status !== 0) return null;
+      const child = spawn('java', ['-jar', jarPath], { stdio: 'ignore', detached: true });
+      child.unref();
+      child._work = work;
+      return child;
+    }
+
+    it('无 pidfile 的实例按进程命令行识别：面板自己生成的 server-<版本>.jar 也要命中', () => {
+      // 面板升级后的 jar 叫 server-<mcVersion>.jar、Forge 是 forge-*.jar，
+      // 按 server.jar 写死名字会一个都认不出来——实例继续写存档，userdel 必然失败
+      const dir = mkdtempSync(path.join(os.tmpdir(), 'mcs-orphan-'));
+      try {
+        const instDir = path.join(dir, 'var', 'servers', 'inst1');
+        mkdirSync(instDir, { recursive: true });
+        // 不写 pidfile：走「按命令行识别」这条路
+        const child = spawnJavaInstance(instDir, 'server-1.21.4.jar');
+        if (!child) return; // 本机无 JDK：该断言依赖真 JVM，跳过而非假绿
+        // 等 JVM 起来再扫，避免时序抖动
+        spawnSync('sleep', ['1.5']);
+        const r = runStopOrphans(dir);
+        expect(r.stdout).toContain('停止无 pidfile 的实例进程');
+        expect(isRunning(child.pid)).toBe(false);
+        rmSync(child._work, { recursive: true, force: true });
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it('命令行里带 jar 路径但不是 java 的进程不误杀（tail/rsync 备份该目录）', () => {
+      // 判据只按路径子串匹配时，备份/看日志这类进程会被一起 SIGTERM 掉
+      const dir = mkdtempSync(path.join(os.tmpdir(), 'mcs-notjava-'));
+      try {
+        const instDir = path.join(dir, 'var', 'servers', 'inst1');
+        mkdirSync(instDir, { recursive: true });
+        const child = spawnFakeInstance(instDir, 'server-1.21.4.jar');
+        const r = runStopOrphans(dir);
+        expect(r.stdout).not.toContain('停止无 pidfile 的实例进程');
+        expect(isRunning(child.pid)).toBe(true);
+        process.kill(child.pid, 'SIGKILL');
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+
+    it('数据目录改到别处（.env 里指绝对路径）时，仍能停到那里的实例', () => {
+      // 用户把实例目录换到大盘是常态；按 var/servers 硬编码会「停了个空目录」，
+      // 真实实例继续写存档，随后 --purge 从底下抽走文件。
+      const dir = mkdtempSync(path.join(os.tmpdir(), 'mcs-purge-custom-'));
+      const outside = mkdtempSync(path.join(os.tmpdir(), 'mcs-servers-outside-'));
+      try {
+        writeFileSync(path.join(dir, '.env'), `SERVERS_DIR=${outside}\n`);
+        const instDir = path.join(outside, 'inst1');
+        mkdirSync(instDir, { recursive: true });
+        const child = spawnFakeInstance(instDir);
+        writeFileSync(
+          path.join(instDir, '.mc-commander-pid'),
+          JSON.stringify({ pid: child.pid, startedAt: Date.now() }),
+        );
+        const r = runStop(dir);
+        expect(r.status).toBe(0);
+        expect(r.stdout).toContain('停止仍在运行的实例进程');
+        expect(isRunning(child.pid)).toBe(false);
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+        rmSync(outside, { recursive: true, force: true });
+      }
+    });
+
+    it('数据目录解析四档都按服务端口径：绝对路径原样、相对路径锚安装目录、带引号去壳、缺省回退', () => {
+      const dir = mkdtempSync(path.join(os.tmpdir(), 'mcs-rdd-'));
+      const run = (envLine) => {
+        writeFileSync(path.join(dir, '.env'), envLine);
+        const r = spawnSync(
+          BASH_BIN,
+          ['-c', 'eval "$FN_SRC"\nresolve_data_dir SERVERS_DIR ./var/servers'],
+          {
+            encoding: 'utf8',
+            env: { ...process.env, MC_COMMANDER_DIR: dir, FN_SRC: dirResolverSource[0] },
+          },
+        );
+        return r.stdout.trim();
+      };
+      try {
+        // 服务端把相对路径锚定包根（安装目录），不是 cwd——两侧必须同一口径
+        expect(run('SERVERS_DIR=/mnt/big/servers\n')).toBe('/mnt/big/servers');
+        expect(run('SERVERS_DIR=./var/servers\n')).toBe(path.join(dir, 'var', 'servers'));
+        expect(run('SERVERS_DIR=data/srv\n')).toBe(path.join(dir, 'data', 'srv'));
+        expect(run('SERVERS_DIR="/mnt/x/y"\n')).toBe('/mnt/x/y');
+        expect(run('')).toBe(path.join(dir, 'var', 'servers'));
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
     });
   });
   // 卸载清单必须与安装时铺下的条目一一对应：漏一项就留下几十 MB 与含凭据的 .env，
@@ -1214,19 +1562,101 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
       expect(resolvePort('# PORT=9999\nPORT=8080\n')).toBe('8080');
     });
   });
+
+  /* 端口被占时 node 以 EADDRINUSE 退出，systemd 每 3 秒重试，就绪检查空等满 30 秒
+     才报「未就绪」——用户去修一个不存在的面板问题。起服务前必须先把真因说出来。 */
+  describe('起服务前预检端口', () => {
+    const fnSource = script.match(/check_port_free\(\) \{[\s\S]*?\n\}/);
+    if (!fnSource) throw new Error('未能在部署脚本中定位 check_port_free');
+
+    /** 在真监听端口上跑一遍预检（不依赖 mock：判据就是 ss 的真实输出） */
+    function runCheck(port) {
+      return spawnSync(BASH_BIN, ['-c', 'eval "$FN_SRC"\ncheck_port_free "$PORT"'], {
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          PORT: String(port),
+          PORT_FREE_WAIT: '2',
+          FN_SRC: 'err() { echo "[ERR] $*" >&2; }\n' + fnSource[0],
+        },
+      });
+    }
+
+    it('端口空闲 → 放行', () => {
+      const r = runCheck(59997);
+      expect(r.status).toBe(0);
+      expect(r.stderr).toBe('');
+    });
+
+    it('端口被占 → 拦下并报出占用进程与处置办法', async () => {
+      const { createServer } = await import('node:net');
+      const srv = createServer();
+      await new Promise((res) => srv.listen(59996, '0.0.0.0', res));
+      try {
+        const r = runCheck(59996);
+        expect(r.status).not.toBe(0);
+        expect(r.stderr).toContain('已被占用');
+        // 只说「被占」不够：用户要知道停谁、下一步做什么
+        expect(r.stderr).toContain('PID');
+        expect(r.stderr).toContain('systemctl stop mc-commander');
+      } finally {
+        await new Promise((res) => srv.close(res));
+      }
+    });
+
+    it('预检发生在启动服务之前，且不早于「停旧面板」', () => {
+      // 早于停旧面板：升级时面板本就占着端口，会把自己判成占用者，正常升级被拦
+      const stopAt = script.indexOf(
+        'systemctl stop mc-commander 2>/dev/null || true\n    # 升级中途失败',
+      );
+      const checkAt = script.indexOf('check_port_free "$SERVER_PORT"');
+      const startAt = script.indexOf('systemctl enable mc-commander');
+      expect(checkAt).toBeGreaterThan(stopAt);
+      expect(checkAt).toBeLessThan(startAt);
+    });
+  });
   // 服务起不来时不能无限重试：3 秒间隔配 systemd 默认的「10 秒内 5 次」永远够不着额度，
   // 于是每 3 秒重试一次、永不进入 failed——用户既看不到「它坏了」，也等不到它自己好。
   describe('systemd 单元的重试上限', () => {
+    /** 取出面板服务单元模板的正文（heredoc 之间那段） */
+    function serviceUnitBody() {
+      const start = script.indexOf('cat > /etc/systemd/system/mc-commander.service <<EOF');
+      if (start < 0) throw new Error('未能定位面板服务单元模板');
+      const bodyStart = script.indexOf('\n', start) + 1;
+      const bodyEnd = script.indexOf('\nEOF', bodyStart);
+      if (bodyEnd < 0) throw new Error('未能定位单元模板的结束标记');
+      return script.slice(bodyStart, bodyEnd);
+    }
+
+    /** 单元文件里某个键落在哪个段（systemd 只认各段自己声明的键） */
+    function sectionOf(body, key) {
+      let section = '';
+      for (const line of body.split('\n')) {
+        const head = line.match(/^\[(.+)\]$/);
+        if (head) section = head[1];
+        if (line.startsWith(`${key}=`)) return section;
+      }
+      return null;
+    }
+
     it('单元模板带 StartLimit，且间隔与次数能让失败态真的出现', () => {
-      expect(script).toContain('StartLimitIntervalSec=');
-      expect(script).toContain('StartLimitBurst=');
-      const interval = Number((script.match(/StartLimitIntervalSec=(\d+)/) || [])[1]);
-      const burst = Number((script.match(/StartLimitBurst=(\d+)/) || [])[1]);
-      const restartSec = Number((script.match(/RestartSec=(\d+)/) || [])[1]);
+      const body = serviceUnitBody();
+      const interval = Number((body.match(/StartLimitIntervalSec=(\d+)/) || [])[1]);
+      const burst = Number((body.match(/StartLimitBurst=(\d+)/) || [])[1]);
+      const restartSec = Number((body.match(/RestartSec=(\d+)/) || [])[1]);
       expect(interval).toBeGreaterThan(0);
       expect(burst).toBeGreaterThan(0);
       // 窗口内能容纳的重试次数必须真的耗尽额度，否则限制形同虚设
       expect(Math.floor(interval / restartSec)).toBeGreaterThanOrEqual(burst);
+    });
+
+    it('StartLimit 必须写在 [Unit] 段：写进 [Service] 会被 systemd 当作未知键静默忽略', () => {
+      // 实测 systemd 255：写在 [Service] 段时 `systemctl show` 回的是默认值
+      // StartLimitIntervalUSec=10s，同时 journal 只有一行 Unknown key name——限流等于没设。
+      // 故判据是「落在哪个段」，不是「脚本里有没有这两行」。
+      const body = serviceUnitBody();
+      expect(sectionOf(body, 'StartLimitIntervalSec')).toBe('Unit');
+      expect(sectionOf(body, 'StartLimitBurst')).toBe('Unit');
     });
   });
   // 反代/域名部署下，脚本探测到的 IP 与用户实际访问的入口不是一回事：
@@ -1330,6 +1760,65 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
       const body = script.slice(fnStart, script.indexOf('\n}\n', fnStart));
       expect(body).toContain('ps -u mc-commander');
       expect(body).toContain('pkill -u mc-commander');
+    });
+
+    it('删用户不以「本次见到单元」为前提：上次失败后重跑必须还会尝试', () => {
+      // 上一次 userdel 因实例占着该用户而失败，同时单元已被删掉。重跑时单元不存在，
+      // 若删用户仍以「见到单元」为前提就永远不会再尝试，机器上留下一个删不掉的系统用户。
+      // 判据：门控只能由「别的部署认领了这个用户」挡住，不能由 unit_matches 挡住。
+      const fnStart = script.indexOf('do_uninstall() {');
+      const body = script.slice(fnStart, script.indexOf('\n}\n', fnStart));
+      // 定位真正执行 userdel 的那一行往上最近的条件行（if 开头）
+      const userdelAt = body.indexOf('userdel mc-commander');
+      const guardLine = body
+        .slice(0, userdelAt)
+        .split('\n')
+        .filter((l) => l.trim().startsWith('if '))
+        .pop();
+      expect(guardLine).toContain('unit_owned_by_other');
+      expect(guardLine).not.toContain('unit_matches');
+    });
+
+    it('安装目录归一化：尾斜杠不得让单元归属判定失效（否则静默跳过停服务/删单元/删用户）', () => {
+      // unit 里的 WorkingDirectory 是当次调用写入的字面量，而卸载要与它逐字比对。
+      // 不归一化时 /opt/x/ 会被判成「另一个目录」：停服务、删单元、删用户全跳过，
+      // 代码却照删——服务仍 enabled 且 Restart=always，每 3 秒拉起一个没有 node_modules 的进程。
+      const normAt = script.indexOf('while [ "${MC_COMMANDER_DIR}" != "/" ]');
+      expect(normAt).toBeGreaterThan(-1);
+      // 归一化必须发生在任何比对与路径拼接之前
+      expect(normAt).toBeLessThan(script.indexOf('MANIFEST="$MC_COMMANDER_DIR/.install-manifest"'));
+      expect(normAt).toBeLessThan(script.indexOf('do_uninstall() {'));
+
+      const run = (value) =>
+        spawnSync(
+          BASH_BIN,
+          [
+            '-c',
+            [
+              'MC_COMMANDER_DIR="$V"',
+              'MC_COMMANDER_DIR="${MC_COMMANDER_DIR:-/opt/mc-commander}"',
+              'while [ "${MC_COMMANDER_DIR}" != "/" ] && [ "${MC_COMMANDER_DIR%/}" != "$MC_COMMANDER_DIR" ]; do MC_COMMANDER_DIR="${MC_COMMANDER_DIR%/}"; done',
+              '[ -n "$MC_COMMANDER_DIR" ] || MC_COMMANDER_DIR="/"',
+              'printf "%s" "$MC_COMMANDER_DIR"',
+            ].join('\n'),
+          ],
+          { encoding: 'utf8', env: { ...process.env, V: value } },
+        ).stdout;
+      expect(run('/opt/mc-commander')).toBe('/opt/mc-commander');
+      expect(run('/opt/mc-commander/')).toBe('/opt/mc-commander');
+      expect(run('/opt/mc-commander///')).toBe('/opt/mc-commander');
+      // 根目录不能被归一化成空串（那会让危险路径守卫的 "/" 分支失效）
+      expect(run('/')).toBe('/');
+      expect(run('//')).toBe('/');
+    });
+
+    it('单元指向别的安装目录时才保留用户（互不误伤）', () => {
+      const fnStart = script.indexOf('do_uninstall() {');
+      const body = script.slice(fnStart, script.indexOf('\n}\n', fnStart));
+      expect(body).toContain('unit_owned_by_other=1');
+      // 指向别的目录 ⇒ 那套部署仍认领这个全局唯一用户
+      const branch = body.slice(body.indexOf('unit_dir" = "$MC_COMMANDER_DIR"'));
+      expect(branch.slice(0, 400)).toContain('unit_owned_by_other=1');
     });
   });
 
