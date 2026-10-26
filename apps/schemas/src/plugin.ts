@@ -43,6 +43,12 @@ export const pluginUpdateStatusSchema = z.object({
 export const pluginUpdateCheckResultSchema = z.object({
   checkedAt: z.string(),
   results: z.array(pluginUpdateStatusSchema),
+  /** 本次没被检测的插件数，按原因分类：面板必须能说清「全部最新」覆盖了哪些 */
+  skipped: z.object({
+    disabled: z.number(),
+    overLimit: z.number(),
+    noMeta: z.number(),
+  }),
 })
 
 export const pluginToggleResultSchema = z.object({

@@ -27,6 +27,14 @@ export const deployResultSchema = z.object({
   javaVersion: z.string(),
   path: z.string(),
   maxMemory: z.string(),
+  /**
+   * 部署收尾的真实结果。终态 complete 的语义是「可以去连了」，而入库失败、
+   * 首启失败、自动启动失败都不会让部署本身失败——这些必须如实回报，
+   * 否则用户拿到「部署成功」却连不上，且不知道原因。
+   */
+  warnings: z.array(z.string()),
+  /** 本次是否已自动启动（勾了 EULA 且启动成功才为 true） */
+  started: z.boolean(),
 })
 
 /**
