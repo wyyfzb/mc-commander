@@ -225,8 +225,10 @@ describe('market.service - getMarketProjectVersions', () => {
 
     expect(projectSlug).toBe('essentialsx');
     expect(httpJson).toHaveBeenCalledTimes(1);
-    const [url] = vi.mocked(httpJson).mock.calls[0];
+    const [url, opts] = vi.mocked(httpJson).mock.calls[0];
     expect(url).toBe('https://api.modrinth.com/v2/project/essentialsx/version');
+    // Modrinth 明确要求携带可联系的 UA：三个调用点都必须带，漏一个就是整条链路失联
+    expect(opts.headers['User-Agent']).toContain('MC_Commander');
 
     // 2.20.1 无 files → 被过滤，只剩 2.21.0
     expect(versions).toHaveLength(1);

@@ -2137,7 +2137,9 @@ export class MCServerInstance extends EventEmitter {
           'minecraft:max_health',
           true,
         );
-        details.maxHealth = maxHealthVal != null ? maxHealthVal : 20;
+        // 查不到就留 null（前端显示 --）：编造成 20 会与真实 health 组成错误比例，
+        // 而「未知」这条路前端本来就支持
+        details.maxHealth = maxHealthVal ?? null;
 
         // 护甲：使用 /attribute 查询最终值（含装备加成），兼容新旧版
         const armorVal = await this._queryAttribute(

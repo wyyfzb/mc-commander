@@ -13,7 +13,6 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Toaster, toast as sonnerToast } from 'sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
-import { BREAKPOINT_BELOW_SM } from '@/hooks/use-media-query'
 import { mockContainerWidth } from '@tests/support/mock-container-width'
 import { PlayerTable } from '@/features/players/components/player-table'
 import { usePlayersUiStore } from '@/features/players/store'
@@ -99,6 +98,22 @@ function mockTableWidth(px: number) {
   return mockContainerWidth(px)
 }
 
+import { BREAKPOINT_BELOW_SM } from '@/hooks/use-media-query'
+
+/**
+ * 卡片态阈值写死在测试里，不从被测模块 import：
+ * 把实现的常量喂给 mock 等于「用实现算出的值断言实现」——常量改成 1200px 时
+ * mock 跟着一起变，640–1200 全部误转卡片态也不会有用例变红（实测打穿）。
+ */
+const CARD_LAYOUT_QUERY = '(max-width: 639px)'
+
+describe('PlayerTable · 卡片态阈值', () => {
+  it('实现用的查询串就是 639px（jsdom 量不到几何，值本身必须在这里被钉住）', () => {
+    // 卡片态阈值是「有理由的例外」：刻意取视口而非表格区实宽，改它要连带改理由
+    expect(BREAKPOINT_BELOW_SM).toBe(CARD_LAYOUT_QUERY)
+  })
+})
+
 let restoreMedia: (() => void) | null = null
 let restoreObserver: (() => void) | null = null
 
@@ -136,7 +151,7 @@ function setup(players: Player[]) {
 
 describe('PlayerTable · 响应式形态', () => {
   it('<640px：渲染行式卡片而非表格，勾选/全选/操作菜单均在位', () => {
-    restoreMedia = mockBreakpoints([BREAKPOINT_BELOW_SM])
+    restoreMedia = mockBreakpoints([CARD_LAYOUT_QUERY])
     restoreObserver = mockTableWidth(375)
     usePlayersUiStore.setState({ selectedUuids: [] })
     const { onOpenDetail } = setup([makePlayer()])
@@ -157,7 +172,7 @@ describe('PlayerTable · 响应式形态', () => {
   })
 
   it('<640px：卡片态行内菜单与表格共用同一套操作（可逆项直执）', async () => {
-    restoreMedia = mockBreakpoints([BREAKPOINT_BELOW_SM])
+    restoreMedia = mockBreakpoints([CARD_LAYOUT_QUERY])
     restoreObserver = mockTableWidth(375)
     usePlayersUiStore.setState({ selectedUuids: [] })
     const user = userEvent.setup()
@@ -169,7 +184,7 @@ describe('PlayerTable · 响应式形态', () => {
   })
 
   it('<640px：卡片勾选写入选中集（批量条依赖同一 store）', async () => {
-    restoreMedia = mockBreakpoints([BREAKPOINT_BELOW_SM])
+    restoreMedia = mockBreakpoints([CARD_LAYOUT_QUERY])
     restoreObserver = mockTableWidth(375)
     usePlayersUiStore.setState({ selectedUuids: [] })
     const user = userEvent.setup()

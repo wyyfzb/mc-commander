@@ -9,31 +9,66 @@ import { EventEmitter } from 'events';
 import fs from 'fs';
 import path from 'path';
 
+/** 去掉注释：裸 toMatch 会把注释里的措辞当成实现，改坏函数体也照样绿 */
+function stripComments(src) {
+  return src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+}
+
+/** 取 marker 之后第一个 `{` 起、花括号配平到对应 `}` 的函数体源码 */
+function sliceBracedBody(src, marker) {
+  const at = src.indexOf(marker);
+  if (at < 0) throw new Error(`源码中未找到 ${marker}`);
+  const open = src.indexOf('{', at);
+  let depth = 0;
+  for (let i = open; i < src.length; i += 1) {
+    if (src[i] === '{') depth += 1;
+    else if (src[i] === '}') {
+      depth -= 1;
+      if (depth === 0) return src.slice(open, i + 1);
+    }
+  }
+  throw new Error(`函数体未闭合：${marker}`);
+}
+
 // ── ① 锁定键 socket.remoteAddress ──
 
 describe('锁定键使用 socket.remoteAddress', () => {
   const src = fs.readFileSync(path.join(__dirname, '../src/routes/auth.js'), 'utf-8');
+  // 判据必须落在函数体上：注释里本来就写着「不信任 X-Forwarded-For」，
+  // 拿整份源码做正则时，把函数体改成读该头仍然全绿（实测打穿）。
+  const clientIpBody = sliceBracedBody(stripComments(src), 'function clientIp(req)');
 
-  it('clientIp 函数体包含 socket.remoteAddress 而非 req.ip', () => {
-    // clientIp 应使用 req.socket?.remoteAddress，不应以 req.ip 开头
-    expect(src).toMatch(/clientIp\(req\)[\s\\]*{[\s\\]*.*socket[\\.]?remoteAddress/s);
-    // 不应以 req.ip 作为首选来源（旧代码 req.ip || req.socket?.remoteAddress）
-    expect(src).not.toMatch(/req\.ip\s*\|\|\s*req\.socket/);
+  it('clientIp 函数体取 socket.remoteAddress，不读 req.ip', () => {
+    expect(clientIpBody).toMatch(/req\.socket\??\.remoteAddress/);
+    expect(clientIpBody).not.toMatch(/req\.ip/);
   });
 
-  it('clientIp 不信任 X-Forwarded-For（注释说明设计意图）', () => {
-    expect(src).toMatch(/socket\.remoteAddress/);
-    expect(src).toMatch(/不信任|X-Forwarded-For|伪造/);
+  it('clientIp 函数体不读任何代理头（X-Forwarded-For / X-Real-IP）', () => {
+    expect(clientIpBody).not.toMatch(/forwarded-for/i);
+    expect(clientIpBody).not.toMatch(/x-real-ip/i);
+    expect(clientIpBody).not.toMatch(/req\.headers/);
   });
 });
 
 // ── ② TRUST_PROXY 可配 ──
 
 describe('TRUST_PROXY 环境变量可配', () => {
-  it('config.js 导出 trustProxy 字段，默认值为 1', async () => {
+  it('config.js 的 trustProxy 默认为 1（不是「≥0」这种恒真判据）', async () => {
+    // 默认值 0 会让反向代理下所有客户端 IP 塌成代理地址，登录锁定被整体绕过
     const config = (await import('../src/config.js')).default;
-    expect(typeof config.trustProxy).toBe('number');
-    expect(config.trustProxy).toBeGreaterThanOrEqual(0);
+    expect(config.trustProxy).toBe(1);
+  });
+
+  it('TRUST_PROXY 可被环境变量覆盖（默认值写死就等于不可配）', async () => {
+    vi.resetModules();
+    vi.stubEnv('TRUST_PROXY', '3');
+    try {
+      const config = (await import('../src/config.js')).default;
+      expect(config.trustProxy).toBe(3);
+    } finally {
+      vi.unstubAllEnvs();
+      vi.resetModules();
+    }
   });
 
   it('.env.example 包含 TRUST_PROXY 配置说明', () => {

@@ -28,6 +28,7 @@ import {
   backupItemSchema,
   instanceStatusSchema,
   taskRunHistorySchema,
+  updateCheckResultSchema,
 } from '@mc-commander/schemas'
 
 /**
@@ -880,7 +881,16 @@ export const handlers = [
   ),
   http.get('*/api/v1/system-stats', () => ok(systemStatsSchema.parse(mockSystemStats))),
   http.get('*/api/v1/check-update', () =>
-    ok({ current: '0.1.0', latest: null, hasUpdate: false, offline: true }),
+    // 走契约校验：手造字面量会让「前端用的字段名」与契约脱钩，
+    // 契约改了字段类型也不会有一条用例变红
+    ok(
+      updateCheckResultSchema.parse({
+        current: '0.1.0',
+        latest: null,
+        hasUpdate: false,
+        offline: true,
+      }),
+    ),
   ),
   http.get('*/api/v1/instances', () =>
     ok([
