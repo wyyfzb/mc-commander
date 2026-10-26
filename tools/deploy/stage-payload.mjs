@@ -76,6 +76,39 @@ export function runtimePackageJson(pkg) {
   return out
 }
 
+/**
+ * lock 里所有 `resolved` 必须落在公共 registry 上。
+ *
+ * 判据是「用户机上能不能解析到」：打包机的 npm registry 是可变的（本机默认内网镜像），
+ * 而 `npm ci` 严格按 lock 的 `resolved` 取包，不匹配用户配置的 registry 时不会替换。
+ * 内网域名在用户机上不存在 ⇒ 装不上。故这里 fail-closed，而不是信任生成参数。
+ */
+export function findForeignResolved(lockText, allowedHost = 'registry.npmjs.org') {
+  const bad = []
+  for (const m of lockText.matchAll(/"resolved":\s*"([^"]+)"/g)) {
+    let host
+    try {
+      host = new URL(m[1]).host
+    } catch {
+      bad.push(m[1])
+      continue
+    }
+    if (host !== allowedHost) bad.push(m[1])
+  }
+  return bad
+}
+
+function assertPublicLock(dir) {
+  const lockPath = path.join(dir, 'package-lock.json')
+  const bad = findForeignResolved(fs.readFileSync(lockPath, 'utf8'))
+  if (bad.length) {
+    throw new Error(
+      `载荷 lock 里有 ${bad.length} 条依赖指向非公共 registry（用户机上解析不到）：\n  ` +
+        `${bad.slice(0, 5).join('\n  ')}${bad.length > 5 ? '\n  …' : ''}`,
+    )
+  }
+}
+
 function sh(cmd, args, opts = {}) {
   return execFileSync(cmd, args, { cwd: REPO, stdio: 'inherit', ...opts })
 }
@@ -212,15 +245,32 @@ function main() {
   fs.writeFileSync(vendorPkgPath, `${JSON.stringify(vendorPkg, null, 2)}\n`)
 
   // ⑤ 现场生成 lock：产物在用户机上是独立项目（没有 workspace 根），必须自备 lock
+  //
+  // registry 必须显式钉死：lock 里的 `resolved` 会照抄生成它的那台机器的 registry，
+  // 而打包机的 registry 是可变的（本机 npm 默认走内网镜像）。内网镜像域名在用户机上
+  // 解析不到，`npm ci` 会以 ENOTFOUND 直接失败——安装脚本在「安装 npm 依赖」一步中断，
+  // 用户拿到的是一个装不上的发布包。钉到公共源后，用户若配了自己的镜像，npm 仍会把
+  // 公共源地址改写成镜像地址（实测：lock 写 registry.npmjs.org，配 npmmirror 时走
+  // cdn.npmmirror.com），故国内用户不受影响。
   for (const stale of [
     path.join(staging, 'package-lock.json'),
     path.join(schemasOut, 'package-lock.json'),
   ]) {
     fs.rmSync(stale, { force: true })
   }
-  sh('npm', ['install', '--package-lock-only', '--omit=dev', '--no-audit', '--no-fund'], {
-    cwd: staging,
-  })
+  sh(
+    'npm',
+    [
+      'install',
+      '--package-lock-only',
+      '--omit=dev',
+      '--no-audit',
+      '--no-fund',
+      '--registry=https://registry.npmjs.org',
+    ],
+    { cwd: staging },
+  )
+  assertPublicLock(staging)
 
   // ⑥ fail-closed：产物的**每个文件**必须落在白名单内（多一个都红）。
   // 只判文件、不判目录——目录是容器的容器，本身不进白名单清单。
