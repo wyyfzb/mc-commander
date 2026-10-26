@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 
 // 目录由本用例逐个创建；config 在导入时求值，故用 globalThis 让 mock 读到当次临时目录
 vi.mock('../src/config.js', () => ({
@@ -76,5 +77,23 @@ describe('面板数据清点', () => {
     const sources = collectExportSources();
     expect(sources).toHaveLength(1);
     expect(sources[0].name).toBe('servers');
+  });
+
+  it('按导出源真打一次包：每个目录的内容都必须进包（成员名写错会得到合法空包）', () => {
+    // 打包命令是「-C 父目录 + 成员名」。成员名若不是目录自己的名字，tar 只报 stderr
+    // 并以非 0 退出，stdout 仍是一段合法 gzip —— 用户会下载到一个能解开但空无一物的包。
+    write(path.join(root, 'servers', 'inst-1'), 'server.jar', 'x');
+    write(path.join(root, 'backups', 'b1'), 'data.tar', 'x');
+    const sources = collectExportSources();
+    const args = ['-czf', '-', ...sources.flatMap((s) => ['-C', path.dirname(s.dir), s.name])];
+    const packed = spawnSync('tar', args, { encoding: 'buffer', maxBuffer: 32 * 1024 * 1024 });
+    expect(packed.status).toBe(0);
+    const list = spawnSync('tar', ['-tzf', '-'], {
+      input: packed.stdout,
+      encoding: 'utf8',
+    });
+    expect(list.status).toBe(0);
+    expect(list.stdout).toContain('inst-1/server.jar');
+    expect(list.stdout).toContain('b1/data.tar');
   });
 });

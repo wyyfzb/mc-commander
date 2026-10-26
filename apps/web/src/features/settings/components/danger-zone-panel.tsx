@@ -159,7 +159,7 @@ export function DangerZonePanel({
         </CardHeader>
         <CardBody className="flex flex-col gap-3">
           <p className="text-mcs-sm text-mcs-text-default">
-            停止面板服务并取消开机自启。服务器实例、存档、备份、配置
+            停止面板服务。服务器实例、存档、备份、配置
             <strong className="font-semibold">全部保留</strong>，随时可以重新启动。
           </p>
           <div>

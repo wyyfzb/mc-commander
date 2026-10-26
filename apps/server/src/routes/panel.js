@@ -84,26 +84,60 @@ export function createPanelRoutes() {
           res.status(500).json(error(ErrorCodes.SERVER_ERROR, '打包失败：系统缺少 tar 命令'));
         } else res.destroy();
       });
+      // tar 的失败形态很隐蔽：某个成员 stat 不到时它只报 stderr 并以非 0 退出，
+      // stdout 仍是一段**合法的空 gzip**。不查退出码，用户会下载到一个「能解开、
+      // 里面什么都没有」的包，还看到「备份已下载」。
+      tar.on('close', (code) => {
+        if (code === 0) return;
+        logger.error(`[Panel] 导出打包失败（tar 退出码 ${code}）`);
+        if (res.headersSent) res.destroy();
+        else res.status(500).json(error(ErrorCodes.SERVER_ERROR, `打包失败：tar 退出码 ${code}`));
+      });
       req.on('close', () => tar.kill());
     }),
   );
 
   // POST /api/v1/panel/stop - 停用面板服务（保留全部数据，随时可重新启用）
+  //
+  // 三步：先用 `sudo -l` 只校验权限（不执行），权限不足就当场报错；
+  // 再回话；最后 detached 执行真正的 stop。顺序不能换——
+  // 直接执行会在回包前把进程自己 SIGTERM 掉，前端只看到连接中断、拿不到任何结论；
+  // 而像以前那样先回 200 再 spawn、且不看退出码，权限不足时用户永远不知道面板没停
+  // （面板以 mc-commander 身份运行，stop 默认要交互式认证，必然退出码 1）。
   router.post(
     '/panel/stop',
     asyncHandler(async (req, res) => {
+      const args = ['-n', 'systemctl', 'stop', 'mc-commander.service'];
+      // `sudo -l <命令> <参数…>` 里首个参数是可执行文件路径、其后是参数，不能再写一遍命令名
+      const probe = spawnSync(
+        'sudo',
+        ['-n', '-l', '/usr/bin/systemctl', 'stop', 'mc-commander.service'],
+        {
+          encoding: 'utf8',
+          timeout: 10000,
+        },
+      );
+      if (probe.status !== 0) {
+        const raw = `${probe.stderr || probe.stdout || ''}`.trim() || `退出码 ${probe.status}`;
+        logger.error(`[Panel] 无停止面板的权限：${raw}`);
+        return res
+          .status(500)
+          .json(
+            error(
+              ErrorCodes.SERVER_ERROR,
+              '面板没有停止自身的权限（sudo 白名单缺失）。请用部署脚本的 --uninstall 卸载，或重新安装一次以补齐权限。',
+            ),
+          );
+      }
       recordAudit({
         action: AuditActions.PANEL_STOP,
         targetType: 'panel',
         targetId: 'panel',
       });
-      res.json(success(null, '面板即将停止，数据全部保留'));
+      res.json(success(null, '面板已停止，数据全部保留'));
       // 响应发出后再停：先停会让用户拿不到这句确认，只看到连接中断
       setTimeout(() => {
-        const child = spawn('systemctl', ['stop', 'mc-commander'], {
-          detached: true,
-          stdio: 'ignore',
-        });
+        const child = spawn('sudo', args, { detached: true, stdio: 'ignore' });
         child.unref();
       }, 800);
     }),

@@ -50,12 +50,12 @@ export function hasAnyData(survey) {
  */
 export function collectExportSources() {
   const sources = [];
-  for (const [dir, name] of [
-    [config.serversDir, 'servers'],
-    [config.backupsDir, 'backups'],
-  ]) {
+  for (const dir of [config.serversDir, config.backupsDir]) {
     try {
-      if (fs.existsSync(dir) && fs.readdirSync(dir).length > 0) sources.push({ dir, name });
+      if (!fs.existsSync(dir) || fs.readdirSync(dir).length === 0) continue;
+      // 成员名必须取目录自己的名字：数据目录可被用户改到任意位置，
+      // 打包时按「父目录 + 成员名」定位，写死名字会 stat 不到而打出一个空包
+      sources.push({ dir, name: path.basename(dir) });
     } catch {}
   }
   return sources;

@@ -76,8 +76,13 @@ describe('危险区面板', () => {
 
   it('停用只说保留，不暗示会删数据', () => {
     render(<DangerZonePanel {...baseProps()} />)
-    const body = screen.getByText(/停止面板服务并取消开机自启/)
+    const body = screen.getByText(/停止面板服务/)
     expect(body).toHaveTextContent('全部保留')
+  })
+
+  it('不宣称会取消开机自启（停机流程里没有 disable，说了就是假承诺）', () => {
+    render(<DangerZonePanel {...baseProps()} />)
+    expect(screen.queryByText(/取消开机自启/)).not.toBeInTheDocument()
   })
 
   it('没有任何数据时如实说「不会丢失存档」，不虚报', () => {

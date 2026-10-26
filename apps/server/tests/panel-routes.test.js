@@ -106,20 +106,63 @@ describe('面板去留端点', () => {
     expect(res.body.message).toContain('没有可导出的数据');
   });
 
-  it('有实例数据时导出返回 gzip 流', async () => {
+  it('有实例数据时导出返回 gzip 流，且包里真有存档（解包核对，不看头就完事）', async () => {
     fs.mkdirSync(path.join(root, 'servers', 'inst-1'), { recursive: true });
     fs.writeFileSync(path.join(root, 'servers', 'inst-1', 'server.jar'), 'jar-bytes');
-    const res = await request(buildApp()).get('/api/panel/export');
+    const res = await request(buildApp())
+      .get('/api/panel/export')
+      .buffer(true)
+      .parse((r, cb) => {
+        const chunks = [];
+        r.on('data', (c) => chunks.push(c));
+        r.on('end', () => cb(null, Buffer.concat(chunks)));
+      });
     expect(res.status).toBe(200);
     expect(res.headers['content-type']).toContain('gzip');
     expect(res.headers['content-disposition']).toContain('mc-commander-backup-');
+
+    // 只断言状态码与头会漏掉「包是合法 gzip 但里面什么都没有」：
+    // tar 遇到 stat 不到的成员仍产出合法空包，退出码非 0 而响应早已发出
+    const body = res.body;
+    expect(body.length).toBeGreaterThan(0);
+    const list = spawnSync('tar', ['-tzf', '-'], { input: body, encoding: 'utf8' });
+    expect(list.status).toBe(0);
+    expect(list.stdout).toContain('inst-1/server.jar');
   });
 
   it('POST /panel/stop 先回确认文案（停服务在响应之后）', async () => {
-    const res = await request(buildApp()).post('/api/panel/stop').send({});
-    expect(res.status).toBe(200);
-    // 先停会让用户拿不到这句确认，只看到连接中断
-    expect(res.body.message).toContain('数据全部保留');
+    const fake = withFakeSudo({ status: 0 });
+    try {
+      const res = await request(buildApp()).post('/api/panel/stop').send({});
+      expect(res.status).toBe(200);
+      // 先停会让用户拿不到这句确认，只看到连接中断
+      expect(res.body.message).toContain('数据全部保留');
+      // 权限必须先校验：面板以 mc-commander 身份运行，直接 stop 会因缺交互式认证而失败
+      expect(fake.argv()).toEqual([
+        '-n',
+        '-l',
+        '/usr/bin/systemctl',
+        'stop',
+        'mc-commander.service',
+      ]);
+    } finally {
+      fake.restore();
+    }
+  });
+
+  it('没有停自身的权限 → 500 并说清怎么办，不谎报已停止', async () => {
+    // 实机复现：sudo -u mc-commander systemctl stop 退出码 1 + Interactive authentication required
+    const fake = withFakeSudo({ status: 1, stderr: 'Interactive authentication required' });
+    try {
+      const res = await request(buildApp()).post('/api/panel/stop').send({});
+      expect(res.status).toBe(500);
+      expect(res.body.message).toContain('没有停止自身的权限');
+      expect(res.body.message).toContain('--uninstall');
+      // 文案里不能出现「已停止」这类结论
+      expect(res.body.message).not.toContain('已停止');
+    } finally {
+      fake.restore();
+    }
   });
 
   it('GET /panel/removal-preview 给出 2FA 状态与数据清单', async () => {
@@ -241,6 +284,52 @@ function runRemoval(installDir, mode = '--keep-data', tmpDir, extraEnv) {
   if (r.error) throw new Error(`无法启动 bash（${BASH_BIN}）：${r.error.message}`);
   return { status: r.status, out: r.stdout + r.stderr };
 }
+
+describe('清理脚本不接受按自身位置反推安装目录', () => {
+  it('未传 MC_COMMANDER_DIR → 拒绝执行（生产副本在 /usr/local/lib 下，反推会得到 /usr/local）', () => {
+    const env = { ...process.env, TMPDIR: os.tmpdir() };
+    delete env.MC_COMMANDER_DIR;
+    const r = spawnSync(BASH_BIN, [REMOVAL, '--keep-data'], { encoding: 'utf8', env });
+    expect(r.status).not.toBe(0);
+    expect(r.stdout + r.stderr).toContain('必须通过 MC_COMMANDER_DIR 指定');
+  });
+
+  it('脚本正文不再含按脚本位置反推的分支', () => {
+    const src = fs.readFileSync(REMOVAL, 'utf8');
+    // 反推写法是 BASH_SOURCE 上溯两级；留着它就等于留着一个「删系统目录」的默认值
+    expect(src).not.toMatch(/BASH_SOURCE\[0\]\}"\)\/\.\.\/\.\./);
+  });
+});
+
+describe('清理脚本的失败必须可见', () => {
+  it('带 set -e：任一步失败都不该继续往下走并报「清理完成」', () => {
+    // 面板侧只看退出码判定删除成功；无 -e 时 rm 失败后脚本仍走到末尾并 exit 0
+    const src = fs.readFileSync(REMOVAL, 'utf8');
+    expect(src).toMatch(/^set -euo pipefail$/m);
+  });
+
+  it('删不掉时以非 0 退出，不打印「清理完成」', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcs-removal-fail-'));
+    try {
+      fs.mkdirSync(path.join(dir, 'src'), { recursive: true });
+      fs.writeFileSync(path.join(dir, 'package.json'), '{}');
+      // 造一个删不掉的条目：把 node_modules 做成只读目录里的文件，
+      // 非 root 下 rm -rf 会失败
+      fs.mkdirSync(path.join(dir, 'node_modules', 'locked'), { recursive: true });
+      fs.writeFileSync(path.join(dir, 'node_modules', 'locked', 'x'), 'x');
+      fs.chmodSync(path.join(dir, 'node_modules', 'locked'), 0o500);
+      const r = runRemoval(dir, '--keep-data', os.tmpdir());
+      // root 环境下权限拦不住，此时脚本会成功——只在非 root 时验证失败分支
+      if (process.getuid && process.getuid() !== 0) {
+        expect(r.status).not.toBe(0);
+        expect(r.out).not.toContain('清理完成');
+      }
+      fs.chmodSync(path.join(dir, 'node_modules', 'locked'), 0o700);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
 
 describe('清理脚本收尾本项目自己的残留', () => {
   let dir;

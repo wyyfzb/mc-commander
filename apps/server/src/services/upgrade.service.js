@@ -519,6 +519,8 @@ export class UpgradeService {
     );
 
     let backupId = null;
+    // 备份恢复失败的原因：非空时终态不能说「已回滚」
+    let restoreFailure = null;
 
     // 保存原始版本用于回滚
     instance._originalMcVersion = oldMcVersion;
@@ -644,12 +646,17 @@ export class UpgradeService {
             `升级失败: ${err.message}，正在回滚...`,
           );
           await this._doRollback(instanceId, backupJarPath, oldJarFile);
-          // 回滚后尝试恢复备份
+          // 回滚后尝试恢复备份。恢复失败不阻塞主流程，但绝不能静默：
+          // 此时磁盘上的世界仍是「新版本首启失败」后的状态，与「已回滚」相反
           if (backupId) {
             try {
               await this.backupService.restoreBackup(backupId);
-            } catch {
-              // 恢复备份失败不阻塞主流程
+            } catch (restoreErr) {
+              restoreFailure = restoreErr.message;
+              logger.error(
+                `[UpgradeService] 备份恢复失败（${backupId}），世界未回滚到升级前状态:`,
+                restoreErr.message,
+              );
             }
           }
         } else {
@@ -685,7 +692,11 @@ export class UpgradeService {
         instanceId,
         cancelled ? UPGRADE_STAGES.CANCELLED : UPGRADE_STAGES.FAILED,
         0,
-        cancelled ? cancelDetail : `升级失败并已回滚: ${err.message}`,
+        cancelled
+          ? cancelDetail
+          : restoreFailure
+            ? `升级失败，回滚未完成：世界备份恢复失败（${restoreFailure}），请用备份 ${backupId} 手动恢复`
+            : `升级失败并已回滚: ${err.message}`,
       );
       this._activeUpgrades.delete(instanceId);
       // 取消不是故障：终态已按 cancelled 发出，正常返回而不是抛错——抛出会让

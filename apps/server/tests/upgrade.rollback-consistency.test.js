@@ -55,6 +55,7 @@ vi.mock('../src/services/backup.service.js', () => ({
       return 'bk-mock';
     }
     async restoreBackup() {
+      if (globalThis.__restoreBackupFails) throw new Error('rsync failed: disk full');
       return { restored: true };
     }
   },
@@ -215,6 +216,31 @@ describe('回滚终态三者自洽（核心行为）', () => {
     // 终态 failed（非 rollback 中途吞错）
     const stages = progressStages(manager);
     expect(stages[stages.length - 1]).toBe(UPGRADE_STAGES.FAILED);
+  });
+
+  it('备份恢复失败时不得声称「已回滚」：世界没回到升级前状态，必须说清并给出备份 id', async () => {
+    // 恢复失败被空 catch 吞掉时，磁盘世界仍是「新版本首启失败」后的状态，
+    // 而终态文案是全链路唯一的用户可见结论——说「已回滚」就是让用户不再处理
+    globalThis.__restoreBackupFails = true;
+    try {
+      const manager = createMockServerManager({ start: startEmitsCrash() });
+      const service = new UpgradeService(manager);
+      fs.writeFileSync(OLD_JAR(), 'OLD_JAR_CONTENT');
+
+      await expect(service.upgrade('inst-1', '1.21.4', 'purpur')).rejects.toThrow(
+        'Server crashed during startup verification',
+      );
+
+      const failedDetail = manager._emitted
+        .filter((e) => e.event === 'instance:upgradeProgress')
+        .filter((e) => e.data.stage === UPGRADE_STAGES.FAILED)
+        .pop().data.detail;
+      expect(failedDetail).toContain('回滚未完成');
+      expect(failedDetail).toContain('bk-mock');
+      expect(failedDetail).not.toContain('已回滚');
+    } finally {
+      globalThis.__restoreBackupFails = false;
+    }
   });
 });
 
