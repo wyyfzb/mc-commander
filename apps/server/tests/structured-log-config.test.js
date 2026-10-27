@@ -311,6 +311,8 @@ describe('与真实参数构建的集成锁', () => {
     // -Xms 由 _buildFullJvmArgs 补在用户参数之前（内存档由字段管理，已显式给的 -Xmx 不重复补）
     expect(args).toEqual([
       `-D${STRUCTURED_LOG_PROPERTY}=${path.join(serverPath, STRUCTURED_LOG_CONFIG_FILE)}`,
+      '-XX:+HeapDumpOnOutOfMemoryError',
+      `-XX:HeapDumpPath=${path.join(serverPath, 'dumps')}`,
       '-Xms1G',
       '-Xmx4G',
       '-XX:+UseG1GC',

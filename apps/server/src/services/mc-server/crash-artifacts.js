@@ -32,6 +32,17 @@ const CRASH_REPORT_DIR = 'crash-reports';
 /** 崩溃报告文件名：crash-<yyyy-mm-dd>_<hh.mm.ss>-<client|server>.txt */
 const CRASH_REPORT_RE = /^crash-.*-(client|server)\.txt$/;
 
+/**
+ * 堆转储落点（相对实例目录）。
+ *
+ * 为什么默认开 HeapDumpOnOutOfMemoryError：堆耗尽**不产 hs_err_pid*.log**（那是 JVM 自身
+ * 致命故障才有），也不产 crash-reports（多数情况只是某个线程抛 OutOfMemoryError）。
+ * 没有转储时，面板能拿到的只有退出码与 stdout 尾巴，用户来问「为什么崩」时无从回答。
+ * 该开关的运行期开销为零，代价是崩溃瞬间落一个约等于堆大小的文件 ⇒ 放独立目录，
+ * 由备份排除（`backup.service.js` 的 EXCLUDE_DIRS），避免快照被 GB 级产物撑大。
+ */
+export const HEAP_DUMP_DIR = 'dumps';
+
 /** 单个产物最多读取的字节数：hs_err 可达数十 KB，取头部足够覆盖已核实字段 */
 const MAX_READ_BYTES = 256 * 1024;
 
@@ -43,6 +54,36 @@ const CRASH_REPORT_HEADER = '---- Minecraft Crash Report ----';
 
 /** hs_err 头部签名（两种形态共用这一行） */
 const HS_ERR_HEADER = '# A fatal error has been detected by the Java Runtime Environment:';
+
+/**
+ * 把堆转储参数并进启动参数（单点注入，四条启动来源合一后生效）。
+ *
+ * 插在**最前**：JVM 选项必须在主类之前，而 Forge/Fabric 的启动方式会把主类藏在 @argfile 里，
+ * 附在末尾会被当成应用参数传给 MC。
+ * 用户自己指定过堆转储相关参数（开或关、或自定义落点）时不覆盖——面板不与用户的显式配置抢。
+ */
+export function _withHeapDumpArgs(args) {
+  const specified = args.some((a) => {
+    const arg = String(a);
+    return (
+      arg.startsWith('-XX:+HeapDump') ||
+      arg.startsWith('-XX:-HeapDump') ||
+      arg.startsWith('-XX:HeapDumpPath')
+    );
+  });
+  if (specified) return args;
+  const dumpDir = path.join(this.serverPath, HEAP_DUMP_DIR);
+  try {
+    // 目录必须先存在：实测 -XX:HeapDumpPath 指向不存在的目录时，JVM 把这个路径当成
+    // **文件名**直接写（落成实例根下一个叫 dumps 的文件），而不是在其下建目录写
+    // java_pid<pid>.hprof —— 转储本身还在，但形态与可发现性都丢了
+    fs.mkdirSync(dumpDir, { recursive: true });
+  } catch (e) {
+    logger.warn(`[${this.id}] 无法创建堆转储目录，本次不启用堆转储:`, e.message);
+    return args;
+  }
+  return ['-XX:+HeapDumpOnOutOfMemoryError', `-XX:HeapDumpPath=${dumpDir}`, ...args];
+}
 
 /**
  * 列出实例目录下的崩溃产物并按 mtime 降序返回（最新的在前）。

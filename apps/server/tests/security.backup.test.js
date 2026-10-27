@@ -339,6 +339,8 @@ describe('命令参数构造（目录快照：rsync --link-dest / robocopy /MIR�
     expect(args).toContain('--exclude=versions/');
     expect(args).toContain('--exclude=cache/');
     expect(args).toContain('--exclude=backups/');
+    // 堆转储是约等于堆大小的二进制快照，进备份会把快照撑成 GB 级
+    expect(args).toContain('--exclude=dumps/');
     expect(args).toContain('--exclude=server.jar');
     expect(args).toContain('--exclude=*.pid');
     expect(args).toContain('--exclude=*.lock');

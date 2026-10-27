@@ -74,6 +74,25 @@ function mockRconReturns(client) {
 describe('MCServerInstance lifecycle / RCON / stats timers', () => {
   let tmpDir;
   let lastProc;
+  /**
+   * 剥掉面板注入的运行时参数（堆转储 / pidFile）——本组用例只验证用户参数如何拼装，
+   * 注入项在 security.mc-server 与 crash-artifacts 里另有专门用例。
+   */
+  function stripPanelArgs(args, dir) {
+    const dumpPath = `-XX:HeapDumpPath=${path.join(dir, 'dumps')}`;
+    const pidPath = path.join(dir, '.mc-commander-pid');
+    const out = [];
+    for (let i = 0; i < args.length; i++) {
+      const a = String(args[i]);
+      if (a === '-XX:+HeapDumpOnOutOfMemoryError' || a === dumpPath) continue;
+      if (a === '--pidFile' && String(args[i + 1]) === pidPath) {
+        i++;
+        continue;
+      }
+      out.push(a);
+    }
+    return out;
+  }
 
   function createInstance(overrides = {}) {
     return new MCServerInstance({
@@ -127,11 +146,14 @@ describe('MCServerInstance lifecycle / RCON / stats timers', () => {
       instance.start();
 
       expect(spawn).toHaveBeenCalledTimes(1);
-      expect(spawn).toHaveBeenCalledWith(
-        'java',
-        ['-Xmx2G', '-Xms1G', '-jar', path.join(tmpDir, 'server.jar'), 'nogui'],
-        expect.objectContaining({ cwd: tmpDir }),
-      );
+      expect(spawn.mock.calls[0][0]).toBe('java');
+      expect(stripPanelArgs(spawn.mock.calls[0][1], tmpDir)).toEqual([
+        '-Xmx2G',
+        '-Xms1G',
+        '-jar',
+        path.join(tmpDir, 'server.jar'),
+        'nogui',
+      ]);
       expect(instance.isRunning).toBe(true);
       expect(instance.startTime).not.toBeNull();
       expect(statusEvents).toContainEqual({ event: 'started' });
@@ -176,11 +198,13 @@ describe('MCServerInstance lifecycle / RCON / stats timers', () => {
       const instance = createInstance();
       instance.start('java -Xmx4G -jar custom.jar nogui');
 
-      expect(spawn).toHaveBeenCalledWith(
-        'java',
-        ['-Xmx4G', '-jar', 'custom.jar', 'nogui'],
-        expect.objectContaining({ cwd: tmpDir }),
-      );
+      expect(spawn.mock.calls[0][0]).toBe('java');
+      expect(stripPanelArgs(spawn.mock.calls[0][1], tmpDir)).toEqual([
+        '-Xmx4G',
+        '-jar',
+        'custom.jar',
+        'nogui',
+      ]);
     });
 
     it('restart 后 stop：延迟启动被取消，不再拉起服务器', () => {
@@ -238,11 +262,14 @@ describe('MCServerInstance lifecycle / RCON / stats timers', () => {
       // restart/自动重启/任务调度器均调用 start() 不传参，应使用实例配置的 startCommand
       instance.start();
 
-      expect(spawn).toHaveBeenCalledWith(
-        'java',
-        ['-Xmx3G', '-XX:+UseG1GC', '-jar', 'server.jar', 'nogui'],
-        expect.objectContaining({ cwd: tmpDir }),
-      );
+      expect(spawn.mock.calls[0][0]).toBe('java');
+      expect(stripPanelArgs(spawn.mock.calls[0][1], tmpDir)).toEqual([
+        '-Xmx3G',
+        '-XX:+UseG1GC',
+        '-jar',
+        'server.jar',
+        'nogui',
+      ]);
     });
 
     it('throws when server is already running', () => {

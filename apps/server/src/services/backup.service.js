@@ -20,7 +20,8 @@ const WORLD_NAME_REGEX = /^[A-Za-z0-9_-]+$/;
 // 顶层 world_nether/world_the_end）、plugins、mods、config、datapacks、
 // server.properties、whitelist.json、ops.json、banned-*.json 全部纳入备份。
 // libraries/versions 为加载器依赖（可重新下载）、logs/crash-reports 为日志
-// （运行时持续增长）、cache 为缓存——全部排除。
+// （运行时持续增长）、cache 为缓存、dumps 为堆转储（约等于堆大小的二进制快照，
+// 单份可达 GB 级）——全部排除。
 const EXCLUDED_DIRS = new Set([
   'logs',
   'crash-reports',
@@ -28,6 +29,7 @@ const EXCLUDED_DIRS = new Set([
   'versions',
   'cache',
   'backups',
+  'dumps',
 ]);
 
 // 路径包含校验走 utils/fs-utils.js 的解析面 resolveContainedPath
