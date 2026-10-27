@@ -15,6 +15,7 @@ import type {
   CrashArtifactHistory,
   InstanceStatus,
   InstanceSummary,
+  MarketKind,
   LogEntry,
   OverviewData,
   PanelErrors,
@@ -61,7 +62,10 @@ export const queryKeys = {
   tasks: (id: string) => [...queryKeys.all, 'tasks', id] as const,
   /** 任务执行历史（编辑对话框内展示） */
   taskHistory: (taskId: number) => [...queryKeys.all, 'tasks', 'history', taskId] as const,
-  plugins: (id: string) => [...queryKeys.all, 'plugins', id] as const,
+  plugins: (id: string, kind: MarketKind = 'plugin') =>
+    [...queryKeys.all, 'plugins', id, kind] as const,
+  /** 市场装载目标（实例类型决定的「插件/模组」）：实例切换即失效 */
+  marketProfile: (id: string) => [...queryKeys.all, 'market-profile', id] as const,
   files: (id: string, dir: string) => [...queryKeys.all, 'files', id, dir] as const,
   /** 文件内容（按完整文件路径细分） */
   fileContent: (id: string, filePath: string) =>

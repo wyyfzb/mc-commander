@@ -45,25 +45,30 @@ import { PageHeader } from '@/components/mcs/page-header'
 import { useServerStore } from '@/stores/server'
 import { useConnectionStore } from '@/stores/connection'
 import { MarketSheet } from './market-sheet'
+import { TARGET_TEXT } from './market-config'
 import { apiCheckPluginUpdates } from '@/api/plugins'
 import type { PluginUpdateStatus } from '@/api/types'
-import { useDeletePlugin, usePlugins, useTogglePlugin } from './queries'
+import { useDeletePlugin, useMarketProfile, usePlugins, useTogglePlugin } from './queries'
 import { usePluginUpload } from './use-plugin-upload'
 import { PluginRow } from './components/plugin-row'
 import { PluginDetailSheet } from './components/plugin-detail-sheet'
 import { UploadProgressBar } from './components/upload-progress-bar'
 
-/** 插件管理说明全文（唯一声明源：展示点与测试都取这里） */
-const PLUGIN_EFFECT_HINT = '管理 Bukkit 系插件（Paper/Spigot）：启停与增删在重启实例后生效'
-
 export function PluginsPage() {
   const instanceId = useServerStore((s) => s.instanceId)
 
-  const pluginsQuery = usePlugins(instanceId)
+  /** 装载目标由服务端按实例类型给出：插件页与模组页是同一个页面的两种形态 */
+  const profileQuery = useMarketProfile(instanceId)
+  const profilePending = profileQuery.isPending && profileQuery.fetchStatus !== 'idle'
+  const kind = profileQuery.data?.kind ?? 'plugin'
+  const text = TARGET_TEXT[kind]
+  const supportsToggle = kind === 'plugin'
+
+  const pluginsQuery = usePlugins(instanceId, kind, { enabled: !profilePending })
   /** 列表相位：有旧值可留时不把一次轮询抖动呈现成整屏故障 */
   const pluginsPhase = queryPhase(pluginsQuery)
   const toggleMutation = useTogglePlugin(instanceId)
-  const deleteMutation = useDeletePlugin(instanceId)
+  const deleteMutation = useDeletePlugin(instanceId, kind)
 
   const [search, setSearch] = useState('')
   const [deleteTarget, setDeleteTarget] = useState<PluginInfo | null>(null)
@@ -111,7 +116,7 @@ export function PluginsPage() {
     onDragLeave,
     onDragOver,
     onDrop,
-  } = usePluginUpload({ instanceId, refreshList: pluginsQuery.refetch })
+  } = usePluginUpload({ instanceId, kind, refreshList: pluginsQuery.refetch })
 
   const plugins = useMemo(() => pluginsQuery.data?.plugins ?? [], [pluginsQuery.data])
 
@@ -150,6 +155,25 @@ export function PluginsPage() {
   // 无实例门：加载中/加载失败/真空态/待选中四态各自诚实（见 InstanceRequiredState）
   if (!instanceId) {
     return <InstanceRequiredState />
+  }
+
+  // 装载目标未定前不渲染：先按插件渲染再翻成模组会闪一次错标题，
+  // 且会往 plugins/ 白拉一次列表
+  if (profilePending) {
+    return (
+      <div
+        className="@container flex h-full min-h-0 flex-col gap-4 p-4"
+        data-testid="market-profile-skeleton"
+        aria-label="识别实例装载目标中"
+      >
+        <Skeleton className="h-9 w-48" />
+        <div className="space-y-2">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Skeleton key={i} className="h-16 w-full" />
+          ))}
+        </div>
+      </div>
+    )
   }
 
   /**
@@ -218,7 +242,7 @@ export function PluginsPage() {
     setDeleteTarget(null)
     try {
       await deleteMutation.mutateAsync(target.file)
-      toast.success(`插件 ${target.name} 已删除`)
+      toast.success(`${text.noun} ${target.name} 已删除`)
     } catch (e) {
       toast.error(`删除失败：${getFriendlyErrorText(e)}`)
     }
@@ -270,7 +294,7 @@ export function PluginsPage() {
     }
     setSelected(new Set())
     if (fail === 0) {
-      toast.success(`已删除 ${ok} 个插件`)
+      toast.success(`已删除 ${ok} 个${text.noun}`)
     } else {
       toast.warning(`删除完成：成功 ${ok} 个，失败 ${fail} 个`, {
         description: failures.map((f) => `• ${f.target}：${f.error}`).join('\n'),
@@ -305,7 +329,7 @@ export function PluginsPage() {
         >
           <div className="flex flex-col items-center gap-2 text-mcs-accent-fg">
             <ArrowUpFromLine className="size-8" aria-hidden />
-            <p className="text-mcs-sm font-medium">松开以上传插件（.jar）</p>
+            <p className="text-mcs-sm font-medium">松开以上传{text.noun}（.jar）</p>
           </div>
         </div>
       )}
@@ -317,7 +341,7 @@ export function PluginsPage() {
         accept=".jar,application/java-archive"
         multiple
         className="sr-only"
-        aria-label="选择插件 jar 文件"
+        aria-label={`选择${text.noun} jar 文件`}
         onChange={(e) => {
           handleFilesPicked(e.target.files)
           e.target.value = '' // 允许重复选择同一文件
@@ -330,15 +354,19 @@ export function PluginsPage() {
            侧栏折叠会使同视口下内容宽差 152px，且 768 以下侧栏退化成抽屉（不占布局宽），
            视口断点在这两种状态下给不出正确判据 */
         className="flex-col items-stretch gap-3 @xl:flex-row @xl:items-center"
-        title="插件管理"
+        title={text.pageTitle}
         description={
           <span className="inline-flex items-center gap-1">
-            {plugins.length > 0 && (
-              <>
-                共 {plugins.length} 个（启用 {enabledCount} / 禁用 {plugins.length - enabledCount}）
-              </>
-            )}
-            <InfoHint label="插件管理说明">{PLUGIN_EFFECT_HINT}</InfoHint>
+            {plugins.length > 0 &&
+              (supportsToggle ? (
+                <>
+                  共 {plugins.length} 个（启用 {enabledCount} / 禁用 {plugins.length - enabledCount}
+                  ）
+                </>
+              ) : (
+                <>共 {plugins.length} 个</>
+              ))}
+            <InfoHint label={`${text.noun}管理说明`}>{text.effectHint}</InfoHint>
           </span>
         }
         actions={
@@ -351,41 +379,48 @@ export function PluginsPage() {
               variant="ghost"
               onClick={() => void pluginsQuery.refetch()}
               disabled={pluginsQuery.isFetching}
-              aria-label="刷新插件列表"
-              title="刷新插件列表"
+              aria-label={`刷新${text.noun}列表`}
+              title={`刷新${text.noun}列表`}
             >
               <RefreshCw
                 className={`size-3.5 ${pluginsQuery.isFetching ? 'animate-spin' : ''}`}
                 aria-hidden
               />
             </IconButton>
-            <Button size="sm" onClick={() => fileInputRef.current?.click()} aria-label="上传插件">
-              <ArrowUpFromLine className="size-3.5" aria-hidden />
-              上传插件
-            </Button>
             <Button
-              variant="outline"
               size="sm"
-              onClick={() => void checkUpdates()}
-              disabled={updateChecking || plugins.length === 0}
-              aria-label="检查插件更新"
-              data-testid="check-updates"
+              onClick={() => fileInputRef.current?.click()}
+              aria-label={`上传${text.noun}`}
             >
-              <RefreshCw
-                className={`size-3.5 ${updateChecking ? 'animate-spin' : ''}`}
-                aria-hidden
-              />
-              检查更新
+              <ArrowUpFromLine className="size-3.5" aria-hidden />
+              上传{text.noun}
             </Button>
+            {/* 更新检测读的是 plugins/ 的元数据（plugin.yml）：模组目录没有该面 */}
+            {supportsToggle && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void checkUpdates()}
+                disabled={updateChecking || plugins.length === 0}
+                aria-label="检查插件更新"
+                data-testid="check-updates"
+              >
+                <RefreshCw
+                  className={`size-3.5 ${updateChecking ? 'animate-spin' : ''}`}
+                  aria-hidden
+                />
+                检查更新
+              </Button>
+            )}
             <Button
               variant="outline"
               size="sm"
               onClick={() => setMarketOpen(true)}
-              aria-label="打开插件市场"
+              aria-label={`打开${text.noun}市场`}
               data-testid="open-market"
             >
               <Store className="size-3.5" aria-hidden />
-              插件市场
+              {text.noun}市场
             </Button>
           </div>
         }
@@ -408,17 +443,21 @@ export function PluginsPage() {
           data-testid="batch-bar"
         >
           <span className="text-mcs-sm text-mcs-text-default">
-            已选 <span className="font-semibold">{selected.size}</span> 个
+            已选 <span className="font-semibold">{selected.size}</span> 个{text.noun}
           </span>
-          <Separator orientation="vertical" className="mx-1 h-4" />
-          <Button variant="outline" size="sm" onClick={() => void batchSetEnabled(true)}>
-            <Power className="size-3.5" aria-hidden />
-            批量启用
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => void batchSetEnabled(false)}>
-            <PowerOff className="size-3.5" aria-hidden />
-            批量禁用
-          </Button>
+          {supportsToggle && (
+            <>
+              <Separator orientation="vertical" className="mx-1 h-4" />
+              <Button variant="outline" size="sm" onClick={() => void batchSetEnabled(true)}>
+                <Power className="size-3.5" aria-hidden />
+                批量启用
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => void batchSetEnabled(false)}>
+                <PowerOff className="size-3.5" aria-hidden />
+                批量禁用
+              </Button>
+            </>
+          )}
           <Button variant="destructive-outline" size="sm" onClick={() => setBatchDeleteOpen(true)}>
             <Trash2 className="size-3.5" aria-hidden />
             删除
@@ -434,8 +473,8 @@ export function PluginsPage() {
         <SearchInput
           value={search}
           onValueChange={setSearch}
-          placeholder="搜索插件名或文件名…"
-          aria-label="搜索插件"
+          placeholder={`搜索${text.noun}名或文件名…`}
+          aria-label={`搜索${text.noun}`}
         />
       )}
 
@@ -475,15 +514,15 @@ export function PluginsPage() {
         <div className="min-h-0 flex-1">
           <EmptyState
             icon={Package}
-            title="暂无插件"
+            title={`暂无${text.noun}`}
             hint={
               <>
-                将插件 jar 拖入本页或点击「上传插件」，放入实例{' '}
-                <code className="text-mcs-text-muted">plugins/</code>{' '}
+                将{text.noun} jar 拖入本页或点击「上传{text.noun}」，放入实例{' '}
+                <code className="text-mcs-text-muted">{text.emptyDir}/</code>{' '}
                 目录，首次启动实例后会生成该目录
               </>
             }
-            action={{ label: '上传插件', onClick: () => fileInputRef.current?.click() }}
+            action={{ label: `上传${text.noun}`, onClick: () => fileInputRef.current?.click() }}
           />
           <div className="mt-3 flex justify-center">
             <Button
@@ -493,14 +532,14 @@ export function PluginsPage() {
               data-testid="open-market-empty"
             >
               <Store className="size-3.5" aria-hidden />
-              或从插件市场一键安装
+              或从{text.noun}市场一键安装
             </Button>
           </div>
         </div>
       ) : filtered.length === 0 ? (
         <div className="flex flex-col items-center gap-1.5 px-4 py-12 text-center text-mcs-text-muted">
           <Search className="size-8 opacity-60" aria-hidden />
-          <p className="mt-1 text-mcs-sm">无匹配插件</p>
+          <p className="mt-1 text-mcs-sm">无匹配{text.noun}</p>
           <p className="text-mcs-xs text-mcs-text-muted">换个关键词试试</p>
         </div>
       ) : (
@@ -515,10 +554,11 @@ export function PluginsPage() {
                   onCheckedChange={(c) => toggleSelected(plugin.file, c)}
                   toggling={togglingFile === plugin.file}
                   deleting={deleteMutation.isPending && deleteMutation.variables === plugin.file}
+                  kind={kind}
                   onToggle={handleToggle}
                   onDelete={() => setDeleteTarget(plugin)}
                   onOpenDetail={() => setDetail(plugin)}
-                  updateInfo={updateMap.get(plugin.file)}
+                  updateInfo={supportsToggle ? updateMap.get(plugin.file) : undefined}
                   onUpdate={(p) => {
                     setMarketInitialQuery(p.meta?.name ?? p.name)
                     setMarketOpen(true)
@@ -536,7 +576,7 @@ export function PluginsPage() {
         onOpenChange={(open) => {
           if (!open) setDeleteTarget(null)
         }}
-        title={`删除插件 ${deleteTarget?.name ?? ''}？`}
+        title={`删除${text.noun} ${deleteTarget?.name ?? ''}？`}
         description={`将永久删除文件 ${deleteTarget?.file ?? ''}。`}
         warning="此操作不可撤销"
         confirmText="删除"
@@ -550,8 +590,8 @@ export function PluginsPage() {
         onOpenChange={(open) => {
           if (!open) setBatchDeleteOpen(false)
         }}
-        title={`删除 ${selected.size} 个插件？`}
-        description="将永久删除选中的插件文件。"
+        title={`删除 ${selected.size} 个${text.noun}？`}
+        description={`将永久删除选中的${text.noun}文件。`}
         warning="此操作不可撤销"
         confirmText={`删除 ${selected.size} 个`}
         danger
@@ -564,8 +604,8 @@ export function PluginsPage() {
         onOpenChange={(open) => {
           if (!open) dismissConflict()
         }}
-        title="同名插件已存在"
-        description={`plugins/ 目录中已存在 ${conflict?.file.name ?? ''}。覆盖后旧版本将被替换（建议先备份）。`}
+        title={`同名${text.noun}已存在`}
+        description={`${text.emptyDir}/ 目录中已存在 ${conflict?.file.name ?? ''}。覆盖后旧版本将被替换（建议先备份）。`}
         confirmText="覆盖上传"
         danger
         onConfirm={() => confirmOverwrite()}
@@ -576,6 +616,7 @@ export function PluginsPage() {
       {/* ── 详情面板 ── */}
       <PluginDetailSheet
         plugin={detail}
+        kind={kind}
         open={detail !== null}
         onOpenChange={(open) => {
           if (!open) setDetail(null)
@@ -592,6 +633,8 @@ export function PluginsPage() {
           if (!o) setMarketInitialQuery(null) // 关闭即清预填，下次手动打开回到浏览模式
         }}
         instanceId={instanceId}
+        kind={kind}
+        lockedLoader={kind === 'mod' ? (profileQuery.data?.loader ?? null) : null}
         initialQuery={marketInitialQuery}
       />
     </div>

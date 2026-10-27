@@ -286,8 +286,9 @@ describe('market.service - sanitizeMarketFileName', () => {
 
   it('回退名：空/全非法字符输入 → slug-version.jar（回退名同样净化）', () => {
     expect(sanitizeMarketFileName('', { slug: 'ess', versionNumber: '2.0' })).toBe('ess-2.0.jar');
+    // 保留 `+`（上游版本号与文件名普遍带它做构建标记）
     expect(sanitizeMarketFileName('???', { slug: 'ess', versionNumber: '2.0+build.1' })).toBe(
-      'ess-2.0build.1.jar',
+      'ess-2.0+build.1.jar',
     );
     // 全非法回退 → 终极兜底
     expect(sanitizeMarketFileName('///', { slug: '??', versionNumber: '+' })).toBe(

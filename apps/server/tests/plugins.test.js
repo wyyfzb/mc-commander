@@ -340,6 +340,17 @@ describe('plugin.service - uploadPlugin（上传延伸）', () => {
     expect(fs.existsSync(path.join(pluginsDir, 'EssentialsX-2.20.1.jar'))).toBe(true);
   });
 
+  it('文件名带 + 可直接上传/列出（上游真实文件名就长这样）', () => {
+    // 实测 Modrinth：fabric-api-0.136.1+1.21.8.jar、lithium-fabric-0.18.1+mc1.21.8.jar
+    const tmp = stageUpload('fabric-api-0.136.1+1.21.8.jar', Buffer.from([0x50, 0x4b, 0x03, 0x04]));
+    const saved = uploadPlugin(serverPath, tmp, 'fabric-api-0.136.1+1.21.8.jar');
+    expect(saved.file).toBe('fabric-api-0.136.1+1.21.8.jar');
+    expect(fs.existsSync(path.join(pluginsDir, 'fabric-api-0.136.1+1.21.8.jar'))).toBe(true);
+    expect(listPlugins(serverPath).plugins.map((p) => p.file)).toContain(
+      'fabric-api-0.136.1+1.21.8.jar',
+    );
+  });
+
   it('非 jar 扩展名返回 400', () => {
     const tmp = stageUpload('notes.txt', 'hello');
     expect(() => uploadPlugin(serverPath, tmp, 'notes.txt')).toThrowError(

@@ -176,6 +176,16 @@ describe('market.service 分支补测', () => {
       expect(sanitizeMarketFileName('dir\\back\\file.jar', opts)).toBe('file.jar');
     });
 
+    it('保留上游文件名里的 + 构建标记（剥掉会变成看着像别的版本的名字）', () => {
+      // 实测 Modrinth：fabric-api-0.136.1+1.21.8.jar；剥掉 + 得到 0.136.11.21.8
+      expect(
+        sanitizeMarketFileName('fabric-api-0.136.1+1.21.8.jar', {
+          slug: 'fabric-api',
+          versionNumber: '0.136.1+1.21.8',
+        }),
+      ).toBe('fabric-api-0.136.1+1.21.8.jar');
+    });
+
     it('非字母数字开头补 mc- 前缀（满足上传白名单首字符要求）', () => {
       expect(sanitizeMarketFileName('-weird.jar', opts)).toBe('mc--weird.jar');
     });
@@ -274,7 +284,9 @@ describe('market.service 分支补测', () => {
 
 // ── 更新检测域补测（comparePluginVersions / matchProjectByPluginName / checkPluginUpdates）──
 
-vi.mock('../src/services/plugin.service.js', () => ({
+// 只替身读写盘的两个函数；装载目标表是纯数据（目录名/启停能力），保留真实现
+vi.mock('../src/services/plugin.service.js', async (importOriginal) => ({
+  ...(await importOriginal()),
   listPlugins: vi.fn(),
   uploadPlugin: vi.fn(),
 }));

@@ -3,7 +3,7 @@
  * 完整元数据（描述/主类/依赖/软依赖/官网/加载时机）+ 文件信息 + 行内启停
  */
 import { ExternalLink, Globe, Layers, Power, PowerOff } from 'lucide-react'
-import type { PluginInfo } from '@/api/types'
+import type { MarketKind, PluginInfo } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import {
   Sheet,
@@ -15,10 +15,13 @@ import {
 import { StatusPill } from '@/components/mcs/status-pill'
 import { InfoHint } from '@/components/mcs/info-hint'
 import { formatFileSize, formatModifiedAt } from '@/lib/mc-files'
+import { TARGET_TEXT } from '../market-config'
 
 interface PluginDetailSheetProps {
   plugin: PluginInfo | null
   open: boolean
+  /** 装载目标：模组没有文件层启停，不展示启停状态与按钮 */
+  kind?: MarketKind
   onOpenChange: (open: boolean) => void
   onToggle: (plugin: PluginInfo, enabled: boolean) => void
   toggling: boolean
@@ -33,11 +36,14 @@ const LOAD_LABEL: Record<string, string> = {
 export function PluginDetailSheet({
   plugin,
   open,
+  kind = 'plugin',
   onOpenChange,
   onToggle,
   toggling,
 }: PluginDetailSheetProps) {
   if (!plugin) return null
+  const text = TARGET_TEXT[kind]
+  const supportsToggle = kind === 'plugin'
   const meta = plugin.meta
   const displayName = meta?.name ?? plugin.name
 
@@ -47,9 +53,11 @@ export function PluginDetailSheet({
         <SheetHeader className="text-left">
           <SheetTitle className="flex flex-wrap items-center gap-2">
             <span className="truncate">{displayName}</span>
-            <StatusPill tone={plugin.enabled ? 'success' : 'muted'}>
-              {plugin.enabled ? '已启用' : '已禁用'}
-            </StatusPill>
+            {supportsToggle && (
+              <StatusPill tone={plugin.enabled ? 'success' : 'muted'}>
+                {plugin.enabled ? '已启用' : '已禁用'}
+              </StatusPill>
+            )}
           </SheetTitle>
           <SheetDescription className="font-mono text-mcs-xs">{plugin.file}</SheetDescription>
         </SheetHeader>
@@ -166,39 +174,41 @@ export function PluginDetailSheet({
               </dd>
               <dt className="shrink-0 text-mcs-text-muted">路径</dt>
               <dd className="break-all font-mono text-mcs-xs text-mcs-text-muted">
-                plugins/{plugin.file}
+                {text.emptyDir}/{plugin.file}
               </dd>
             </dl>
           </section>
 
-          <div className="mt-auto flex items-center gap-2 pt-2">
-            {plugin.enabled ? (
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={toggling}
-                onClick={() => onToggle(plugin, false)}
-                className="flex-1"
-              >
-                <PowerOff className="size-3.5" aria-hidden />
-                禁用插件
-              </Button>
-            ) : (
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={toggling}
-                onClick={() => onToggle(plugin, true)}
-                className="flex-1"
-              >
-                <Power className="size-3.5" aria-hidden />
-                启用插件
-              </Button>
-            )}
-            <InfoHint label="启停生效时机说明">
-              启停与增删在重启实例后生效（Bukkit 插件仅启动时加载）
-            </InfoHint>
-          </div>
+          {supportsToggle && (
+            <div className="mt-auto flex items-center gap-2 pt-2">
+              {plugin.enabled ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={toggling}
+                  onClick={() => onToggle(plugin, false)}
+                  className="flex-1"
+                >
+                  <PowerOff className="size-3.5" aria-hidden />
+                  禁用插件
+                </Button>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={toggling}
+                  onClick={() => onToggle(plugin, true)}
+                  className="flex-1"
+                >
+                  <Power className="size-3.5" aria-hidden />
+                  启用插件
+                </Button>
+              )}
+              <InfoHint label="启停生效时机说明">
+                启停与增删在重启实例后生效（Bukkit 插件仅启动时加载）
+              </InfoHint>
+            </div>
+          )}
         </div>
       </SheetContent>
     </Sheet>
