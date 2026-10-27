@@ -47,6 +47,25 @@ function runBash(args) {
 }
 
 describe('deploy-mc-commander.sh 安全修复回归', () => {
+  /**
+   * 取 sudoers 规则正文（那行 ALL=(root) NOPASSWD:）。
+   *
+   * 锚点找不到时抛错而不是返回空串：空串上的 toContain / not.toMatch 永远通过，
+   * 脚本形态一改断言就静默失效——曾因锚点指向已删除的变量名而假绿。
+   */
+  function sudoersRule() {
+    const at = script.indexOf('cat > /etc/sudoers.d/mc-commander <<EOF');
+    expect(at, '未能在部署脚本中定位 sudoers 白名单').toBeGreaterThan(-1);
+    const end = script.indexOf('\nEOF', at);
+    expect(end, '未能在部署脚本中定位 sudoers 白名单结尾').toBeGreaterThan(at);
+    const line = script
+      .slice(at, end)
+      .split('\n')
+      .find((l) => l.includes('NOPASSWD:'));
+    expect(line, '白名单里没有 NOPASSWD 规则').toBeTruthy();
+    return line;
+  }
+
   it('脚本语法检查通过（bash -n）', () => {
     const result = runBash(['-n', SCRIPT_PATH]);
     expect(result.status).toBe(0);
@@ -446,15 +465,14 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
       expect(removalUnit).toContain('User=root');
       // 白名单只给 start，不给 stop/restart 等其它能力。
       // --no-block 是参数序列的一部分：sudoers 逐参数匹配，面板调用少一个词就不放行
-      expect(script).toContain(
-        'NOPASSWD: /usr/bin/systemctl start --no-block mc-commander-removal.service',
+      const sudoBlock = sudoersRule();
+      // 整词匹配：子串匹配会被 `restart` 绕过（rest-art 里含 `art` 更含 `start` 的尾巴）
+      expect(sudoBlock).toMatch(
+        /\/usr\/bin\/systemctl start --no-block mc-commander-removal\.service/,
       );
       // 判据只针对删除单元：stop/restart/disable 若落在它身上，面板就能绕过删除流程。
       // 停面板自身是另一条白名单项（面板以非 root 身份运行，不授权就必然停不掉）
-      const removalEntries = script
-        .split('\n')
-        .filter((l) => /NOPASSWD:/.test(l))
-        .join('\n');
+      const removalEntries = sudoBlock;
       expect(removalEntries).not.toMatch(/systemctl (stop|restart|disable) mc-commander-removal/);
       // 面板发的命令必须与白名单里的参数序列逐字一致，否则线上永远匹配不上
       const panelRoute = readFileSync(
@@ -464,10 +482,15 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
       expect(panelRoute).toContain("'start', '--no-block', unit");
     });
 
+    it('白名单确实存在（锚点找不到时上面的断言不得在空串上通过）', () => {
+      // sudoersRule() 取不到规则时会抛错；这条用来证明锚点本身指向真实内容
+      expect(sudoersRule()).toContain('ALL=(root) NOPASSWD:');
+    });
+
     it('停面板自身在 sudoers 白名单内，且面板调用序列逐字一致', () => {
       // 面板以 mc-commander 身份运行：不授权时 systemctl stop 要交互式认证，
       // 面板内点「停用面板」必然失败（实测退出码 1），而 API 却回成功
-      const sudoersLine = script.split('\n').find((l) => /NOPASSWD:/.test(l)) ?? '';
+      const sudoersLine = sudoersRule();
       expect(sudoersLine).toContain('/usr/bin/systemctl stop mc-commander.service');
       const panelRoute = readFileSync(
         path.resolve(import.meta.dirname, '../src/routes/panel.js'),
@@ -497,6 +520,7 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
       expect(unitBlock).not.toContain('$MC_COMMANDER_DIR/src/services');
     });
 
+
     it('卸载与自删都清掉 root 副本，不留一个可被再次触发的 root 脚本', () => {
       expect(script).toContain('rm -rf "$REMOVAL_LIB_DIR"');
       const removal = readFileSync(
@@ -519,7 +543,9 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
     it('同机已有另一份部署时中止，不静默顶掉它', () => {
       // unit 名与专用用户全局唯一，覆盖写入会让上一份部署变成「目录还在、服务没了」的孤儿。
       // 判据取 WorkingDirectory 而不是「目录是否存在」：同一目录重装/升级是正常路径。
-      const fnStart = script.indexOf('if [ "$SKIP_SYSTEMD" -eq 0 ]');
+      const fnStart = script.indexOf(
+        'if command -v systemctl &>/dev/null; then\n  # 同机第二份安装',
+      );
       const body = script.slice(fnStart, fnStart + 1200);
       expect(body).toContain('WorkingDirectory=');
       expect(body).toContain('EXISTING_DIR" != "$MC_COMMANDER_DIR"');
@@ -1615,6 +1641,158 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
       expect(checkAt).toBeLessThan(startAt);
     });
   });
+  /* sudoers 的 command 参数禁止通配符：实测整份文件会因
+     `wildcards are not allowed in command arguments` 被拒载，届时白名单里的
+     停止/删除/更新/迁移一起失效——而症状是「点了没反应」，排查不到 sudoers 上。 */
+  describe('sudoers 白名单', () => {
+    it('不含通配符（否则整份文件被拒载，所有面板操作静默失灵）', () => {
+      const at = script.indexOf('cat > /etc/sudoers.d/mc-commander <<EOF');
+      expect(at).toBeGreaterThan(-1);
+      const body = script.slice(at, script.indexOf('\nEOF', at));
+      const rules = body.split('\n').filter((l) => l.includes('NOPASSWD'));
+      expect(rules.length).toBeGreaterThan(0);
+      for (const rule of rules) {
+        expect(rule, `白名单行含通配符会被 sudo 拒载：${rule}`).not.toContain('*');
+        expect(rule).not.toContain('?');
+      }
+    });
+
+    it('每条授权都对应一个精确的单元名（不是模板实例）', () => {
+      const at = script.indexOf('cat > /etc/sudoers.d/mc-commander <<EOF');
+      const body = script.slice(at, script.indexOf('\nEOF', at));
+      // 模板单元（@）只能靠通配符授权，与上一条互斥
+      expect(body).not.toContain('@');
+    });
+  });
+
+  /* 安装与卸载的健壮性：每条对应一个用户会真实走到、且失败后果不可逆的场景。 */
+  describe('安装与卸载的健壮性', () => {
+    it('非 root 直接判死并给出 sudo 出路（不降级继续跑）', () => {
+      // 降级继续会在 apt-get / mkdir 处报一串 Permission denied，用户看不出该做什么
+      // 锚安装侧那句独有的报错：卸载侧也有同名判断，按裸条件会定位到卸载那一段
+      const at = script.lastIndexOf(
+        'if [ "$(id -u)" -ne 0 ]',
+        script.indexOf('需要 root 权限：安装要写'),
+      );
+      expect(at).toBeGreaterThan(-1);
+      const body = script.slice(at, script.indexOf('\nfi\n', at) + 4);
+      expect(body).toContain('exit 1');
+      expect(body).toContain('sudo bash');
+      // 降级开关已随判死一并移除
+      expect(script).not.toContain('SKIP_SYSTEMD');
+    });
+
+    it('安装目录落点校验在入口处，且用 realpath 归一（挡 /opt/../etc）', () => {
+      const at = script.indexOf('MC_COMMANDER_DIR_RESOLVED=$(realpath -m');
+      expect(at).toBeGreaterThan(-1);
+      // 校验必须早于任何 mkdir / rm
+      const firstMkdir = script.indexOf('mkdir -p "$MC_COMMANDER_DIR"');
+      if (firstMkdir > 0) expect(at).toBeLessThan(firstMkdir);
+      expect(script.slice(at, at + 900)).toContain('拒绝在系统目录上安装');
+    });
+
+    it('npm 包走国内镜像，失败回退官方源', () => {
+      expect(script).toContain('--registry="$registry"');
+      expect(script).toContain('https://registry.npmmirror.com');
+      expect(script).toContain('https://registry.npmjs.org');
+      const fnAt = script.indexOf('install_deps()');
+      const body = script.slice(fnAt, fnAt + 700);
+      expect(body).toContain('npmmirror');
+      // 回退分支必须真的再装一次，而不是只 warn
+      expect(body).toContain('install_deps "https://registry.npmjs.org"');
+    });
+
+    it('更新前备份旧代码，就绪失败时回退', () => {
+      expect(script).toContain('CODE_BACKUP="$MC_COMMANDER_DIR/.rollback"');
+      // 备份必须发生在覆盖代码之前
+      const backupAt = script.indexOf('CODE_BACKUP="$MC_COMMANDER_DIR/.rollback"');
+      const copyAt = script.indexOf('cp -rf "$TMP_EXTRACT/." "$MC_COMMANDER_DIR/"');
+      expect(backupAt).toBeGreaterThan(-1);
+      expect(backupAt).toBeLessThan(copyAt);
+      // 失败分支里要真的把旧代码放回去并重启
+      const failAt = script.indexOf('正在回退到升级前的版本');
+      expect(failAt).toBeGreaterThan(copyAt);
+      expect(script.slice(failAt, failAt + 800)).toContain('systemctl restart mc-commander');
+    });
+
+    it('更新先清掉要重铺的条目，避免旧文件残留', () => {
+      const rmAt = script.indexOf('for entry in src public mc-schemas; do');
+      const copyAt = script.indexOf('cp -rf "$TMP_EXTRACT/." "$MC_COMMANDER_DIR/"');
+      expect(rmAt).toBeGreaterThan(-1);
+      expect(rmAt).toBeLessThan(copyAt);
+      // 清理范围不得包含数据与配置
+      const body = script.slice(rmAt, copyAt);
+      expect(body).not.toContain('.env');
+      expect(body).not.toContain('var');
+      expect(body).not.toContain('node_modules');
+    });
+
+    it('卸载清理 /tmp 下运行期目录，且路径跟着 TMPDIR', () => {
+      const at = script.indexOf('tmp_root="${TMPDIR:-/tmp}"');
+      expect(at).toBeGreaterThan(-1);
+      const body = script.slice(at, at + 700);
+      expect(body).toContain('mc-commander-logs');
+      expect(body).toContain('mc-commander-uploads');
+    });
+
+    it('卸载处理 pm2 与 nohup 两种托管方式', () => {
+      expect(script).toContain('pm2 describe mc-commander');
+      expect(script).toContain('pm2 delete mc-commander');
+      expect(script).toContain('$MC_COMMANDER_DIR/src/index.js');
+    });
+  });
+
+  /* npm ci 的语义是先 rm -rf node_modules 再重建。期间旧进程还在服务，任何一次运行期
+     懒加载都会撞上不存在的模块。升级必须有一个「没有读者」的窗口，且窗口开着时脚本
+     中途死掉要把面板拉回来——否则升级失败等于面板消失，用户只看到一条报错。 */
+  describe('升级期给 npm ci 一个没有读者的窗口', () => {
+    /** 取「安装 npm 依赖」那一段的脚本文本 */
+    function npmCiSection() {
+      const start = script.indexOf('# 8. 安装 npm 依赖');
+      if (start < 0) throw new Error('未能定位安装依赖段');
+      const end = script.indexOf('# 9.', start);
+      return script.slice(start, end < 0 ? start + 3000 : end);
+    }
+
+    it('npm ci 之前停面板，之后才装依赖', () => {
+      const sec = npmCiSection();
+      const stopAt = sec.indexOf('systemctl stop mc-commander');
+      // 锚真实命令行：注释里也写着「npm ci」，按裸串定位会匹配到说明文字
+      const ciAt = sec.indexOf('npm ci --omit=dev');
+      expect(stopAt).toBeGreaterThan(-1);
+      expect(ciAt).toBeGreaterThan(stopAt);
+    });
+
+    it('停之前先判 is-active，首次安装不白跑一次 stop', () => {
+      const sec = npmCiSection();
+      expect(sec).toContain('systemctl is-active --quiet mc-commander');
+    });
+
+    it('停成功后置位 PANEL_STOPPED，供 EXIT trap 拉回', () => {
+      const sec = npmCiSection();
+      const stopAt = sec.indexOf('systemctl stop mc-commander');
+      const flagAt = sec.indexOf('PANEL_STOPPED=1', stopAt);
+      expect(flagAt).toBeGreaterThan(stopAt);
+    });
+
+    it('EXIT trap 在 PANEL_STOPPED=1 时把面板拉回来，且失败给出可执行的手动命令', () => {
+      const trapStart = script.indexOf('on_exit() {');
+      const trapBody = script.slice(trapStart, script.indexOf('trap on_exit EXIT'));
+      expect(trapBody).toContain('PANEL_STOPPED');
+      expect(trapBody).toContain('systemctl start mc-commander');
+      // 自动恢复失败时必须给手动出路，否则用户只知道「升级失败了」
+      expect(trapBody).toContain('自动恢复失败，请手动执行：systemctl start mc-commander');
+    });
+
+    it('面板最终起来后清掉 PANEL_STOPPED，避免正常结束时多拉一次', () => {
+      expect(script).toContain('PANEL_STOPPED=0');
+      const clearAt = script.lastIndexOf('PANEL_STOPPED=0');
+      const trapAt = script.indexOf('trap on_exit EXIT');
+      // 置 0 的那处必须在 trap 定义之后（否则是初始化那行）
+      expect(clearAt).toBeGreaterThan(trapAt);
+    });
+  });
+
   // 服务起不来时不能无限重试：3 秒间隔配 systemd 默认的「10 秒内 5 次」永远够不着额度，
   // 于是每 3 秒重试一次、永不进入 failed——用户既看不到「它坏了」，也等不到它自己好。
   describe('systemd 单元的重试上限', () => {

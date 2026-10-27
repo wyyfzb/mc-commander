@@ -80,6 +80,25 @@ while [ "${MC_COMMANDER_DIR}" != "/" ] && [ "${MC_COMMANDER_DIR%/}" != "$MC_COMM
   MC_COMMANDER_DIR="${MC_COMMANDER_DIR%/}"
 done
 [ -n "$MC_COMMANDER_DIR" ] || MC_COMMANDER_DIR="/"
+
+# 安装目录落点校验：安装与卸载共用，入口处判死。
+#
+# 装到 / 或 /usr 这类位置能装上（cp 有写权），卸载时却会被拒绝——用户得手工收拾
+# 一个半删的目录。用 realpath -m 归一后再比：`/opt/../etc` 这类写法绕得过字符串黑名单。
+# 校验放在归一化之后、任何 mkdir/rm 之前。
+if command -v realpath &>/dev/null; then
+  MC_COMMANDER_DIR_RESOLVED=$(realpath -m "$MC_COMMANDER_DIR")
+else
+  MC_COMMANDER_DIR_RESOLVED="$MC_COMMANDER_DIR"
+fi
+case "$MC_COMMANDER_DIR_RESOLVED" in
+  /|/usr|/etc|/var|/opt|/home|/root|/bin|/sbin|/lib|/lib64|/boot|/srv|/tmp)
+    err "拒绝在系统目录上安装：MC_COMMANDER_DIR=$MC_COMMANDER_DIR（解析为 $MC_COMMANDER_DIR_RESOLVED）"
+    err "请指定一个独立子目录，例如：sudo MC_COMMANDER_DIR=/opt/mc-commander bash $0"
+    exit 1
+    ;;
+esac
+
 # root 执行的删除脚本必须与面板可写目录分离：装一份只读副本，单元只认它
 REMOVAL_LIB_DIR="/usr/local/lib/mc-commander"
 REMOVAL_SCRIPT="$REMOVAL_LIB_DIR/panel-removal.sh"
@@ -452,16 +471,7 @@ do_uninstall() {
     return 1
   fi
 
-  # 目录安全校验：宁可拒绝也不 rm -rf 一个危险路径。
-  # 允许用户用 MC_COMMANDER_DIR 覆盖，但绝不允许 / 、/usr 、/etc 这类位置——
-  # 一个手误的 MC_COMMANDER_DIR=/ 会让 --purge 抹掉整个系统。
-  case "$MC_COMMANDER_DIR" in
-    /|/usr|/usr/|/etc|/etc/|/var|/var/|/opt|/opt/|/home|/home/|/root|/root/|""|/)
-      err "拒绝在危险路径上执行卸载：MC_COMMANDER_DIR=$MC_COMMANDER_DIR"
-      err "请显式指定安装目录，例如：sudo MC_COMMANDER_DIR=/opt/mc-commander bash $0 --uninstall"
-      return 1
-      ;;
-  esac
+  # 危险路径已由入口处的共用校验挡掉（安装与卸载同一套判据，含 realpath 归一）
 
   log "卸载 MC_Commander（安装目录：$MC_COMMANDER_DIR）"
 
@@ -518,7 +528,37 @@ do_uninstall() {
     systemctl reset-failed mc-commander 2>/dev/null || true
     log "已删除 /etc/systemd/system/mc-commander.service"
   elif [ "$unit_matches" -eq 0 ] && [ ! -f "$unit_path" ]; then
-    log "未发现 systemd 服务（可能当初以非 root 部署）"
+    log "未发现 systemd 服务（可能当初以 pm2 或 nohup 部署）"
+  fi
+
+  # 1b. 非 systemd 托管的部署：pm2 与 nohup 起的进程不会随单元删除而退出。
+  #
+  # 安装有三条分支（systemd / pm2 / nohup），卸载只管 systemd 时，pm2 起的进程会
+  # 一直跑、nohup 起的进程也还在，用户以为卸完了，机器上却仍有一个占着端口的
+  # node 进程，且没有任何界面能停它。判据取进程命令行而非「装过什么」——
+  # 用户可能后来换了托管方式。
+  if [ "$unit_owned_by_other" -eq 0 ] && command -v pm2 &>/dev/null; then
+    if pm2 describe mc-commander &>/dev/null; then
+      log "停止并移除 pm2 进程 mc-commander..."
+      pm2 stop mc-commander &>/dev/null || true
+      pm2 delete mc-commander &>/dev/null || true
+      pm2 save &>/dev/null || true
+    fi
+  fi
+  # nohup 分支没有进程管理器，只能按「命令行里是本安装目录的 src/index.js」找。
+  # 模式里只放路径字面量：路径含 . 时按正则解释会匹配到别的进程
+  local nohup_pids
+  nohup_pids=$(pgrep -f -- "$MC_COMMANDER_DIR/src/index.js" 2>/dev/null || true)
+  if [ -n "$nohup_pids" ]; then
+    log "停止 nohup 方式启动的面板进程..."
+    echo "$nohup_pids" | xargs -r kill -TERM 2>/dev/null || true
+    sleep 1
+    echo "$nohup_pids" | xargs -r kill -KILL 2>/dev/null || true
+  fi
+  # 这两种方式留下的运行期文件在安装目录里：--purge 会随目录删掉，非 purge 时
+  # 单独清掉，否则「保留数据」的目录里会留一份陈旧的日志与 pid
+  if [ "$purge" -eq 0 ]; then
+    rm -f "$MC_COMMANDER_DIR/server.log" "$MC_COMMANDER_DIR/server.pid" 2>/dev/null || true
   fi
 
   # 2. 删除专用用户。
@@ -711,7 +751,22 @@ do_uninstall() {
     warn "未找到安装清单，跳过系统包与防火墙回滚（无法判断哪些是本项目装的）"
   fi
 
-  # 5. 收尾校验：逐项确认真的清干净了，不说「卸载完成」了事
+  # 5. 清理面板运行期在 /tmp 建的东西
+  #
+  # 面板把日志缓冲与上传暂存放在 Node 的 os.tmpdir()（不是安装目录），按安装目录
+  # 清一遍是清不到的。这些目录含实例日志片段与用户上传的文件，留着既不干净，/tmp
+  # 默认 1777 也可能被同机其他用户读到。os.tmpdir() 读 TMPDIR，脚本以 root 跑时通常为空
+  local tmp_root="${TMPDIR:-/tmp}"
+  local tmp_leftover=0
+  for d in "$tmp_root/mc-commander-logs" \
+           "$tmp_root/mc-commander-uploads" \
+           "$tmp_root/hsperfdata_mc-commander"; do
+    [ -e "$d" ] || continue
+    rm -rf "$d" 2>/dev/null || tmp_leftover=1
+  done
+  [ "$tmp_leftover" -eq 1 ] && warn "部分临时目录未能删除（可能被其他进程占用）：mc-commander-logs / mc-commander-uploads"
+
+  # 6. 收尾校验：逐项确认真的清干净了，不说「卸载完成」了事
   local leftover=""
   [ -f /etc/systemd/system/mc-commander.service ] && leftover="$leftover"$'\n'"  - systemd 单元仍在"
   id -u mc-commander &>/dev/null && leftover="$leftover"$'\n'"  - 用户 mc-commander 仍在"
@@ -738,13 +793,15 @@ if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
   exit 0
 fi
 
-# 0. root 权限检查（systemd 注册需要）
+# 0. root 权限检查
+#
+# 必须在这里判死，不能降级继续：跳过 systemd 之后每一步都要 root——
+# apt-get update 报 Permission denied、mkdir /opt/mc-commander 报 Permission denied、
+# useradd 失败。用户看到的是一串权限错误，而不是「请用 sudo 重跑」这一句。
 if [ "$(id -u)" -ne 0 ]; then
-  warn "当前不是 root 用户，将跳过 systemd 服务注册。"
-  warn "如需注册系统服务（推荐），请使用 sudo 重新运行此脚本。"
-  SKIP_SYSTEMD=1
-else
-  SKIP_SYSTEMD=0
+  err "需要 root 权限：安装要写 /opt、装系统包、注册 systemd 服务。"
+  err "请改用：sudo bash $0 $*"
+  exit 1
 fi
 
 # 1. 检测系统包管理器
@@ -1357,7 +1414,28 @@ if [ ! -f "$TMP_EXTRACT/package.json" ]; then
   exit 1
 fi
 # 复制代码到安装目录（首次部署与更新共用此逻辑）
-# 注意：不会覆盖 .env（配置文件）、var/（运行时数据）、node_modules/（已安装依赖）
+#
+# 先清掉本次会重新铺设的条目再复制：纯覆盖会让新版本已移除的文件永久留在安装
+# 目录里，与本次的代码混在一起。清理范围严格取载荷里的顶层条目，不碰 .env
+# （配置）、var/（数据）、node_modules/（依赖）——那些不在载荷里。
+#
+# 更新前把旧代码留一份：下面任何一步失败（npm ci 失败、服务起不来）都能退回去。
+# 不留的话「代码已换新 + 依赖残缺」是不可恢复的现场——旧进程还在内存里跑着，
+# 用户看不出问题，直到下次重启才彻底起不来。
+CODE_BACKUP=""
+if [ -n "$PREVIOUS_VERSION" ]; then
+  CODE_BACKUP="$MC_COMMANDER_DIR/.rollback"
+  rm -rf "$CODE_BACKUP"
+  mkdir -p "$CODE_BACKUP"
+  for entry in src public mc-schemas package.json package-lock.json; do
+    [ -e "$MC_COMMANDER_DIR/$entry" ] && cp -a "$MC_COMMANDER_DIR/$entry" "$CODE_BACKUP/" 2>/dev/null || true
+  done
+  log "已备份当前版本代码到 $CODE_BACKUP（升级失败时可回退）"
+fi
+
+for entry in src public mc-schemas; do
+  rm -rf "${MC_COMMANDER_DIR:?}/$entry"
+done
 cp -rf "$TMP_EXTRACT/." "$MC_COMMANDER_DIR/"
 # 复制 .env.example（如果不存在 .env 时作为模板）
 if [ ! -f "$MC_COMMANDER_DIR/.env" ] && [ -f "$TMP_EXTRACT/.env.example" ]; then
@@ -1400,7 +1478,24 @@ if [ -f "$MC_COMMANDER_DIR/package.json" ] && command -v systemctl &>/dev/null; 
 fi
 # 用 npm ci 而非 npm install：严格按 lock 重建依赖树；升级时先清旧 node_modules，
 # 避免「半新半旧」的依赖树被 systemd 拉起来（可复现是产物带 lock 的全部意义）
-npm ci --omit=dev
+#
+# 包本体也走国内镜像：只给 node-gyp 配 node_mirror 时，npm 包仍从 registry.npmjs.org
+# 跨境直连，冷缓存实测 16.5 s，走 npmmirror 是 2.5 s。lock 里的 resolved 是
+# registry.npmjs.org，而 npm 只对**默认** registry 的地址做镜像改写，故必须显式
+# --registry 才生效；镜像站缺包或不可达时回退官方源，不让加速变成新的失败点。
+install_deps() {
+  local registry="$1"
+  npm ci --omit=dev --registry="$registry"
+}
+if install_deps "https://registry.npmmirror.com"; then
+  :
+else
+  warn "国内镜像安装失败，改用官方源重试..."
+  install_deps "https://registry.npmjs.org" || {
+    err "npm 依赖安装失败（国内镜像与官方源均不可用）"
+    exit 1
+  }
+fi
 
 # 9. 生成/读取 .env 配置（API Key 首次部署自动生成，更新时保留原有Key）
 # .env 只落 API_KEY_HASH（SHA-256 摘要），明文仅在完成横幅一次性展示
@@ -1545,7 +1640,7 @@ check_port_free() {
 log "启动 MC_Commander 后端..."
 check_port_free "$SERVER_PORT"
 
-if [ "$SKIP_SYSTEMD" -eq 0 ] && command -v systemctl &>/dev/null; then
+if command -v systemctl &>/dev/null; then
   # 同机第二份安装会静默顶掉第一份：unit 名与专用用户都是全局唯一的，而安装目录可覆盖。
   # 直接覆盖会让上一份部署变成「目录还在、服务已指向别处」的孤儿，用户以为两份都在跑。
   # 判据取 unit 的 WorkingDirectory（不是「目录是否存在」——同一目录重装/升级是正常路径）。
@@ -1615,6 +1710,7 @@ EOF
   install -o root -g root -m 0755 \
     "$MC_COMMANDER_DIR/src/services/panel-removal.sh" "$REMOVAL_SCRIPT"
   record_change "removal-lib" "$REMOVAL_SCRIPT"
+
   cat > /etc/systemd/system/mc-commander-removal.service <<EOF
 [Unit]
 Description=MC Commander panel removal
@@ -1699,7 +1795,7 @@ wait_until_ready() {
       # 磁盘读不到版本号时退回「有响应即就绪」：此时没有可比对的基准
       if [ -z "$INSTALLED_VERSION" ] || [ "$seen" = "$INSTALLED_VERSION" ]; then
         # 版本对上了还不够：unit 崩溃重启期间旧进程照样答这个端口，此时「重启成功」是假的
-        if [ "${SKIP_SYSTEMD:-0}" -ne 0 ] || ! command -v systemctl &>/dev/null; then
+        if ! command -v systemctl &>/dev/null; then
           return 0
         fi
         SERVICE_STATE=$(systemctl is-active mc-commander 2>/dev/null || true)
@@ -1743,19 +1839,19 @@ if ! wait_until_ready; then
       echo "占用端口的进程：${OWNER_CMD:-未知}（PID ${OWNER_PID:-未知}）"
     fi
   fi
-  if [ "$SKIP_SYSTEMD" -eq 0 ] && command -v systemctl &>/dev/null; then
+  if command -v systemctl &>/dev/null; then
     SVC_STATE=$(systemctl is-active mc-commander 2>/dev/null || true)
     echo "面板服务状态：${SVC_STATE:-未知}"
   fi
   echo ""
   echo "下一步："
-  if [ "${SKIP_SYSTEMD:-0}" -eq 0 ] && command -v systemctl &>/dev/null; then
+  if command -v systemctl &>/dev/null; then
     echo "  1. 让开端口：停掉上面那个占用的进程。面板服务每 3 秒重试一次，端口腾出来会自己起来"
   else
     echo "  1. 让开端口后手动启动：cd $MC_COMMANDER_DIR && node src/index.js"
   fi
   echo "  2. 也可以重新运行同一条部署命令，已下载的代码与配置都会保留"
-  if [ "$SKIP_SYSTEMD" -eq 0 ] && command -v journalctl &>/dev/null; then
+  if command -v journalctl &>/dev/null; then
     echo "  3. 需要更多线索时看日志：sudo journalctl -u mc-commander -n 50 --no-pager"
   else
     echo "  3. 需要更多线索时看日志：$MC_COMMANDER_DIR/server.log"
@@ -1766,6 +1862,26 @@ if ! wait_until_ready; then
     echo ""
     echo "SETUP_TOKEN 已生成，设密时仍需粘贴，请先保存："
     echo "  $SETUP_TOKEN"
+  fi
+  # 升级失败要退回旧版本：只报「起不来」而把新代码留在盘上，用户重跑还是同一个
+  # 坏现场。回滚后服务回到升级前的版本，用户至少还有一个能用的面板。
+  if [ -n "${CODE_BACKUP:-}" ] && [ -d "$CODE_BACKUP" ]; then
+    echo ""
+    log "正在回退到升级前的版本（v${PREVIOUS_VERSION}）..."
+    for entry in src public mc-schemas package.json package-lock.json; do
+      [ -e "$CODE_BACKUP/$entry" ] || continue
+      rm -rf "${MC_COMMANDER_DIR:?}/$entry"
+      cp -a "$CODE_BACKUP/$entry" "$MC_COMMANDER_DIR/" 2>/dev/null || true
+    done
+    if command -v systemctl &>/dev/null; then
+      systemctl restart mc-commander 2>/dev/null || true
+    fi
+    if wait_until_ready >/dev/null 2>&1; then
+      log "已回退到 v${PREVIOUS_VERSION}，面板可用（本次升级未生效）"
+    else
+      warn "回退后服务仍未就绪，请查看日志：journalctl -u mc-commander -n 50"
+      warn "旧代码仍在 $CODE_BACKUP，可手工恢复：cp -a $CODE_BACKUP/. $MC_COMMANDER_DIR/"
+    fi
   fi
   echo ""
   exit 1
@@ -1780,6 +1896,12 @@ elif [ "$PREVIOUS_VERSION" = "$SEEN_VERSION" ]; then
   log "版本未变（v$SEEN_VERSION），本次只重装了运行环境"
 else
   log "版本已从 v$PREVIOUS_VERSION 升级到 v$SEEN_VERSION"
+fi
+
+# 升级成功后清掉回滚副本：留着会让下次升级把「上上次」的代码当成回退目标
+if [ -n "${CODE_BACKUP:-}" ] && [ -d "$CODE_BACKUP" ]; then
+  rm -rf "$CODE_BACKUP"
+  CODE_BACKUP=""
 fi
 
 # 12. 输出部署信息
@@ -1904,7 +2026,7 @@ echo "║  接下来：进面板 → 部署实例                        ║"
 echo "╚═══════════════════════════════════════════════════╝"
 echo ""
 echo "常用命令："
-if [ "$SKIP_SYSTEMD" -eq 0 ]; then
+if command -v systemctl &>/dev/null; then
   echo "  systemctl status  mc-commander    # 查看状态"
   echo "  systemctl restart mc-commander    # 重启服务"
   echo "  systemctl stop    mc-commander    # 停止服务"
