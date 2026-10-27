@@ -28,7 +28,7 @@ import { flushNotificationEvents } from './websocket.js';
 import { MetricsModel } from './db/metrics.model.js';
 import { BackupModel } from './db/backup.model.js';
 import { setupWebhookDispatch } from './services/webhook.service.js';
-import { BackupService } from './services/backup.service.js';
+import { BackupService, inFlightBackupOps } from './services/backup.service.js';
 import { initDatabase, getDb, InstanceModel, AdminAccountModel } from './db/index.js';
 import { bootstrapApiKey, isPublicBind } from './utils/credentials.js';
 import { logger } from './utils/logger.js';
@@ -444,6 +444,27 @@ server.listen(config.port, config.host, () => {
 // 边界：面板不在线期间实例崩溃无自动重启（autoRestart 依赖面板进程）。
 async function shutdown(signal) {
   logger.info(`${signal} received, shutting down (MC instances keep running)...`);
+  // 备份中途退出会把世界留在危险状态：save-off 已发、save-on 还没发，
+  // 服务端从此不再自动保存，而面板已经没了——再没有界面能把它打开。
+  // 有界等待：只等这一种，且不超过 30 秒（systemd 默认 TimeoutStopSec=90）。
+  // 部署/升级中途退出只留下可重跑的残骸，不等，但如实告知。
+  const pending = inFlightBackupOps();
+  if (pending.length > 0) {
+    const kinds = pending.map((p) => `${p.instanceId}(${p.kind})`).join('、');
+    logger.warn(`有 ${pending.length} 个备份/恢复正在进行：${kinds}，最多等待 30 秒让它收尾`);
+    const deadline = Date.now() + 30_000;
+    while (inFlightBackupOps().length > 0 && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+    const left = inFlightBackupOps();
+    if (left.length > 0) {
+      // 等超时也要说清后果：用户下次看到「服务器不自动保存」时得有据可查
+      logger.error(
+        `仍有 ${left.length} 个备份/恢复未收尾就退出（${left.map((p) => p.instanceId).join('、')}）：` +
+          '若其中某个已发出 save-off，该实例的自动保存可能停在关闭状态，重启服务器即可恢复',
+      );
+    }
+  }
   taskScheduler.stop();
   stopSystemStatsBroadcast();
   stopMetricsSampler();

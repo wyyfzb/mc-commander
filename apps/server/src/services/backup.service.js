@@ -1449,6 +1449,20 @@ export function spawnProcess(cmd, args, options = {}) {
 // 同实例的创建/恢复经 status 互斥状态机保证同时至多一个，无需复合键
 const activeOperations = new Map();
 
+/**
+ * 正在进行中的备份/恢复操作快照（实例 id → 类型）。
+ *
+ * 停机要据此判断「现在退出会不会把一个已经 save-off 的世界留在危险状态」：
+ * 备份发出 save-off 后、save-on 之前被打断，服务端会永久停止自动保存，
+ * 而那一刻没有任何界面能再把它打开。
+ */
+export function inFlightBackupOps() {
+  return [...activeOperations.entries()].map(([instanceId, entry]) => ({
+    instanceId,
+    kind: entry.kind,
+  }));
+}
+
 /** 请求取消该实例进行中的备份/恢复；无进行中操作返回 null */
 export function requestCancelBackup(instanceId) {
   const entry = activeOperations.get(instanceId);
