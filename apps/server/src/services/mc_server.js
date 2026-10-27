@@ -72,6 +72,37 @@ function matchCommandFailure(response) {
 export { atomicWriteFile };
 export { isEulaAccepted } from './mc-server/start-lifecycle.js';
 
+/**
+ * 把实例的最新配置回写 instance.json。
+ *
+ * instance.json 只在创建实例时写一次，作用是 DB 记录丢失时的迁移兜底——不跟着改，
+ * 兜底恢复出来的配置就是过期的（旧版本号、旧类型、旧内存档）。`type` 与 `mcVersion`
+ * 必须在列：升级会换掉这两者，而它们决定「这个目录该按哪种服务端启动」。
+ * 原子写（tmp + rename）避免半写 JSON 让兜底自己失效。
+ */
+export function syncInstanceJson(instance) {
+  try {
+    const configPath = path.join(instance.serverPath, 'instance.json');
+    if (!fs.existsSync(configPath)) return;
+    const existing = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    const updated = {
+      ...existing,
+      name: instance.name ?? existing.name,
+      type: instance.modLoader ?? existing.type,
+      mcVersion: instance.mcVersion ?? existing.mcVersion,
+      jarFile: instance.jarFile ?? existing.jarFile,
+      maxMemory: instance.maxMemory ?? existing.maxMemory,
+      minMemory: instance.minMemory ?? existing.minMemory,
+      javaPath: instance.javaPath ?? existing.javaPath,
+      startCommand: instance.startCommand ?? null,
+      jvmArgs: instance.jvmArgs ?? null,
+    };
+    atomicWriteFile(configPath, JSON.stringify(updated, null, 2));
+  } catch (e) {
+    logger.warn('Failed to sync instance.json:', e.message);
+  }
+}
+
 export class MCServerManager extends EventEmitter {
   constructor() {
     super();
@@ -113,6 +144,7 @@ export class MCServerManager extends EventEmitter {
           autoRestart: inst.autoRestart,
           autoStart: inst.autoStart,
           mcVersion: inst.mcVersion,
+          modLoader: inst.modLoader,
         });
         logger.info(`Loaded instance from DB: ${inst.id}`);
       } catch (e) {
@@ -207,6 +239,7 @@ export class MCServerManager extends EventEmitter {
     maxMemory = '2G',
     minMemory = '1G',
     serverPath,
+    modLoader,
     ...rest
   }) {
     const instancePath = serverPath || path.join(config.serversDir, id);
@@ -220,6 +253,8 @@ export class MCServerManager extends EventEmitter {
       maxMemory,
       minMemory,
       serverPath: instancePath,
+      // type 是 instance.json 里的字段名（DB 丢失时的迁移兜底来源），两边同一语义
+      modLoader: modLoader || rest.type,
       ...rest,
     });
 
@@ -307,6 +342,7 @@ export class MCServerInstance extends EventEmitter {
     autoRestart,
     autoStart,
     mcVersion,
+    modLoader,
   }) {
     super();
     this.id = id;
@@ -323,6 +359,8 @@ export class MCServerInstance extends EventEmitter {
     this.autoRestart = autoRestart !== undefined ? Boolean(autoRestart) : true;
     // DB 持久化的 MC 版本号（部署/升级时写入），运行时以此为准
     this.mcVersion = mcVersion || null;
+    // 服务端类型（小写枚举，见 toStatus 里为何不从 jar 推断）
+    this.modLoader = modLoader ? String(modLoader).toLowerCase() : null;
     // 是否主动停止（stop/kill 设置），用于区分「意外停止/崩溃」与「用户主动停止」
     this._manualStop = false;
     this.process = null;
@@ -1369,7 +1407,11 @@ export class MCServerInstance extends EventEmitter {
       playerCount: this.players.size,
       maxPlayers: parseInt(props['max-players'] || '20'),
       mcVersion: this._getMcVersion(),
-      modLoader: this._getModLoader(),
+      // 服务端类型取部署/升级时写入的记录，不从文件面推断：所有类型的落地 jar 都叫
+      // server.jar（Forge 的启动 jar 由安装器生成），Paper/Purpur/Vanilla 三者在目录里
+      // 没有可区分的痕迹，嗅探只会把 Paper 报成 Vanilla。小写形态与部署/升级请求里的
+      // type 枚举同一口径，展示层再转标题形态。
+      modLoader: (this.modLoader || 'vanilla').toLowerCase(),
       tps: this.tps,
       mspt: this._mspt,
       cpuUsage: this._cpuUsage,
@@ -1635,19 +1677,6 @@ export class MCServerInstance extends EventEmitter {
     // 目录尚未产出 jar）：回退 DB 持久化版本（部署/升级时写入）
     if (this.mcVersion) return this.mcVersion;
     return 'unknown';
-  }
-
-  _getModLoader() {
-    const fabricPath = path.join(this.serverPath, 'fabric-server-launch.jar');
-    if (fs.existsSync(fabricPath)) return 'Fabric';
-
-    try {
-      const files = fs.readdirSync(this.serverPath);
-      for (const file of files) {
-        if (/^forge-.*-universal\.jar$/.test(file)) return 'Forge';
-      }
-    } catch {}
-    return 'Vanilla';
   }
 
   getLogs(lines = 100) {

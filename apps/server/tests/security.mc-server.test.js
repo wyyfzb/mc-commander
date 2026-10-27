@@ -66,6 +66,26 @@ describe('安全修复：start 结构化改造', () => {
   let tmpDir;
   let lastProc;
 
+  /**
+   * 从 spawn 实参里剥掉面板自己注入的两类参数（堆转储、pidFile），
+   * 本组用例只验证「用户参数如何拼装」，注入项另有专门用例覆盖。
+   */
+  function stripPanelArgs(args, dir) {
+    const dumpPath = `-XX:HeapDumpPath=${path.join(dir, 'dumps')}`;
+    const pidPath = path.join(dir, '.mc-commander-pid');
+    const out = [];
+    for (let i = 0; i < args.length; i++) {
+      const a = String(args[i]);
+      if (a === '-XX:+HeapDumpOnOutOfMemoryError' || a === dumpPath) continue;
+      if (a === '--pidFile' && String(args[i + 1]) === pidPath) {
+        i++;
+        continue;
+      }
+      out.push(a);
+    }
+    return out;
+  }
+
   function createInstance(overrides = {}) {
     return new MCServerInstance({
       id: 'sec-002',
@@ -129,11 +149,14 @@ describe('安全修复：start 结构化改造', () => {
     fs.writeFileSync(javaBin, '');
     const instance = createInstance({ javaPath: javaBin });
     instance.start();
-    expect(spawn).toHaveBeenCalledWith(
-      javaBin,
-      ['-Xmx2G', '-Xms1G', '-jar', path.join(tmpDir, 'server.jar'), 'nogui'],
-      expect.objectContaining({ cwd: tmpDir }),
-    );
+    expect(spawn.mock.calls[0][0]).toBe(javaBin);
+    expect(stripPanelArgs(spawn.mock.calls[0][1], tmpDir)).toEqual([
+      '-Xmx2G',
+      '-Xms1G',
+      '-jar',
+      path.join(tmpDir, 'server.jar'),
+      'nogui',
+    ]);
   });
 
   it('拒绝 -jar 路径越出实例目录（../ 路径穿越）', () => {
@@ -159,11 +182,14 @@ describe('安全修复：start 结构化改造', () => {
   it('结构化 jvmArgs 参数数组正常启动（-X/-D 与 -jar 白名单）', () => {
     const instance = createInstance();
     instance.start({ jvmArgs: ['-Xmx4G', '-Xms2G', '-jar', 'server.jar', 'nogui'] });
-    expect(spawn).toHaveBeenCalledWith(
-      'java',
-      ['-Xmx4G', '-Xms2G', '-jar', 'server.jar', 'nogui'],
-      expect.objectContaining({ cwd: tmpDir }),
-    );
+    expect(spawn.mock.calls[0][0]).toBe('java');
+    expect(stripPanelArgs(spawn.mock.calls[0][1], tmpDir)).toEqual([
+      '-Xmx4G',
+      '-Xms2G',
+      '-jar',
+      'server.jar',
+      'nogui',
+    ]);
   });
 
   it('结构化 jvmArgs 拒绝越界 -jar 路径', () => {
@@ -183,11 +209,14 @@ describe('安全修复：start 结构化改造', () => {
       startCommand: 'java -Xmx3G -XX:+UseG1GC -jar server.jar nogui',
     });
     instance.start();
-    expect(spawn).toHaveBeenCalledWith(
-      'java',
-      ['-Xmx3G', '-XX:+UseG1GC', '-jar', 'server.jar', 'nogui'],
-      expect.objectContaining({ cwd: tmpDir }),
-    );
+    expect(spawn.mock.calls[0][0]).toBe('java');
+    expect(stripPanelArgs(spawn.mock.calls[0][1], tmpDir)).toEqual([
+      '-Xmx3G',
+      '-XX:+UseG1GC',
+      '-jar',
+      'server.jar',
+      'nogui',
+    ]);
   });
 
   it('旧 startCommand 字段含危险参数时拒绝启动', () => {
@@ -249,19 +278,16 @@ describe('安全修复：start 结构化改造', () => {
       jvmArgs: ['-XX:+UseG1GC', '-Daikars.new.flags=true'],
     });
     instance.start();
-    expect(spawn).toHaveBeenCalledWith(
-      'java',
-      [
-        '-Xmx2G',
-        '-Xms1G',
-        '-XX:+UseG1GC',
-        '-Daikars.new.flags=true',
-        '-jar',
-        path.join(tmpDir, 'server.jar'),
-        'nogui',
-      ],
-      expect.objectContaining({ cwd: tmpDir }),
-    );
+    expect(spawn.mock.calls[0][0]).toBe('java');
+    expect(stripPanelArgs(spawn.mock.calls[0][1], tmpDir)).toEqual([
+      '-Xmx2G',
+      '-Xms1G',
+      '-XX:+UseG1GC',
+      '-Daikars.new.flags=true',
+      '-jar',
+      path.join(tmpDir, 'server.jar'),
+      'nogui',
+    ]);
   });
 
   it('实例配置 jvmArgs 已含 -Xmx/-jar 时不重复补全（显式值尊重）', () => {
@@ -795,5 +821,63 @@ describe('安全修复：日志单行截断', () => {
     );
     expect(instance.logBuffer[0].text).toContain('Steve joined the game');
     expect(instance.players.has('Steve')).toBe(true);
+  });
+});
+
+// ── 服务端类型的真相源 ─────────────────────────────────────────────────────
+// 类型是用户在部署/升级时选定的意图，不是从目录里猜出来的：vanilla/paper/purpur 落地后
+// 都叫 server.jar，文件面没有可区分的痕迹。这里锁住「取记录值」与「不嗅探」两件事。
+describe('服务端类型真相源（toStatus 取记录值，不从文件嗅探）', () => {
+  let tmpDir;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-sec-type-'));
+    vi.spyOn(MCServerInstance.prototype, '_detectPublicIp').mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('记录为 paper 时 toStatus 报 paper——即使目录里有 Fabric 启动 jar（嗅探会报 fabric）', () => {
+    const instance = new MCServerInstance({
+      id: 'type-paper',
+      name: 'Type Paper',
+      javaPath: 'java',
+      jarFile: 'server.jar',
+      serverPath: tmpDir,
+      modLoader: 'Paper',
+    });
+    fs.writeFileSync(path.join(tmpDir, 'fabric-server-launch.jar'), '');
+
+    expect(instance.toStatus().modLoader).toBe('paper');
+  });
+
+  it('未记录类型的实例回落到 vanilla（不靠目录猜），且 DTO 一律小写', () => {
+    const instance = new MCServerInstance({
+      id: 'type-none',
+      name: 'Type None',
+      javaPath: 'java',
+      jarFile: 'server.jar',
+      serverPath: tmpDir,
+    });
+
+    expect(instance.toStatus().modLoader).toBe('vanilla');
+  });
+
+  it('记录为 purpur 时 DTO 原样透出小写枚举（与部署/升级请求同形）', () => {
+    const instance = new MCServerInstance({
+      id: 'type-purpur',
+      name: 'Type Purpur',
+      javaPath: 'java',
+      jarFile: 'server.jar',
+      serverPath: tmpDir,
+      modLoader: 'Purpur',
+    });
+
+    expect(instance.toStatus().modLoader).toBe('purpur');
   });
 });

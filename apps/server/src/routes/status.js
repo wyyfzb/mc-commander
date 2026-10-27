@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { error, ErrorCodes } from '../utils/response.js';
 import { InstanceModel, BackupModel } from '../db/index.js';
 import config from '../config.js';
-import { atomicWriteFile, isEulaAccepted } from '../services/mc_server.js';
+import { atomicWriteFile, isEulaAccepted, syncInstanceJson } from '../services/mc_server.js';
 import { recordAudit, AuditActions } from '../utils/audit.js';
 import {
   commandResponseSchema,
@@ -121,33 +121,8 @@ function getDiskUsage() {
   return result;
 }
 
-// 同步实例目录下的 instance.json，保持其与 DB/内存中的最新配置一致。
-// instance.json 在创建实例时写入一次，用于 DB 记录丢失时的迁移兜底；
-// 若不同步更新，兜底恢复出的配置将过期（不含 startCommand、内存为旧值）。
-function _syncInstanceJson(instance) {
-  try {
-    const configPath = path.join(instance.serverPath, 'instance.json');
-    if (!fs.existsSync(configPath)) return;
-    const existing = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-    const updated = {
-      ...existing,
-      name: instance.name ?? existing.name,
-      jarFile: instance.jarFile ?? existing.jarFile,
-      maxMemory: instance.maxMemory ?? existing.maxMemory,
-      minMemory: instance.minMemory ?? existing.minMemory,
-      javaPath: instance.javaPath ?? existing.javaPath,
-      startCommand: instance.startCommand ?? null,
-      jvmArgs: instance.jvmArgs ?? null,
-    };
-    // 原子写（tmp + rename）：直接 writeFileSync 覆盖（默认 flag 'w' 先 truncate 后写）
-    // 在进程中途崩溃/断电时残留半写 JSON，下次启动 loadInstances 的 JSON.parse
-    // 抛 SyntaxError → 迁移兜底跳过该目录；DB 记录也已丢失时实例永久无法恢复。
-    // 复用 services/mc_server.js atomicWriteFile 正例，崩溃只影响 .tmp 中间文件。
-    atomicWriteFile(configPath, JSON.stringify(updated, null, 2));
-  } catch (e) {
-    logger.warn('Failed to sync instance.json:', e.message);
-  }
-}
+// 同步实现住在 mc_server.js：升级换类型/版本时也要回写 instance.json，两边必须是同一份
+const _syncInstanceJson = syncInstanceJson;
 
 // 计算云服务器系统级 CPU 使用率（Linux: /proc/stat；其他平台回退到 os.loadavg）
 // 返回 0-100 的百分比。维护上一次的采样状态以做差分。

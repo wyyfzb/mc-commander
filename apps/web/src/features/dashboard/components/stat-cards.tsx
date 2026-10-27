@@ -7,6 +7,7 @@ import { Card, CardHeader, CardTitle } from '@/components/mcs/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useServerStore } from '@/stores/server'
 import { formatRelativeTime, formatStartTime, formatUptime } from '@/lib/format'
+import { serverTypeLabel } from '@/lib/instance-label'
 import { cn } from '@/lib/utils'
 import { TPS_HEALTHY_MIN, tpsLevel } from '@/lib/mc-tps'
 
@@ -454,10 +455,10 @@ export function RuntimeInfoCard({ isLoading = false }: { isLoading?: boolean }) 
     },
   ]
 
-  // 版本信息：右上角展示（替代原图标位）；无 modLoader 时仅显示 MC 版本
+  // 版本信息：右上角展示（替代原图标位）；Vanilla 不额外标类型，其余标出服务端类型
   const versionText = status?.mcVersion
     ? status.modLoader && status.modLoader !== 'vanilla'
-      ? `${status.mcVersion} · ${status.modLoader}`
+      ? `${status.mcVersion} · ${serverTypeLabel(status.modLoader)}`
       : status.mcVersion
     : null
 

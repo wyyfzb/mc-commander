@@ -101,6 +101,8 @@ function createMockInstance(overrides = {}) {
     name: 'Test Server',
     mcVersion: '1.20.4',
     jarFile: 'server-1.20.4.jar',
+    // 当前是 Paper：升级请求带 purpur ⇒ 回滚必须把类型一并还原
+    modLoader: 'paper',
     serverPath: tmpDir,
     isRunning: false,
     start: vi.fn(() => {}),
@@ -201,6 +203,7 @@ describe('回滚终态三者自洽（核心行为）', () => {
     expect(InstanceModel.update).toHaveBeenLastCalledWith('inst-1', {
       jarFile: 'server-1.20.4.jar',
       mcVersion: '1.20.4',
+      modLoader: 'Paper',
     });
 
     // 磁盘：旧 jar 本体唯一且内容=备份旧内容；错位副本（新名 jar）已删
@@ -268,6 +271,7 @@ describe('阶段 3 前失败：jarFile 未切换', () => {
     expect(InstanceModel.update).toHaveBeenCalledWith('inst-1', {
       jarFile: 'server-1.20.4.jar',
       mcVersion: '1.20.4',
+      modLoader: 'Paper',
     });
     // promises unlink 仅用于临时副本清理兜底（旧名不存在 ._upgrade_backup_ 文件，
     // ENOENT 被吞）；无错位副本删除目标（新名不在 promises unlink 调用参数中）
@@ -293,6 +297,7 @@ describe('错位副本删除失败容忍', () => {
     expect(InstanceModel.update).toHaveBeenLastCalledWith('inst-1', {
       jarFile: 'server-1.20.4.jar',
       mcVersion: '1.20.4',
+      modLoader: 'Paper',
     });
     expect(manager._instance.jarFile).toBe('server-1.20.4.jar');
     expect(manager._instance.mcVersion).toBe('1.20.4');
@@ -308,6 +313,7 @@ describe('_doRollback 直调（阶段 3 已切换模拟）', () => {
     const manager = createMockServerManager();
     const service = new UpgradeService(manager);
     manager._instance._originalMcVersion = '1.20.4';
+    manager._instance._originalModLoader = 'paper';
     // 模拟阶段 3 已切换：内存视角 jarFile 为新名，磁盘存在错位副本与旧本体
     manager._instance.jarFile = 'server-1.21.4.jar';
     fs.writeFileSync(NEW_JAR(), 'MISPLACED_NEW_CONTENT');
@@ -327,9 +333,11 @@ describe('_doRollback 直调（阶段 3 已切换模拟）', () => {
     expect(InstanceModel.update).toHaveBeenCalledWith('inst-1', {
       jarFile: 'server-1.20.4.jar',
       mcVersion: '1.20.4',
+      modLoader: 'Paper',
     });
-    // 内存同步
+    // 内存同步（含类型：只在 DB 里还原会让内存仍是转换后的类型）
     expect(manager._instance.jarFile).toBe('server-1.20.4.jar');
+    expect(manager._instance.modLoader).toBe('paper');
     // 临时副本清零（await 语义）
     expect(fs.existsSync(backupPath)).toBe(false);
   });
