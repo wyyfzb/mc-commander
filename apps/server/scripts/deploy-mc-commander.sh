@@ -358,8 +358,9 @@ stop_running_instances() {
   local pidfile pid found=0
   while IFS= read -r pidfile; do
     [ -f "$pidfile" ] || continue
-    pid=$(sed -n 's/.*"pid"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$pidfile" | head -1)
-    [ -n "$pid" ] || continue
+    # pid 文件由服务端按官方 --pidFile 写出，内容是纯数字（无 JSON 包装）
+    pid=$(tr -d '[:space:]' < "$pidfile")
+    case "$pid" in '' | *[!0-9]*) continue ;; esac
     # pid 可能已被复用给别的进程：只对「命令行里带这个实例目录」的进程下手
     # /proc/PID 可能刚消失（进程恰在此刻退出）：先判存在再读，
     # 否则重定向本身的报错会漏到 stderr，看起来像卸载失败
@@ -380,8 +381,8 @@ stop_running_instances() {
     local alive=0
     while IFS= read -r pidfile; do
       [ -f "$pidfile" ] || continue
-      pid=$(sed -n 's/.*"pid"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$pidfile" | head -1)
-      [ -n "$pid" ] || continue
+      pid=$(tr -d '[:space:]' < "$pidfile")
+      case "$pid" in '' | *[!0-9]*) continue ;; esac
       [ -r "/proc/$pid/cmdline" ] &&
         tr '\0' ' ' < "/proc/$pid/cmdline" | grep -qF "$(dirname "$pidfile")" && alive=1
     done < <(find "$servers_dir" -maxdepth 2 -name '.mc-commander-pid' 2>/dev/null)
@@ -392,8 +393,9 @@ stop_running_instances() {
 
   while IFS= read -r pidfile; do
     [ -f "$pidfile" ] || continue
-    pid=$(sed -n 's/.*"pid"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$pidfile" | head -1)
-    [ -n "$pid" ] || continue
+    # pid 文件由服务端按官方 --pidFile 写出，内容是纯数字（无 JSON 包装）
+    pid=$(tr -d '[:space:]' < "$pidfile")
+    case "$pid" in '' | *[!0-9]*) continue ;; esac
     if [ -r "/proc/$pid/cmdline" ] &&
       tr '\0' ' ' < "/proc/$pid/cmdline" | grep -qF "$(dirname "$pidfile")"; then
       warn "实例进程 $pid 未在 30 秒内退出，强制结束"

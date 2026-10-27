@@ -858,8 +858,7 @@ export class MCServerInstance extends EventEmitter {
 
     const { command, args } = this._resolveStartCommand(startCommand);
     this._spawnServerProcess(command, args);
-    // pid 文件是面板重启后接管孤儿进程的唯一线索，spawn 成功即落盘
-    this._writePidFile();
+    // pid 文件由服务端按 --pidFile 自己写出；接管侧用 /proc 兜住「文件还没写出」的窗口
     this._attachSpawnErrorListener();
     this._attachStdinErrorListener();
     this._initializeRuntimeState();

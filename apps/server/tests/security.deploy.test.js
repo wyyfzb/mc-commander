@@ -1281,10 +1281,8 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
     function setupInstance(dir, pid, name = 'inst1') {
       const instDir = path.join(dir, 'var', 'servers', name);
       mkdirSync(instDir, { recursive: true });
-      writeFileSync(
-        path.join(instDir, '.mc-commander-pid'),
-        JSON.stringify({ pid, startedAt: Date.now() }),
-      );
+      // 服务端按官方 --pidFile 写出的内容就是裸 pid（无 JSON 包装）
+      writeFileSync(path.join(instDir, '.mc-commander-pid'), `${pid}\n`);
       return instDir;
     }
 
@@ -1360,10 +1358,7 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
         const instDir = setupInstance(dir, 0);
         const child = spawnFakeInstance(instDir);
         // pid 文件写真实 pid
-        writeFileSync(
-          path.join(instDir, '.mc-commander-pid'),
-          JSON.stringify({ pid: child.pid, startedAt: Date.now() }),
-        );
+        writeFileSync(path.join(instDir, '.mc-commander-pid'), String(child.pid));
         const r = runStop(dir);
         expect(r.status).toBe(0);
         expect(r.stdout).toContain('停止仍在运行的实例进程');
@@ -1494,10 +1489,7 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
         const instDir = path.join(outside, 'inst1');
         mkdirSync(instDir, { recursive: true });
         const child = spawnFakeInstance(instDir);
-        writeFileSync(
-          path.join(instDir, '.mc-commander-pid'),
-          JSON.stringify({ pid: child.pid, startedAt: Date.now() }),
-        );
+        writeFileSync(path.join(instDir, '.mc-commander-pid'), String(child.pid));
         const r = runStop(dir);
         expect(r.status).toBe(0);
         expect(r.stdout).toContain('停止仍在运行的实例进程');

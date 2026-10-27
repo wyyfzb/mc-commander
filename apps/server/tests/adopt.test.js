@@ -11,6 +11,7 @@ import { describe, it, expect, vi, afterAll, beforeEach } from 'vitest';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { spawn } from 'child_process';
 
 vi.mock('../src/config.js', async () => {
   const fs = await import('fs');
@@ -33,7 +34,8 @@ vi.mock('../src/config.js', async () => {
 
 import {
   PID_FILE_NAME,
-  _writePidFile,
+  _withPidFileArg,
+  _readPidFile,
   _removePidFile,
   _startAdoptWatchdog,
   _stopAdoptWatchdog,
@@ -42,11 +44,19 @@ import {
 import { MCServerInstance } from '../src/services/mc_server.js';
 
 const tmpBase = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-adopt-fixture-'));
-// 活体：测试进程自身（win32 纯验活即真；linux 下 /proc cmdline 含 node 与 jarFile 基名匹配）
-const ALIVE_PID = process.pid;
 const DEAD_PID = 999999;
-// _isPidAlive 在 linux 校验 /proc/<pid>/cmdline 含 jar 基名——用 node 可执行名保证活体命中
-const JAR_BASENAME = path.basename(process.execPath);
+
+// 活体用真实子进程，且 cwd 就是实例目录：身份判据取的是 /proc/<pid>/cwd，
+// 只有真的「在该目录下跑的进程」才算本实例的进程（用测试进程自身会绕过这条判据）
+const children = [];
+function spawnFakeServer(cwd) {
+  const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
+    cwd,
+    stdio: 'ignore',
+  });
+  children.push(child);
+  return child.pid;
+}
 
 function makeInstance(name) {
   const serverPath = path.join(tmpBase, name);
@@ -55,7 +65,7 @@ function makeInstance(name) {
   const inst = Object.create(MCServerInstance.prototype);
   inst.id = name;
   inst.serverPath = serverPath;
-  inst.jarFile = JAR_BASENAME;
+  inst.jarFile = 'server.jar';
   inst.properties = {};
   inst.isRunning = false;
   inst.adopted = false;
@@ -78,37 +88,68 @@ beforeEach(() => {
 });
 
 afterAll(() => {
+  for (const child of children) {
+    try {
+      child.kill('SIGKILL');
+    } catch {
+      /* 已退出 */
+    }
+  }
   _stopAdoptWatchdog.call({ _adoptTimer: null });
   fs.rmSync(tmpBase, { recursive: true, force: true });
 });
 
-describe('pid 文件 CRUD', () => {
-  it('spawn 后写 pid 文件（JSON 含 pid 与 startedAt）', () => {
-    const inst = makeInstance('pid-write');
-    inst.process = { pid: ALIVE_PID };
-    inst._writePidFile();
-    const raw = JSON.parse(fs.readFileSync(path.join(inst.serverPath, PID_FILE_NAME), 'utf8'));
-    expect(raw.pid).toBe(ALIVE_PID);
-    expect(typeof raw.startedAt).toBe('number');
+describe('pid 文件与启动参数注入', () => {
+  it('_withPidFileArg 插在 -jar <path> 之后（应用参数位置），不破坏 nogui', () => {
+    const inst = makeInstance('pid-arg');
+    const args = inst._withPidFileArg(['-Xmx2G', '-jar', '/srv/a/server.jar', 'nogui']);
+    expect(args).toEqual([
+      '-Xmx2G',
+      '-jar',
+      '/srv/a/server.jar',
+      '--pidFile',
+      path.join(inst.serverPath, PID_FILE_NAME),
+      'nogui',
+    ]);
+  });
+
+  it('无 -jar（Fabric/Forge 的 @argfile 形态）时追加在末尾', () => {
+    const inst = makeInstance('pid-arg-file');
+    const args = inst._withPidFileArg(['-Xmx2G', '@user_jvm_args.txt', '@libraries/unix_args.txt']);
+    expect(args.slice(-2)).toEqual(['--pidFile', path.join(inst.serverPath, PID_FILE_NAME)]);
+  });
+
+  it('用户已指定 --pidFile 时不覆盖', () => {
+    const inst = makeInstance('pid-arg-user');
+    const args = ['-jar', '/srv/b/server.jar', '--pidFile', '/tmp/mine.pid'];
+    expect(inst._withPidFileArg(args)).toBe(args);
+  });
+
+  it('_readPidFile 解析服务端写出的纯数字（含尾随换行），非法内容返回 null', () => {
+    const inst = makeInstance('pid-read');
+    const pidPath = path.join(inst.serverPath, PID_FILE_NAME);
+    fs.writeFileSync(pidPath, '12345\n');
+    expect(inst._readPidFile()).toBe(12345);
+    fs.writeFileSync(pidPath, 'not-a-pid');
+    expect(inst._readPidFile()).toBeNull();
+    fs.unlinkSync(pidPath);
+    expect(inst._readPidFile()).toBeNull();
   });
 
   it('_removePidFile 幂等（不存在不抛）', () => {
     const inst = makeInstance('pid-remove');
     expect(() => inst._removePidFile()).not.toThrow();
-    inst.process = { pid: ALIVE_PID };
-    inst._writePidFile();
+    fs.writeFileSync(path.join(inst.serverPath, PID_FILE_NAME), '12345');
     inst._removePidFile();
     expect(fs.existsSync(path.join(inst.serverPath, PID_FILE_NAME))).toBe(false);
   });
 });
 
 describe('adoptFromPidFile 接管', () => {
-  it('活 pid → 接管：运行态恢复、接管标记、日志续读、started 广播（终端不注入提示行）', () => {
+  it('pid 文件指向本实例进程 → 接管：运行态恢复、接管标记、日志续读、started 广播（终端不注入提示行）', () => {
     const inst = makeInstance('adopt-alive');
-    fs.writeFileSync(
-      path.join(inst.serverPath, PID_FILE_NAME),
-      JSON.stringify({ pid: ALIVE_PID, startedAt: Date.now() - 60000 }),
-    );
+    const pid = spawnFakeServer(inst.serverPath);
+    fs.writeFileSync(path.join(inst.serverPath, PID_FILE_NAME), String(pid));
     const events = [];
     inst.on('status', (s) => events.push(s));
 
@@ -117,9 +158,11 @@ describe('adoptFromPidFile 接管', () => {
     expect(ok).toBe(true);
     expect(inst.isRunning).toBe(true);
     expect(inst.adopted).toBe(true);
-    expect(inst.adoptedPid).toBe(ALIVE_PID);
+    expect(inst.adoptedPid).toBe(pid);
     expect(inst.process).toBeNull();
+    // startTime 取进程自己的启动时刻（/proc），不是接管时刻：应 ≈ 现在且不晚于现在
     expect(inst.startTime).toBeLessThanOrEqual(Date.now());
+    expect(inst.startTime).toBeGreaterThan(Date.now() - 60000);
     // 接管对用户无感：不向终端注入任何提示行（日志由 log-tail 续读 latest.log）
     expect(inst.logBuffer).toHaveLength(0);
     expect(inst._logTailTimer).not.toBeNull();
@@ -129,29 +172,61 @@ describe('adoptFromPidFile 接管', () => {
     inst._stopStatsCollection();
   });
 
+  it('pid 文件缺失但实例进程在跑 → /proc 兜底接管（覆盖服务端还没写出 pidFile 的窗口）', () => {
+    const inst = makeInstance('adopt-procscan');
+    const pid = spawnFakeServer(inst.serverPath);
+    expect(fs.existsSync(path.join(inst.serverPath, PID_FILE_NAME))).toBe(false);
+
+    expect(inst.adoptFromPidFile()).toBe(true);
+    expect(inst.adoptedPid).toBe(pid);
+    inst._stopAdoptWatchdog();
+    inst._stopAdoptedLogTail();
+    inst._stopStatsCollection();
+  });
+
+  it('pid 文件指向别的目录的进程 → 不接管（pid 复用/串实例的防线）', () => {
+    const inst = makeInstance('adopt-foreign');
+    // 子进程 cwd 是系统临时目录，不是本实例目录
+    const pid = spawnFakeServer(os.tmpdir());
+    fs.writeFileSync(path.join(inst.serverPath, PID_FILE_NAME), String(pid));
+
+    expect(inst.adoptFromPidFile()).toBe(false);
+    expect(inst.isRunning).toBe(false);
+  });
+
+  it('命令行里提到实例路径、但不在该目录运行的进程 → 不接管（rsync/tail 这类旁观进程）', () => {
+    const inst = makeInstance('adopt-bystander');
+    // cwd 在系统临时目录，只有 argv 里带了实例路径：只看命令行的判定会把它认成本实例进程
+    const child = spawn(
+      process.execPath,
+      ['-e', 'setInterval(() => {}, 1000)', path.join(inst.serverPath, 'logs', 'latest.log')],
+      { cwd: os.tmpdir(), stdio: 'ignore' },
+    );
+    children.push(child);
+    fs.writeFileSync(path.join(inst.serverPath, PID_FILE_NAME), String(child.pid));
+
+    expect(inst.adoptFromPidFile()).toBe(false);
+    expect(inst.isRunning).toBe(false);
+  });
+
   it('死 pid → 清残留 pid 文件并拒绝接管', () => {
     const inst = makeInstance('adopt-dead');
-    fs.writeFileSync(
-      path.join(inst.serverPath, PID_FILE_NAME),
-      JSON.stringify({ pid: DEAD_PID, startedAt: Date.now() }),
-    );
+    fs.writeFileSync(path.join(inst.serverPath, PID_FILE_NAME), String(DEAD_PID));
     const ok = inst.adoptFromPidFile();
     expect(ok).toBe(false);
     expect(inst.isRunning).toBe(false);
     expect(fs.existsSync(path.join(inst.serverPath, PID_FILE_NAME))).toBe(false);
   });
 
-  it('无 pid 文件 → 不接管', () => {
+  it('无 pid 文件且无进程 → 不接管', () => {
     const inst = makeInstance('adopt-none');
     expect(inst.adoptFromPidFile()).toBe(false);
   });
 
   it('adoptOrphanInstances 遍历真实例 Map（回归：getAllInstances 返回 toStatus 快照无原型方法）', () => {
     const inst = makeInstance('adopt-manager');
-    fs.writeFileSync(
-      path.join(inst.serverPath, PID_FILE_NAME),
-      JSON.stringify({ pid: ALIVE_PID, startedAt: Date.now() }),
-    );
+    const pid = spawnFakeServer(inst.serverPath);
+    fs.writeFileSync(path.join(inst.serverPath, PID_FILE_NAME), String(pid));
     const manager = { instances: new Map([['adopt-manager', inst]]) };
     expect(adoptOrphanInstances(manager)).toBe(1);
     expect(inst.isRunning).toBe(true);
@@ -164,10 +239,8 @@ describe('adoptFromPidFile 接管', () => {
 describe('接管看门狗', () => {
   it('进程死亡后收敛运行态：残留清理 + 按 _manualStop 区分 stopped/crash', async () => {
     const inst = makeInstance('watchdog');
-    fs.writeFileSync(
-      path.join(inst.serverPath, PID_FILE_NAME),
-      JSON.stringify({ pid: ALIVE_PID, startedAt: Date.now() }),
-    );
+    const pid = spawnFakeServer(inst.serverPath);
+    fs.writeFileSync(path.join(inst.serverPath, PID_FILE_NAME), String(pid));
     expect(inst.adoptFromPidFile()).toBe(true);
     inst._stopAdoptWatchdog();
 
@@ -208,7 +281,7 @@ describe('接管实例命令通道语义', () => {
     });
     inst.isRunning = true;
     inst.adopted = true;
-    inst.adoptedPid = ALIVE_PID;
+    inst.adoptedPid = DEAD_PID;
     inst.process = null;
 
     await expect(inst.sendCommand('help')).rejects.toThrow(/接管实例无控制台管道/);

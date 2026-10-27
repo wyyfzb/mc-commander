@@ -318,6 +318,8 @@ describe('与真实参数构建的集成锁', () => {
       '-XX:+UseG1GC',
       '-jar',
       path.join(serverPath, 'server.jar'),
+      '--pidFile',
+      path.join(serverPath, '.mc-commander-pid'),
       'nogui',
     ]);
   });
