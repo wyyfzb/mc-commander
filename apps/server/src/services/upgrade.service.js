@@ -24,6 +24,7 @@ import {
   getRecommendedJavaVersion,
   isJavaSatisfied,
 } from '../utils/java-detector.js';
+import { ensureJavaRuntime } from './java-runtime.service.js';
 import { readJarVersionInfo } from './mc-server/jar-version.js';
 import { getServerVersion } from '../utils/version.js';
 import { beginCancellableTask, TASK_KINDS, TaskCancelledError } from '../utils/cancellable-task.js';
@@ -69,6 +70,8 @@ function assertSafeInstancePath(serverPath, fileName) {
 const UPGRADE_STAGES = {
   BACKUP: 'backup',
   DOWNLOAD: 'download',
+  // 补齐目标版本要求的 Java（面板自供 JRE）：与 download 分档，进度含义是「准备 Java」
+  PREPARE_JAVA: 'prepare_java',
   REPLACE: 'replace',
   VERIFY: 'verify',
   COMPLETED: 'completed',
@@ -555,6 +558,24 @@ export class UpgradeService {
       if (requiredJava) {
         const currentJava = instance.javaPath;
         if (!isJavaSatisfied(currentJava, requiredJava)) {
+          // 缺目标 Java 时面板自己补齐（用户零操作）：下载期间推「正在准备 Java」进度，
+          // 补齐失败会抛中文可操作错误，交给外层回滚（备份与旧 jar 都还在）
+          const prepared = await ensureJavaRuntime(requiredJava, {
+            mcVersion,
+            signal: task.signal,
+            onProgress: (percent) =>
+              this._emitProgress(
+                instanceId,
+                UPGRADE_STAGES.PREPARE_JAVA,
+                Math.round(percent * 100),
+                `正在准备 Java ${requiredJava}...`,
+              ),
+          });
+          logger.info(
+            `[upgrade ${instanceId}] Java ${currentJava} 不满足 ${requiredJava}，已准备 ${prepared}`,
+          );
+          // 补齐后再走一次严格查找：本机 Java 集合可能在下载期间变化，且「落地成功」
+          // 与「面板能选到」是两件事，选不到就仍按失败处理
           const replacement = findJavaPathStrict(requiredJava);
           if (!replacement) {
             // 找不到满足要求的 Java ⇒ 中止升级，交给外层回滚（备份与旧 jar 都还在）

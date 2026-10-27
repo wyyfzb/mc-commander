@@ -38,6 +38,11 @@ vi.mock('../src/utils/java-detector.js', () => ({
   findJavaPath: vi.fn(() => '/usr/bin/java'),
 }));
 
+// 面板自供 Java：本组只测状态兜底与门控，不触达真实运行时下载
+vi.mock('../src/services/java-runtime.service.js', () => ({
+  ensureJavaRuntime: vi.fn(async () => '/usr/bin/java'),
+}));
+
 vi.mock('../src/services/mc_server.js', () => ({ atomicWriteFile: vi.fn() }));
 
 vi.mock('../src/utils/http-client.js', () => ({

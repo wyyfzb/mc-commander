@@ -59,6 +59,19 @@ export function allowedDownloadHosts(types) {
 }
 
 /**
+ * 面板自供 Java 运行时的下载域（清单 → manifest → JRE 文件各一个域）。
+ *
+ * 为什么是这三条、且不用通配：清单只从 launchermeta 取；manifest 地址由清单给出，
+ * 实测落在 piston-meta（路径段即该文件的 sha1）；JRE 文件实测落在 piston-data。
+ * 少一条安装直接失败，多一条等于放宽「被污染的上游响应可把下载导向任意主机」的面。
+ */
+export const RUNTIME_DOWNLOAD_HOSTS = new Set([
+  'launchermeta.mojang.com',
+  'piston-meta.mojang.com',
+  'piston-data.mojang.com',
+]);
+
+/**
  * 断言下载 URL 的 host 在给定白名单内。畸形 URL 与非白名单域一律 VALIDATION_ERROR。
  * @param {string} rawUrl
  * @param {Set<string>} allowedHosts

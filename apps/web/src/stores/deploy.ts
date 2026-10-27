@@ -12,6 +12,8 @@ import type { DeployProgress, DeployStatusResponse } from '@/api/types'
 /** 部署阶段中文标签 */
 export const DEPLOY_STAGE_LABELS: Record<string, string> = {
   download: '正在下载服务端核心…',
+  // 面板自供 JRE：缺目标 Java 时自动下载（进度来自 JRE 文件下载），用户无需操作
+  prepare_java: '正在准备 Java 运行时…',
   download_complete: '下载完成，正在准备…',
   forge_install: '正在安装 Forge…',
   first_launch: '首次启动生成配置…',
@@ -118,6 +120,7 @@ export const useDeployStore = create<DeployState>()((set) => ({
           transferred: status.transferred,
           total: status.total,
           ...(status.error ? { error: status.error } : {}),
+          ...(status.detail ? { detail: status.detail } : {}),
           instanceId: status.instanceId,
           instanceName: status.instanceName,
           type: status.type,

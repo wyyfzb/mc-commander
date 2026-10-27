@@ -27,8 +27,9 @@ interface DeployProgressViewProps {
 /** 部署中视图：进度条 + 阶段文案 + 传输量（进度为 null 时显示不确定占位）+ 取消入口 */
 export function DeployProgressView({ progress, cancelling, onCancel }: DeployProgressViewProps) {
   const pct = progress != null ? Math.round(progress.percent * 100) : 0
+  // detail 优先：带版本号的阶段（如「正在准备 Java 21…」）无法用固定标签表达
   const stageLabel = progress
-    ? (DEPLOY_STAGE_LABELS[progress.stage] ?? progress.stage)
+    ? (progress.detail ?? DEPLOY_STAGE_LABELS[progress.stage] ?? progress.stage)
     : '正在部署…'
   const showTransfer = progress != null && progress.total > 0
   const stageError = progress?.stage === 'error' ? progress.error : undefined

@@ -236,6 +236,27 @@ describe('DeployDialog', () => {
     expect(screen.queryByRole('button', { name: '上一步' })).not.toBeInTheDocument()
   })
 
+  it('准备 Java 阶段：detail 带目标主版本且优先于固定阶段标签', () => {
+    renderDialog()
+    act(() => {
+      useDeployStore.setState({
+        deploying: true,
+        progress: {
+          stage: 'prepare_java',
+          percent: 0.3,
+          transferred: 0,
+          total: 0,
+          detail: '正在准备 Java 25…',
+        },
+      })
+    })
+
+    expect(screen.getByText('正在准备 Java 25…')).toBeInTheDocument()
+    // 固定标签会丢掉目标主版本，用户无从知道在等哪个 Java
+    expect(screen.queryByText('正在准备 Java 运行时…')).not.toBeInTheDocument()
+    expect(screen.getByText('30%')).toBeInTheDocument()
+  })
+
   it('部署中（progress 为 null）：不确定进度占位文案', () => {
     renderDialog()
     act(() => {

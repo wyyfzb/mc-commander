@@ -74,11 +74,26 @@ vi.mock('child_process', async (importOriginal) => {
 });
 
 import { logger } from '../src/utils/logger.js';
+import config from '../src/config.js';
 import {
   getRecommendedJavaVersion,
   getAllJavaVersions,
   findJavaPath,
+  findJavaPathStrict,
 } from '../src/utils/java-detector.js';
+
+/** 把一条绝对路径的各级祖先目录都注册进内存树（expandGlob 逐段校验中间目录） */
+function addDirTree(p) {
+  let cur = norm(p);
+  const parts = [cur];
+  for (;;) {
+    const parent = path.dirname(cur);
+    if (parent === cur) break;
+    parts.push(parent);
+    cur = parent;
+  }
+  for (const dir of parts) addDir(dir);
+}
 
 // ── 内存文件树工具（键一律经 norm，宿主无关）────────────────
 function addDir(p) {
@@ -524,5 +539,54 @@ describe('findJavaPath —— 精确匹配 / 较新回退 / 默认回退三级�
     expect(warnSpy).toHaveBeenCalledTimes(1);
     expect(String(warnSpy.mock.calls[0][0])).toContain('17');
     warnSpy.mockRestore();
+  });
+});
+
+describe('getAllJavaVersions · 面板自供 JRE 优先', () => {
+  it('面板自供 JRE 先入列：同主版本精确匹配优先于系统 java', () => {
+    const jreDir = config.jreDir;
+    const panelBin = path.join(jreDir, '21', 'bin');
+    const panelJava = path.join(panelBin, 'java');
+    addDirTree(jreDir);
+    addEntries(jreDir, [['21', 'dir']]);
+    addEntries(path.join(jreDir, '21'), [['bin', 'dir']]);
+    addEntries(panelBin, [['java', 'file']]);
+    addFile(panelJava);
+    setVersionOutput(panelJava, { err: 'openjdk version "21.0.7" 2025-04-15' });
+
+    const sysHome = '/opt/system-jdk-21';
+    const sysJava = path.join(sysHome, 'bin', 'java');
+    addDir(sysHome);
+    addDir(path.join(sysHome, 'bin'));
+    addFile(sysJava);
+    setVersionOutput(sysJava, { out: 'openjdk version "21" 2023-09-19' });
+    process.env.JAVA_HOME = sysHome;
+
+    const all = getAllJavaVersions();
+    expect(all.map((x) => x.path)).toEqual([norm(panelJava), norm(sysJava)]);
+    // 同主版本都在场时，精确匹配取面板自供的那一个
+    expect(findJavaPath('21')).toBe(norm(panelJava));
+    expect(findJavaPathStrict('21')).toBe(norm(panelJava));
+  });
+});
+
+describe('全机没有一档可用 Java', () => {
+  it('空文件树：getAllJavaVersions 为空、findJavaPathStrict 为 null（调用方据此进下载分支）', () => {
+    expect(getAllJavaVersions()).toEqual([]);
+    expect(findJavaPathStrict('21')).toBeNull();
+  });
+
+  it('面板 JRE 目录里的 java 探测失败（平台不匹配/不可执行）→ 不视为可用', () => {
+    const jreDir = config.jreDir;
+    const panelBin = path.join(jreDir, '21', 'bin');
+    addDirTree(jreDir);
+    addEntries(jreDir, [['21', 'dir']]);
+    addEntries(path.join(jreDir, '21'), [['bin', 'dir']]);
+    addEntries(panelBin, [['java', 'file']]);
+    addFile(path.join(panelBin, 'java'));
+    // 不注册 java -version 输出 ⇒ spawnSync 模拟「进程起不来」
+
+    expect(getAllJavaVersions()).toEqual([]);
+    expect(findJavaPathStrict('21')).toBeNull();
   });
 });

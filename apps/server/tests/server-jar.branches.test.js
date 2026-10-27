@@ -49,6 +49,11 @@ vi.mock('../src/utils/java-detector.js', () => ({
   findJavaPath: vi.fn(() => '/usr/bin/java'),
 }));
 
+// 面板自供 Java：本组只验证部署分支，不触达真实运行时下载
+vi.mock('../src/services/java-runtime.service.js', () => ({
+  ensureJavaRuntime: vi.fn(async () => '/usr/bin/java'),
+}));
+
 vi.mock('../src/services/mc_server.js', async () => {
   const fsSync = await import('node:fs');
   return { atomicWriteFile: (p, c) => fsSync.writeFileSync(p, c) };

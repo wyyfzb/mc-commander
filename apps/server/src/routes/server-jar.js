@@ -14,7 +14,9 @@ import {
 } from '../services/loader-upstreams.js';
 import config from '../config.js';
 import { success, error, ErrorCodes, AppError } from '../utils/response.js';
-import { getRecommendedJavaVersion, findJavaPath } from '../utils/java-detector.js';
+import { getRecommendedJavaVersion } from '../utils/java-detector.js';
+import { ensureJavaRuntime } from '../services/java-runtime.service.js';
+import { readJarVersionInfo } from '../services/mc-server/jar-version.js';
 import { InstanceModel } from '../db/index.js';
 import { atomicWriteFile } from '../services/mc_server.js';
 import { recordAudit, AuditActions } from '../utils/audit.js';
@@ -133,6 +135,7 @@ function trackDeployProgress(serverManager, meta, payload) {
         percent: payload.percent,
         transferred: payload.transferred,
         total: payload.total,
+        detail: payload.detail,
         updatedAt: Date.now(),
       });
     }
@@ -504,6 +507,7 @@ export function createServerJarRoutes(serverManager) {
         transferred: snapshot.transferred ?? 0,
         total: snapshot.total ?? 0,
         updatedAt: snapshot.updatedAt,
+        ...(snapshot.detail ? { detail: snapshot.detail } : {}),
       }),
     );
   });
@@ -638,8 +642,26 @@ export function createServerJarRoutes(serverManager) {
         }
 
         const ramSize = maxMemory || '2G';
-        const javaVersion = getRecommendedJavaVersion(mcVersion);
-        const javaPath = findJavaPath(javaVersion);
+        // jar 内 version.json 的 java_version 是权威值（vanilla/paper 均带；Forge 安装器读不到），
+        // 读不到才退回与版本列表同一套推荐表
+        const jarJavaVersion = readJarVersionInfo(jarPath)?.javaVersion ?? null;
+        const javaVersion =
+          jarJavaVersion !== null ? String(jarJavaVersion) : getRecommendedJavaVersion(mcVersion);
+        // 缺合适 Java 时由面板自己补齐（用户零操作）；补不齐会抛中文可操作错误，
+        // 缺档即报中文错误：回落系统 `java` 会把失败推迟到首启，用户看不出缺哪一档
+        task.throwIfCancelled();
+        const javaPath = await ensureJavaRuntime(javaVersion, {
+          mcVersion,
+          signal: task.signal,
+          onProgress: (percent) =>
+            trackDeployProgress(serverManager, deployMeta, {
+              stage: 'prepare_java',
+              percent,
+              transferred: 0,
+              total: 0,
+              detail: `正在准备 Java ${javaVersion}…`,
+            }),
+        });
 
         let jarFile = 'server.jar';
 

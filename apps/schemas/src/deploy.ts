@@ -59,6 +59,9 @@ export const deployProgressSchema = z.object({
   transferred: z.number(),
   total: z.number(),
   error: z.string().optional(),
+  // 阶段的补充说明：stage 的中文标签是固定文案，带版本号的进度（如「正在准备 Java 21…」）
+  // 只能由 detail 承载（与 upgradeProgress 的 detail 同口径）
+  detail: z.string().optional(),
   // 实例归属（WS 连接补发恢复显示与通知文案所需）：部署实例完成前未入库，
   // 事件走全局广播，归属由 payload 携带而非信封 instanceId
   instanceId: z.string().optional(),
@@ -89,12 +92,16 @@ export const deployStatusResponseSchema = z.discriminatedUnion('deploying', [
     total: z.number(),
     updatedAt: z.number(),
     error: z.string().optional(),
+    detail: z.string().optional(),
   }),
 ])
 
 export const upgradeStageSchema = z.enum([
   'backup',
   'download',
+  // 补齐目标版本要求的 Java：面板自己下载并落地 JRE，期间没有服务端 jar 的传输，
+  // 故与 download 分档（进度条的含义是「准备 Java」而非「下载核心」）
+  'prepare_java',
   'replace',
   'verify',
   'completed',
