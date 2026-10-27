@@ -102,6 +102,8 @@ esac
 # root 执行的删除脚本必须与面板可写目录分离：装一份只读副本，单元只认它
 REMOVAL_LIB_DIR="/usr/local/lib/mc-commander"
 REMOVAL_SCRIPT="$REMOVAL_LIB_DIR/panel-removal.sh"
+UPDATE_SCRIPT="$REMOVAL_LIB_DIR/panel-update.sh"
+MIGRATE_SCRIPT="$REMOVAL_LIB_DIR/panel-migrate-data.sh"
 # 安装清单：记录「本项目在系统上加了什么」。卸载要靠它精确回滚——
 # 没有它就只能猜，而猜错的后果是删掉用户原有的 Java 或留下几百 MB 残留。
 MANIFEST="$MC_COMMANDER_DIR/.install-manifest"
@@ -521,7 +523,9 @@ do_uninstall() {
     systemctl disable mc-commander 2>/dev/null || true
     rm -f "$unit_path" \
           /etc/systemd/system/mc-commander-removal.service \
-          /etc/systemd/system/mc-commander-removal-keep.service
+          /etc/systemd/system/mc-commander-removal-keep.service \
+          /etc/systemd/system/mc-commander-update.service \
+          /etc/systemd/system/mc-commander-migrate.service
     rm -rf "$REMOVAL_LIB_DIR"
     rm -f /etc/sudoers.d/mc-commander
     systemctl daemon-reload 2>/dev/null || true
@@ -1711,6 +1715,16 @@ EOF
     "$MC_COMMANDER_DIR/src/services/panel-removal.sh" "$REMOVAL_SCRIPT"
   record_change "removal-lib" "$REMOVAL_SCRIPT"
 
+  # 自更新脚本同样装到 root 独占目录：它要停面板、换代码、重建依赖，
+  # 留在面板可写的位置等于「面板只要能改文件就能改掉 root 要跑的代码」。
+  install -o root -g root -m 0755 \
+    "$MC_COMMANDER_DIR/src/services/panel-update.sh" "$UPDATE_SCRIPT"
+  record_change "update-lib" "$UPDATE_SCRIPT"
+
+  # 数据目录迁移脚本同样 root 独占：它要停实例、搬世界存档、改 .env。
+  install -o root -g root -m 0755 \
+    "$MC_COMMANDER_DIR/src/services/panel-migrate-data.sh" "$MIGRATE_SCRIPT"
+  record_change "migrate-lib" "$MIGRATE_SCRIPT"
   cat > /etc/systemd/system/mc-commander-removal.service <<EOF
 [Unit]
 Description=MC Commander panel removal
@@ -1740,13 +1754,59 @@ ExecStart=/bin/bash $REMOVAL_SCRIPT --keep-data
 EOF
   record_change "systemd-unit" "/etc/systemd/system/mc-commander-removal-keep.service"
 
+  # 自更新单元：固定名，目标 tag 经请求文件传。
+  #
+  # 不能用模板单元（@）：sudoers 的 command 参数里禁止通配符，实测整份文件会因
+  # `wildcards are not allowed in command arguments` 被拒载——那会让白名单里的
+  # 停止/删除/更新/迁移一起失效。固定名才能被精确授权。
+  cat > /etc/systemd/system/mc-commander-update.service <<EOF
+[Unit]
+Description=MC Commander self update
+After=network.target
+
+[Service]
+Type=oneshot
+# root：要换 /usr/local/lib 下的脚本副本、chown 安装目录、重启面板服务
+User=root
+Environment=MC_COMMANDER_DIR=$MC_COMMANDER_DIR
+Environment=UPDATE_REQUEST=$MC_COMMANDER_DIR/.update-request
+ExecStart=/bin/bash $UPDATE_SCRIPT
+# 更新最长 10 分钟：下载 + npm ci + 重启验证；超时按失败处理并回滚
+TimeoutStartSec=600
+EOF
+  record_change "systemd-unit" "/etc/systemd/system/mc-commander-update.service"
+
+  # 数据目录迁移单元：固定名、参数从面板侧写好的文件读。
+  #
+  # 不用模板单元（@）：sudoers 的 command 参数禁止通配符，而模板单元只能靠通配符
+  # 授权；实测写通配符会让整份 sudoers 文件被拒载（`wildcards are not allowed in
+  # command arguments`），白名单里的停止/删除/更新/迁移一起失效。
+  #
+  # 参数经文件而非实参传递：实参同样要进 sudoers 白名单，而目标路径由用户输入，
+  # 逐字匹配做不到。请求文件落在安装目录顶层（面板可写），由 root 侧脚本读完即删。
+  cat > /etc/systemd/system/mc-commander-migrate.service <<EOF
+[Unit]
+Description=MC Commander data directory migration
+After=network.target
+
+[Service]
+Type=oneshot
+User=root
+Environment=MC_COMMANDER_DIR=$MC_COMMANDER_DIR
+Environment=MIGRATE_REQUEST=$MC_COMMANDER_DIR/.migrate-request
+ExecStart=/bin/bash $MIGRATE_SCRIPT
+# 搬 265MB 级目录 + 重启验证：给足 10 分钟
+TimeoutStartSec=600
+EOF
+  record_change "systemd-unit" "/etc/systemd/system/mc-commander-migrate.service"
+
   # sudoers 白名单：只放行启动两个删除单元 + 停止面板自身，面板拿不到任何其它 root 能力。
   # 必须带 --no-block：sudoers 按完整参数序列匹配，面板用别的形态调用一律不匹配。
   # stop 必须显式授权：面板以 mc-commander 身份运行，systemctl stop 默认要交互式认证，
   # 面板内点「停用面板」会以退出码 1 失败（Interactive authentication required），
   # 而 API 早已回了成功——用户以为停了，实际还在跑。
   cat > /etc/sudoers.d/mc-commander <<EOF
-mc-commander ALL=(root) NOPASSWD: /usr/bin/systemctl start --no-block mc-commander-removal.service, /usr/bin/systemctl start --no-block mc-commander-removal-keep.service, /usr/bin/systemctl stop mc-commander.service
+mc-commander ALL=(root) NOPASSWD: /usr/bin/systemctl start --no-block mc-commander-removal.service, /usr/bin/systemctl start --no-block mc-commander-removal-keep.service, /usr/bin/systemctl stop mc-commander.service, /usr/bin/systemctl start --no-block mc-commander-update.service, /usr/bin/systemctl start --no-block mc-commander-migrate.service
 EOF
   chmod 440 /etc/sudoers.d/mc-commander
   record_change "sudoers" "/etc/sudoers.d/mc-commander"

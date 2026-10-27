@@ -5,6 +5,7 @@
  * 且一旦删错无从回滚。面板只负责把用户送到终端那一条命令，并在之前
  * 把「会删什么」按真实内容列清楚。
  */
+import fs from 'node:fs';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { Router } from 'express';
@@ -140,6 +141,180 @@ export function createPanelRoutes() {
         const child = spawn('sudo', args, { detached: true, stdio: 'ignore' });
         child.unref();
       }, 800);
+    }),
+  );
+
+  // POST /api/v1/panel/update - 面板内自更新
+  //
+  // 更新要把 node_modules 清空重建，而面板自己就是那个「依赖被抽走却还在服务」
+  // 的进程；它一旦中途退出，就再没有东西能执行回滚。故由 sudo 触发安装时预置的
+  // root 一次性单元，在面板进程之外完成「停 → 换代码 → 重装依赖 → 起 → 验版本」。
+  //
+  // 版本号只接受形如 v0.10.4 的 tag：它会被拼进下载 URL，
+  // 放任任意字符串等于把 URL 拼接的入口交给请求方。
+  router.post(
+    '/panel/update',
+    asyncHandler(async (req, res) => {
+      const tag = String(req.body?.tag ?? '').trim();
+      if (!/^v\d+\.\d+\.\d+$/.test(tag)) {
+        return res
+          .status(400)
+          .json(error(ErrorCodes.VALIDATION_ERROR, '版本号格式不正确（应形如 v0.10.4）'));
+      }
+
+      // 目标版本经请求文件传：单元名必须固定（sudoers 的 command 参数禁止通配符，
+      // 按 tag 授权不同实例的做法整份文件会被拒载）
+      const requestPath = path.join(config.rootDir, '.update-request');
+      try {
+        fs.writeFileSync(requestPath, `${tag}\n`, { mode: 0o600 });
+      } catch (err) {
+        logger.error('写入更新请求失败:', err.message);
+        return res
+          .status(500)
+          .json(error(ErrorCodes.SERVER_ERROR, '无法写入更新请求，请检查安装目录权限'));
+      }
+
+      const unit = 'mc-commander-update.service';
+      // `sudo -l <可执行文件> <参数…>`：首个参数是路径、其后是参数，不能再写一遍命令名
+      const probe = spawnSync(
+        'sudo',
+        ['-n', '-l', '/usr/bin/systemctl', 'start', '--no-block', unit],
+        { encoding: 'utf8', timeout: 10000 },
+      );
+      if (probe.status !== 0) {
+        const raw = `${probe.stderr || probe.stdout || ''}`.trim() || `退出码 ${probe.status}`;
+        logger.error(`[Panel] 无自更新权限：${raw}`);
+        try {
+          fs.unlinkSync(requestPath);
+        } catch {
+          /* 已不存在 */
+        }
+        return res
+          .status(500)
+          .json(
+            error(
+              ErrorCodes.SERVER_ERROR,
+              '面板没有自更新的权限（sudo 白名单缺失）。请重新运行一次部署脚本以补齐权限。',
+            ),
+          );
+      }
+
+      recordAudit({
+        action: AuditActions.PANEL_STOP,
+        targetType: 'panel',
+        targetId: 'panel',
+        detail: { action: 'update', tag },
+      });
+
+      // --no-block：oneshot 默认要等脚本跑完才返回，而脚本第一步就是停掉本进程，
+      // 不等它回话用户才能拿到「已开始更新」这个结论
+      const trigger = spawnSync('sudo', ['-n', '/usr/bin/systemctl', 'start', '--no-block', unit], {
+        encoding: 'utf8',
+        timeout: 15_000,
+      });
+      if (trigger.status !== 0) {
+        const raw = (trigger.stderr || trigger.error?.message || '').trim().split('\n')[0];
+        logger.error('panel update trigger failed:', raw || `exit ${trigger.status}`);
+        return res
+          .status(500)
+          .json(error(ErrorCodes.SERVER_ERROR, `无法启动更新流程：${raw || '未知原因'}`));
+      }
+
+      res.json(success(null, '已开始更新，面板会短暂断开，完成后自动恢复'));
+    }),
+  );
+
+  // POST /api/v1/panel/migrate - 数据目录迁移（换到更大的分区）
+  //
+  // 用户遇到这条的唯一场景是「系统盘满了、必须把数据挪到数据盘」。搬运必须停实例
+  // （世界存档一边被写一边被复制会产出不可用的包），而停了实例面板也不该再服务，
+  // 失败时还要把旧配置退回——这些动作都发生在面板不可用的时刻，故交给 root 单元。
+  //
+  // 参数经请求文件传递而非实参：实参要进 sudoers 白名单，而目标路径由用户输入。
+  router.post(
+    '/panel/migrate',
+    asyncHandler(async (req, res) => {
+      const key = String(req.body?.key ?? '').trim();
+      const target = String(req.body?.target ?? '').trim();
+      if (!['servers', 'data', 'backups'].includes(key)) {
+        return res.status(400).json(error(ErrorCodes.VALIDATION_ERROR, '未知的数据目录类别'));
+      }
+      // 只接受绝对路径：相对路径会按 root 的 cwd 解析，落到谁也找不到的位置
+      if (!target.startsWith('/') || target.includes('\n') || target.length > 500) {
+        return res.status(400).json(error(ErrorCodes.VALIDATION_ERROR, '目标目录必须是绝对路径'));
+      }
+      if (fs.existsSync(target) && fs.readdirSync(target).length > 0) {
+        return res
+          .status(400)
+          .json(error(ErrorCodes.VALIDATION_ERROR, `目标目录已存在且非空：${target}`));
+      }
+      const parent = path.dirname(target);
+      if (!fs.existsSync(parent)) {
+        return res
+          .status(400)
+          .json(
+            error(
+              ErrorCodes.VALIDATION_ERROR,
+              `目标父目录不存在：${parent}。请先挂载数据盘，或换一个已存在的目录。`,
+            ),
+          );
+      }
+
+      const requestPath = path.join(config.rootDir, '.migrate-request');
+      try {
+        fs.writeFileSync(requestPath, `${key}\n${target}\n`, { mode: 0o600 });
+      } catch (err) {
+        logger.error('写入迁移请求失败:', err.message);
+        return res
+          .status(500)
+          .json(error(ErrorCodes.SERVER_ERROR, '无法写入迁移请求，请检查安装目录权限'));
+      }
+
+      const unit = 'mc-commander-migrate.service';
+      const probe = spawnSync(
+        'sudo',
+        ['-n', '-l', '/usr/bin/systemctl', 'start', '--no-block', unit],
+        { encoding: 'utf8', timeout: 10000 },
+      );
+      if (probe.status !== 0) {
+        const raw = `${probe.stderr || probe.stdout || ''}`.trim() || `退出码 ${probe.status}`;
+        logger.error(`[Panel] 无迁移权限：${raw}`);
+        // 清掉刚写的请求文件：留着会让下一次误触发的迁移用这份过期目标
+        try {
+          fs.unlinkSync(requestPath);
+        } catch {
+          /* 已不存在 */
+        }
+        return res
+          .status(500)
+          .json(
+            error(
+              ErrorCodes.SERVER_ERROR,
+              '面板没有迁移数据目录的权限（sudo 白名单缺失）。请重新运行一次部署脚本以补齐权限。',
+            ),
+          );
+      }
+
+      recordAudit({
+        action: AuditActions.PANEL_STOP,
+        targetType: 'panel',
+        targetId: 'panel',
+        detail: { action: 'migrate', key, target },
+      });
+
+      const trigger = spawnSync('sudo', ['-n', '/usr/bin/systemctl', 'start', '--no-block', unit], {
+        encoding: 'utf8',
+        timeout: 15_000,
+      });
+      if (trigger.status !== 0) {
+        const raw = (trigger.stderr || trigger.error?.message || '').trim().split('\n')[0];
+        logger.error('panel migrate trigger failed:', raw || `exit ${trigger.status}`);
+        return res
+          .status(500)
+          .json(error(ErrorCodes.SERVER_ERROR, `无法启动迁移流程：${raw || '未知原因'}`));
+      }
+
+      res.json(success(null, '已开始迁移，面板会暂停；完成后数据在新目录，失败会自动退回原目录'));
     }),
   );
 

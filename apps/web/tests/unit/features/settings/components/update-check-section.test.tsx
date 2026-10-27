@@ -2,7 +2,7 @@
  * UpdateCheckSection 测试（走 MSW，四态各自可辨）：
  * - 加载中：spinner + 文案
  * - 已是最新：绿色勾 + 当前版本
- * - 有更新：黄色提示 + 版本号 + releases 外链
+ * - 有更新：黄色提示 + 版本号 + releases 外链 + 「立即更新」
  * - 检查失败：不留白，给「没查到最新版本」+ 重试（点重试会重新发请求）
  * 版本数据为虚构值，与真实发布版本无关。
  */
@@ -116,5 +116,71 @@ describe('UpdateCheckSection', () => {
     renderSection()
     expect(await screen.findByText('已是最新版本')).toBeInTheDocument()
     expect(screen.getByText('无法连接更新服务器（离线）')).toBeInTheDocument()
+  })
+})
+
+/* 面板内自更新：更新由 root 单元在面板进程之外执行，前端只负责把 tag 交上去。
+   面板此刻会被停掉，故前端不等结果——点完给「已开始」并锁住按钮即可。 */
+describe('UpdateCheckSection · 立即更新', () => {
+  function updateFlow({ status = 200 } = {}) {
+    let payload: unknown = null
+    server.use(
+      http.get('*/api/v1/check-update', () =>
+        ok({ current: '0.9.0', latest: '0.9.1', hasUpdate: true }),
+      ),
+      http.post('*/api/v1/panel/update', async ({ request }) => {
+        payload = await request.json()
+        if (status !== 200) {
+          return HttpResponse.json(
+            { status: 'error', code: 50000, message: '面板没有自更新的权限' },
+            { status },
+          )
+        }
+        return ok(null)
+      }),
+    )
+    return () => payload
+  }
+
+  it('有更新时给出「立即更新」按钮', async () => {
+    updateFlow()
+    renderSection()
+    expect(await screen.findByRole('button', { name: '立即更新' })).toBeInTheDocument()
+  })
+
+  it('点更新提交带 v 前缀的 tag（服务端只接受这个形态）', async () => {
+    const user = userEvent.setup()
+    const getPayload = updateFlow()
+    renderSection()
+    await user.click(await screen.findByRole('button', { name: '立即更新' }))
+    await waitFor(() => expect(getPayload()).toEqual({ tag: 'v0.9.1' }))
+  })
+
+  it('提交成功后按钮锁住并说「正在更新」，避免重复触发', async () => {
+    const user = userEvent.setup()
+    updateFlow()
+    renderSection()
+    await user.click(await screen.findByRole('button', { name: '立即更新' }))
+    expect(await screen.findByRole('button', { name: '正在更新…' })).toBeDisabled()
+  })
+
+  it('提交失败时按钮解锁，用户可以重试', async () => {
+    const user = userEvent.setup()
+    updateFlow({ status: 500 })
+    renderSection()
+    await user.click(await screen.findByRole('button', { name: '立即更新' }))
+    // 失败不该把按钮永久锁死：权限缺失时要能补完权限再点一次
+    await waitFor(() => expect(screen.getByRole('button', { name: '立即更新' })).not.toBeDisabled())
+  })
+
+  it('已是最新时不出现更新按钮', async () => {
+    server.use(
+      http.get('*/api/v1/check-update', () =>
+        ok({ current: '0.9.1', latest: '0.9.1', hasUpdate: false }),
+      ),
+    )
+    renderSection()
+    expect(await screen.findByText('已是最新版本')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '立即更新' })).not.toBeInTheDocument()
   })
 })

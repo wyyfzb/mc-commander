@@ -8,7 +8,11 @@ import request from 'supertest';
 
 vi.mock('../src/config.js', () => ({
   default: {
-    rootDir: '/opt/mc-commander',
+    // 安装目录指向临时位置：自更新与迁移都把请求文件写在这里，
+    // 写死真实路径会让用例在开发机上因目录不存在而失败
+    get rootDir() {
+      return globalThis.__testRoot ?? '/tmp/none';
+    },
     get serversDir() {
       return path.join(globalThis.__testRoot ?? '/tmp/none', 'servers');
     },
@@ -145,6 +149,101 @@ describe('面板去留端点', () => {
         'stop',
         'mc-commander.service',
       ]);
+    } finally {
+      fake.restore();
+    }
+  });
+
+  it('POST /panel/migrate 校验类别与目标路径，拒绝相对路径与非空目标', async () => {
+    const fake = withFakeSudo({ status: 0 });
+    try {
+      // 相对路径会按 root 的 cwd 解析，落到谁也找不到的位置
+      for (const target of ['data/servers', './servers', '']) {
+        const res = await request(buildApp())
+          .post('/api/panel/migrate')
+          .send({ key: 'servers', target });
+        expect(res.status).toBe(400);
+        expect(res.body.message).toContain('绝对路径');
+      }
+      // 类别必须是三选一：它会决定改哪个 .env 键
+      const badKey = await request(buildApp())
+        .post('/api/panel/migrate')
+        .send({ key: 'etc', target: '/tmp/x' });
+      expect(badKey.status).toBe(400);
+      expect(badKey.body.message).toContain('未知的数据目录类别');
+    } finally {
+      fake.restore();
+    }
+  });
+
+  it('POST /panel/migrate 目标非空时拒绝（两份数据会混在一起）', async () => {
+    const fake = withFakeSudo({ status: 0 });
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'migrate-nonempty-'));
+    try {
+      fs.writeFileSync(path.join(dir, 'existing.txt'), 'x');
+      const res = await request(buildApp())
+        .post('/api/panel/migrate')
+        .send({ key: 'servers', target: dir });
+      expect(res.status).toBe(400);
+      expect(res.body.message).toContain('已存在且非空');
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+      fake.restore();
+    }
+  });
+
+  it('POST /panel/migrate 父目录不存在时拒绝并说清怎么办', async () => {
+    const fake = withFakeSudo({ status: 0 });
+    try {
+      const res = await request(buildApp())
+        .post('/api/panel/migrate')
+        .send({ key: 'servers', target: '/nonexistent-probe-dir/servers' });
+      expect(res.status).toBe(400);
+      // 指到不存在的父目录时 rsync 会在根分区建目录，等于没迁
+      expect(res.body.message).toContain('目标父目录不存在');
+      expect(res.body.message).toContain('挂载数据盘');
+    } finally {
+      fake.restore();
+    }
+  });
+
+  it('POST /panel/update 先校验权限，再触发更新单元，且 tag 带进单元名', async () => {
+    const fake = withFakeSudo({ status: 0 });
+    try {
+      const res = await request(buildApp()).post('/api/panel/update').send({ tag: 'v0.10.4' });
+      expect(res.status).toBe(200);
+      expect(res.body.message).toContain('已开始更新');
+      // 桩记的是最后一次调用（真实触发），探测与触发两次都得验。
+      // 单元名必须固定：sudoers 的 command 参数禁止通配符，按 tag 拼实例名会让
+      // 整份白名单被拒载（实测报 wildcards are not allowed in command arguments）
+      expect(fake.argv()).toEqual([
+        '-n',
+        '/usr/bin/systemctl',
+        'start',
+        '--no-block',
+        'mc-commander-update.service',
+      ]);
+    } finally {
+      fake.restore();
+    }
+  });
+
+  it('版本号形态非法时拒绝，不把它拼进单元名', async () => {
+    // tag 会被拼进 systemd 单元实例名与下载 URL：放任任意字符串等于开放参数注入
+    for (const tag of ['0.10.4', 'v1.2', 'v1.2.3.4', '../etc', 'v1.2.3; rm -rf /', '']) {
+      const res = await request(buildApp()).post('/api/panel/update').send({ tag });
+      expect(res.status).toBe(400);
+      expect(res.body.message).toContain('版本号格式不正确');
+    }
+  });
+
+  it('没有自更新权限 → 500 并说清怎么办，不谎报已开始', async () => {
+    const fake = withFakeSudo({ status: 1, stderr: 'sudo: a password is required' });
+    try {
+      const res = await request(buildApp()).post('/api/panel/update').send({ tag: 'v0.10.4' });
+      expect(res.status).toBe(500);
+      expect(res.body.message).toContain('没有自更新的权限');
+      expect(res.body.message).not.toContain('已开始更新');
     } finally {
       fake.restore();
     }

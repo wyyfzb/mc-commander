@@ -206,6 +206,50 @@ export function DangerZonePanel({
         </CardBody>
       </Card>
 
+      {/* 数据放在哪、那个盘还剩多少：这是用户判断「要不要清理、要不要换盘」的唯一依据。
+          只报占用不报余量，等于让他自己去想办法。 */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-1.5">
+            数据存放位置
+            <InfoHint label="关于数据位置">
+              面板把实例、数据库与备份分别放在三个目录里。系统盘快满时可以把它们搬到更大的数据盘。
+            </InfoHint>
+          </CardTitle>
+        </CardHeader>
+        <CardBody className="flex flex-col gap-3">
+          {loading ? (
+            <p className="text-mcs-xs text-mcs-text-muted">正在读取…</p>
+          ) : (
+            <ul className="flex flex-col gap-2">
+              {items.map((item) => (
+                <li key={item.key} className="flex flex-col gap-1">
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-2">
+                    <span className="text-mcs-sm text-mcs-text-default">{item.label}所在目录</span>
+                    <span className="font-mono text-mcs-2xs text-mcs-text-muted">
+                      {formatBytes(item.bytes)}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap items-baseline gap-x-2">
+                    <code className="break-all font-mono text-mcs-2xs text-mcs-text-muted">
+                      {item.path}
+                    </code>
+                    {item.freeBytes != null && item.freeBytes >= 0 && (
+                      <span className="text-mcs-2xs text-mcs-text-muted">
+                        所在磁盘剩余 {formatBytes(item.freeBytes)}
+                      </span>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="text-mcs-xs text-mcs-text-muted">
+            系统盘空间不足时，可把占空间最多的那一类搬到数据盘。迁移会暂停面板与运行中的服务器，失败会自动退回原目录。
+          </p>
+        </CardBody>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-1.5">

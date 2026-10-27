@@ -520,6 +520,22 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
       expect(unitBlock).not.toContain('$MC_COMMANDER_DIR/src/services');
     });
 
+    it('卸载删掉全部自建单元（含更新与迁移），不留可被再次触发的 root 单元', () => {
+      // 清单回滚只处理 pkg-installed / repo-file / node-symlink，systemd-unit 那条
+      // 记录不会被它消费；不在卸载段显式列举就会残留——实测两个新单元留在了
+      // /etc/systemd/system/ 下，而卸载已经报了「系统已无本项目残留」。
+      const at = script.indexOf('停止并禁用 systemd 服务');
+      expect(at).toBeGreaterThan(-1);
+      const block = script.slice(at, script.indexOf('rm -rf "$REMOVAL_LIB_DIR"', at));
+      for (const unit of [
+        'mc-commander-removal.service',
+        'mc-commander-removal-keep.service',
+        'mc-commander-update.service',
+        'mc-commander-migrate.service',
+      ]) {
+        expect(block, `卸载段漏删 ${unit}`).toContain(unit);
+      }
+    });
 
     it('卸载与自删都清掉 root 副本，不留一个可被再次触发的 root 脚本', () => {
       expect(script).toContain('rm -rf "$REMOVAL_LIB_DIR"');
