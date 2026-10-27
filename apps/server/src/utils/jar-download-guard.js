@@ -79,6 +79,30 @@ export function assertAllowedDownloadHost(rawUrl, allowedHosts) {
 /// 兼容大型核心包；超过即视为恶意/损坏上游。
 export const JAR_DOWNLOAD_MAX_BYTES = 512 * 1024 * 1024;
 
+/// 部署前的磁盘余量下限（字节）：26.3 的 server.jar 实测 62MB，首启世界在默认
+/// 视距下约 100MB 量级，再留日志与崩溃报告的空间，取 1GB。
+export const DEPLOY_MIN_FREE_BYTES = 1024 * 1024 * 1024;
+
+/**
+ * 部署前检查落点所在文件系统的剩余空间。
+ *
+ * 磁盘满时服务端不是干净报错：jar 写一半、世界生成到一半、save 被截断，
+ * 而 save 截断会让存档损坏。故在动手之前判死，让用户先清理。
+ *
+ * @param {string} dir 落点目录（必须已存在，否则 statfs 报 ENOENT）
+ * @returns {{ok: boolean, freeBytes: number, requiredBytes: number}}
+ */
+export function checkDeployDiskSpace(dir, requiredBytes = DEPLOY_MIN_FREE_BYTES) {
+  try {
+    const statfs = fs.statfsSync(dir);
+    const freeBytes = statfs.bavail * statfs.bsize;
+    return { ok: freeBytes >= requiredBytes, freeBytes, requiredBytes };
+  } catch {
+    // statfs 不可用（罕见平台差异）：跳过预检，不阻断部署
+    return { ok: true, freeBytes: -1, requiredBytes };
+  }
+}
+
 /**
  * 认可的摘要算法白名单（白名单外一律视为「无摘要」跳过：拿未知摘要当 sha256
  * 比对会把正常下载误判成损坏）。md5 在列是因为 purpur 上游只提供 md5，而 md5 档

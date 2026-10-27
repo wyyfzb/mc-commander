@@ -347,6 +347,29 @@ describe('GET /versions 多核心版本分发', () => {
   });
 });
 
+/* 磁盘余量预检：磁盘满时服务端不是干净报错——jar 写一半、世界生成到一半、
+   save 被截断（世界损坏的第一大诱因）。必须在 mkdir 之前拒绝，不放任何东西落盘。 */
+describe('POST /instances/deploy · 磁盘余量预检', () => {
+  it('余量不足时拒绝部署，且不创建实例目录', async () => {
+    const statfsSpy = vi.spyOn(fs, 'statfsSync').mockReturnValue({ bavail: 1, bsize: 1 });
+    try {
+      const { app } = buildApp();
+      const res = await request(app)
+        .post('/api/instances/deploy')
+        .send({ type: 'paper', mcVersion: '1.21.4', instanceName: 'Disk Probe Server' });
+      expect(res.status).toBeGreaterThanOrEqual(400);
+      expect(JSON.stringify(res.body)).toContain('磁盘剩余空间不足');
+      // 关键：拒绝发生在 mkdir 之前，实例目录不该存在
+      const entries = fs.existsSync(testState.serversDir)
+        ? fs.readdirSync(testState.serversDir)
+        : [];
+      expect(entries).toEqual([]);
+    } finally {
+      statfsSpy.mockRestore();
+    }
+  });
+});
+
 describe('POST /instances/deploy · Paper 主链', () => {
   function setPaperChain({ builds = null, noDownloads = false, badSha = false } = {}) {
     let build;

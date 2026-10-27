@@ -36,6 +36,7 @@ import {
   JAR_DOWNLOAD_MAX_BYTES,
   assertDownloadIntegrity,
   assertSizeWithinLimit,
+  checkDeployDiskSpace,
 } from '../utils/jar-download-guard.js';
 import { assertAllowedDownloadHost, allowedDownloadHosts } from '../utils/jar-download-guard.js';
 import { logger } from '../utils/logger.js';
@@ -550,6 +551,16 @@ export function createServerJarRoutes(serverManager) {
       let instanceCreatedInDb = false;
 
       try {
+        // 磁盘余量预检：放在 mkdir 之前，此时还没有任何落盘。
+        // 磁盘满时服务端不是干净报错——jar 写一半、世界生成到一半、save 被截断，
+        // 而 save 截断是世界损坏的第一大诱因；当场拒绝比中途失败好排查得多。
+        const disk = checkDeployDiskSpace(config.serversDir);
+        if (!disk.ok) {
+          throw new AppError(
+            ErrorCodes.DISK_INSUFFICIENT,
+            `磁盘剩余空间不足（需约 ${Math.round(disk.requiredBytes / 1024 / 1024)} MB，实际剩余 ${Math.round(disk.freeBytes / 1024 / 1024)} MB），请清理后重试`,
+          );
+        }
         // 必须在 try 内：mkdirSync 抛错（ENOTDIR/EACCES/EPERM）时由 catch 统一返回 502 并清理，
         // 否则裸 async handler 的 rejection 不被 Express 4 捕获 → 请求挂起 + unhandledRejection
         fs.mkdirSync(instancePath, { recursive: true });

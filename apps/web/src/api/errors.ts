@@ -64,6 +64,8 @@ export const ErrorCode = {
   /** 取消请求无命中：该实例当前没有进行中的备份/恢复操作 */
   BACKUP_NOT_ACTIVE: 40904,
   BACKUP_FAILED: 50002,
+  /** 磁盘余量不足：部署与备份共用，服务端在动手前拒绝以免写坏世界存档 */
+  DISK_INSUFFICIENT: 50007,
   /** 恢复缺少/不匹配实例名确认（服务端强制，见 POST /backups/:id/restore） */
   BACKUP_RESTORE_CONFIRM_REQUIRED: 40017,
 
@@ -143,6 +145,7 @@ const LOCALIZED_MESSAGES: Partial<Record<ErrorCodeValue, string>> = {
   [ErrorCode.BACKUP_NOT_ACTIVE]: '没有进行中的备份或恢复操作',
   [ErrorCode.RESTORE_IN_PROGRESS]: '已有恢复任务进行中',
   [ErrorCode.BACKUP_FAILED]: '备份失败',
+  [ErrorCode.DISK_INSUFFICIENT]: '磁盘剩余空间不足',
   [ErrorCode.INSTANCE_DELETE_UNNAMED]: '该实例无名称，名称确认不构成有效确认，请确认不可恢复后再试',
   [ErrorCode.BACKUP_RESTORE_CONFIRM_REQUIRED]: '需输入该备份所属实例的名称以确认恢复',
   [ErrorCode.TASK_NOT_FOUND]: '定时任务不存在',
