@@ -124,32 +124,36 @@ describe('_getWorldSize 缓存失效：dirty 标记（实测缺陷回归：子�
   const dir = path.join(tmpBase, 'ws-dirty');
   const worldDir = path.join(dir, 'world');
 
-  it('存档写入发生在 region/ 子目录时顶层缓存判定不失效，_worldSizeDirty 强制重算并清除', () => {
+  it('存档写入发生在 region/ 子目录时顶层缓存判定不失效，_worldSizeDirty 强制重算并清除', async () => {
     fs.mkdirSync(path.join(worldDir, 'region'), { recursive: true });
     // 51MB ≈ 0.049805 GB（服务端保留 6 位小数，换算成 MB 由前端做）；
     // 两个 51MB ≈ 0.099609 GB，增量可区分
     fs.writeFileSync(path.join(worldDir, 'region', 'r.-1.-1.mca'), Buffer.alloc(51 * 1024 * 1024));
     const inst = makeBareInstance(dir);
 
-    const first = inst._getWorldSize();
-    expect(first).toBeCloseTo(0.049805, 6);
+    // 首次数值由后台遍历产出：本次调用先返回空态，遍历完成后收敛
+    expect(inst._getWorldSize()).toBe(0);
+    await inst._worldSizeRefreshPromise;
+    expect(inst._getWorldSize()).toBeCloseTo(0.049805, 6);
 
     // 模拟游戏推进：region/ 子目录内新增文件——world/ 顶层目录 mtime/size 不变
     fs.writeFileSync(path.join(worldDir, 'region', 'r.0.-1.mca'), Buffer.alloc(51 * 1024 * 1024));
     expect(inst._getWorldSize()).toBeCloseTo(0.049805, 6); // 复现缺陷路径：仅靠顶层 stat 判定感知不到
 
-    // 存档事件置 dirty → 下次调用强制重算
+    // 存档事件置 dirty → 重算（本次仍返回旧值，遍历完成后收敛）
     inst._worldSizeDirty = true;
-    expect(inst._getWorldSize()).toBeCloseTo(0.099609, 6);
-    // 重算后 dirty 清除、缓存刷新
+    expect(inst._getWorldSize()).toBeCloseTo(0.049805, 6);
+    // 排重算即清 dirty：遍历期间再存档会重新置位，下次调用再排一轮
     expect(inst._worldSizeDirty).toBe(false);
+    await inst._worldSizeRefreshPromise;
+    expect(inst._getWorldSize()).toBeCloseTo(0.099609, 6);
     expect(inst._worldSizeCache.value).toBeCloseTo(0.099609, 6);
   });
 
   // 实测缺陷回归：服务端曾把 GB 值取整到 2 位小数，导致 <5.12MB 的世界一律归零。
   // 界面于是显示「0 GB」，与「没有存档」无法区分（新建实例实测 2.4MB 即命中）。
   // 前端 worldSizeParts 专门有 <1GB 换算 MB 的分支，取整过早会让它永远拿到 0。
-  it('小存档不被取整归零（2.4MB → 约 0.002289 GB，而非 0）', () => {
+  it('小存档不被取整归零（2.4MB → 约 0.002289 GB，而非 0）', async () => {
     // 独立目录：与上一用例共用 worldDir 会读到其 102MB 残留，断言失去意义
     const smallDir = path.join(tmpBase, 'ws-small');
     const smallWorld = path.join(smallDir, 'world');
@@ -157,6 +161,8 @@ describe('_getWorldSize 缓存失效：dirty 标记（实测缺陷回归：子�
     const bytes = 2_400_000;
     fs.writeFileSync(path.join(smallWorld, 'region', 'r.0.0.mca'), Buffer.alloc(bytes));
     const inst = makeBareInstance(smallDir);
+    inst._getWorldSize();
+    await inst._worldSizeRefreshPromise;
     const gb = inst._getWorldSize();
     expect(gb).toBeGreaterThan(0);
     expect(gb).toBeCloseTo(bytes / 1024 ** 3, 6);
@@ -169,5 +175,41 @@ describe('_getWorldSize 缓存失效：dirty 标记（实测缺陷回归：子�
     const inst = makeBareInstance(path.join(tmpBase, 'ws-missing'));
     expect(inst._getWorldSize()).toBe(0);
     expect(inst._worldSizeCache).toBeUndefined();
+    // 不排后台重算：没有世界可统计，排了只会刷告警
+    expect(inst._worldSizeRefreshPromise).toBeUndefined();
+  });
+
+  // 承重断言：调用返回时遍历仍在进行。世界变大时事件循环必须仍能跑别的任务——
+  // 探针：把 _refreshWorldSize 改回同步遍历（返回前完成），本用例转红。
+  it('大目录统计不阻塞事件循环：调用返回时遍历尚未完成，且并发调用共用一次遍历', async () => {
+    const bigDir = path.join(tmpBase, 'ws-big');
+    const bigWorld = path.join(bigDir, 'world');
+    const regionDir = path.join(bigWorld, 'region');
+    fs.mkdirSync(regionDir, { recursive: true });
+    // 4000 个文件足够让同步遍历占住事件循环，异步遍历期间定时器能插进来
+    for (let i = 0; i < 4000; i++) {
+      fs.writeFileSync(path.join(regionDir, `f${i}.dat`), 'x');
+    }
+    const inst = makeBareInstance(bigDir);
+
+    let refreshDone = false;
+    let timerRan = false;
+    inst._getWorldSize();
+    const inFlight = inst._worldSizeRefreshPromise;
+    inFlight.then(() => {
+      refreshDone = true;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    timerRan = refreshDone === false;
+    await inFlight;
+
+    expect(timerRan).toBe(true); // 调用返回后遍历仍在进行 ⇒ 没有同步占满事件循环
+    expect(inst._getWorldSize()).toBeGreaterThan(0);
+    // 并发调用只跑一轮：在途期间再次触发重算，复用同一个 promise
+    inst._worldSizeDirty = true;
+    inst._getWorldSize();
+    const inFlightAgain = inst._worldSizeRefreshPromise;
+    expect(inst._refreshWorldSize(bigWorld)).toBe(inFlightAgain);
+    await inFlightAgain;
   });
 });

@@ -38,7 +38,10 @@ export function _getWorldSize() {
   // 兼容自定义世界目录名的实例（服务层兜底校验防路径穿越）
   const levelName = this._getSafeLevelName();
   const worldPath = path.join(this.serverPath, levelName);
+  // 尚未生成世界（实例刚部署、首启未完成）：直接 0，且不排后台重算——
+  // 否则每次状态轮询都会排一轮注定失败的全树遍历，并刷一条告警
   if (!fs.existsSync(worldPath)) return 0;
+  const cache = this._worldSizeCache;
 
   // 失效判定双条件：
   // ① dirty 标记——存档完成（"Saved the game"）/启动就绪（Done）/进程退出时
@@ -47,57 +50,90 @@ export function _getWorldSize() {
   //    变化，仅靠 ② 判定会让展示值永久陈旧（实测存档 643MB 后仍显示初值）；
   // ② world/ 顶层目录 stat 变化（mtimeMs/size）——兜底外部替换（恢复备份、
   //    手动放置存档文件、版本升级目录迁移）等面板不感知的事件。
-  // 重算=全树 stat 遍历，触发频率从每轮询（5s）收敛到每次存档（默认 60s）一次，
-  // 避免大地图（数万文件 ~3s 同步遍历）高频阻塞事件循环。失败时保留旧值下次重试。
-  const cache = this._worldSizeCache;
   if (cache && !this._worldSizeDirty) {
     try {
       const st = fs.statSync(worldPath);
       if (st.mtimeMs === cache.mtimeMs && st.size === cache.size) return cache.value;
     } catch {
-      // 世界目录被删除/替换 → 缓存失效，重新计算
+      // 世界目录被删除/替换 → 缓存失效，重新统计
     }
-    this._worldSizeCache = undefined;
   }
-  this._worldSizeDirty = false;
 
-  try {
-    // 遍历前先取目录 stat 作缓存键：若遍历期间目录发生变化，下次调用
-    // 校验失效触发重算，保证展示值收敛到最新大小。
-    const st = fs.statSync(worldPath);
-    // 递归累加所有文件大小（region/、playerdata/、data/ 等子目录
-    // 占据世界数据主体，仅遍历顶层文件会严重低估存档大小）
-    let size = 0;
-    const stack = [worldPath];
-    while (stack.length > 0) {
-      const dir = stack.pop();
-      const entries = fs.readdirSync(dir, { withFileTypes: true });
-      for (const entry of entries) {
-        const fullPath = path.join(dir, entry.name);
-        if (entry.isDirectory()) {
-          stack.push(fullPath);
-        } else if (entry.isFile()) {
-          try {
-            size += fs.statSync(fullPath).size;
-          } catch {}
-        }
+  // 未命中：交给后台重算，本次先返回旧值。
+  // 重算是全树 stat 遍历（大地图数万文件实测 ~3s），同步跑会把事件循环按住整段
+  // 时间——期间 WS 心跳、接口响应、RCON 回包全部排队。该值只用于展示，容许落后
+  // 几秒，故重算走后台、本次返回上一次的结论（无缓存时返回 0，随后收敛）。
+  this._worldSizeDirty = false;
+  this._refreshWorldSize(worldPath);
+  return cache?.value ?? 0;
+}
+
+/**
+ * 后台重算存档大小（不阻塞事件循环）。同一时刻至多一次遍历：并发调用共用同一个
+ * 在途 promise，否则每次状态轮询都会再排一轮数万次 stat。
+ * 返回的 promise 供测试与需要等结果的调用方使用；展示链路不 await 它。
+ */
+export function _refreshWorldSize(worldPath) {
+  if (this._worldSizeRefreshing) return this._worldSizeRefreshPromise;
+  this._worldSizeRefreshing = true;
+  this._worldSizeRefreshPromise = this._computeWorldSize(worldPath)
+    .then((next) => {
+      if (next) this._worldSizeCache = next;
+      return this._worldSizeCache?.value ?? 0;
+    })
+    .catch((err) => {
+      logger.warn(`[Instance ${this.id}] 计算存档大小失败:`, err.message);
+      // 失败保留旧值：把有效存档显示成 0 比显示略旧的值更误导
+      return this._worldSizeCache?.value ?? 0;
+    })
+    .finally(() => {
+      this._worldSizeRefreshing = false;
+    });
+  return this._worldSizeRefreshPromise;
+}
+
+/** 遍历世界目录累加文件字节数。逐目录并发 stat，单目录内文件数决定并发上限。 */
+export async function _computeWorldSize(worldPath) {
+  // 遍历前先取目录 stat 作缓存键：若遍历期间目录发生变化，下次调用校验失效重算，
+  // 保证展示值收敛到最新大小
+  const st = await fs.promises.stat(worldPath);
+  // 递归累加所有文件大小（region/、playerdata/、data/ 等子目录
+  // 占据世界数据主体，仅遍历顶层文件会严重低估存档大小）
+  let size = 0;
+  const stack = [worldPath];
+  while (stack.length > 0) {
+    const dir = stack.pop();
+    let entries;
+    try {
+      entries = await fs.promises.readdir(dir, { withFileTypes: true });
+    } catch {
+      // 遍历期间目录被删（回档/世界重建）→ 跳过该子树，不让整次统计失败
+      continue;
+    }
+    const pending = [];
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) stack.push(fullPath);
+      else if (entry.isFile()) {
+        pending.push(
+          fs.promises
+            .stat(fullPath)
+            .then((s) => s.size)
+            .catch(() => 0),
+        );
       }
     }
-    this._worldSizeCache = {
-      // 保留 6 位小数（分辨率约 1KB）而非 2 位：2 位小数会把 <5.12MB 的世界全部
-      // 归零——新建实例实测 2.4MB → 0.00 → 界面显示「0 GB」，读起来像没有存档。
-      // 前端 worldSizeParts 本就把 <1GB 换算成 MB 展示，在服务端过早取整会让该
-      // 分支永远拿到 0（其注释正写着「避免误导性的 0.6」，故精度必须保留到前端）。
-      value: Math.round((size / (1024 * 1024 * 1024)) * 1e6) / 1e6,
-      mtimeMs: st.mtimeMs,
-      size: st.size,
-    };
-    return this._worldSizeCache.value;
-  } catch (err) {
-    logger.warn(`[Instance ${this.id}] 计算存档大小失败:`, err.message);
-    // 遍历/stat 失败（瞬时 IO 错误等）：回退旧缓存值，避免面板把有效存档显示为 0
-    return this._worldSizeCache?.value ?? 0;
+    size += (await Promise.all(pending)).reduce((a, b) => a + b, 0);
   }
+  return {
+    // 保留 6 位小数（分辨率约 1KB）而非 2 位：2 位小数会把 <5.12MB 的世界全部
+    // 归零——新建实例实测 2.4MB → 0.00 → 界面显示「0 GB」，读起来像没有存档。
+    // 前端 worldSizeParts 本就把 <1GB 换算成 MB 展示，在服务端过早取整会让该
+    // 分支永远拿到 0（其注释正写着「避免误导性的 0.6」，故精度必须保留到前端）。
+    value: Math.round((size / (1024 * 1024 * 1024)) * 1e6) / 1e6,
+    mtimeMs: st.mtimeMs,
+    size: st.size,
+  };
 }
 
 /// 读取世界种子（NBT 格式），兼容新旧 MC 版本。
@@ -345,7 +381,7 @@ export function _readWeatherFromLevelDat() {
 export function _readWorldSpawnFromLevelDat(rawOverride) {
   const levelName = this._getSafeLevelName();
   const levelDatPath = path.join(this.serverPath, levelName, 'level.dat');
-  if (!fs.existsSync(levelDatPath)) return;
+  if (!fs.existsSync(levelDatPath)) return null;
 
   try {
     // rawOverride：get _worldSpawn 已读取过原始字节时直接复用，避免重复读盘
@@ -390,4 +426,8 @@ export function _readWorldSpawnFromLevelDat(rawOverride) {
   } catch (e) {
     logger.warn(`[${this.id}] Failed to read world spawn from level.dat:`, e.message);
   }
+  // 读出结果一并返回：调用方既可能用副作用（本方法同时刷新 this._worldSpawn），
+  // 也可能只想要「这次解析到的出生点」。返回 undefined 会让后者拿到「没有出生点」
+  // 与「解析失败」不可区分。
+  return this._worldSpawn ?? null;
 }
