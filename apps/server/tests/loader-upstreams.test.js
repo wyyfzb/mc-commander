@@ -147,7 +147,21 @@ describe('resolveFabricDownload', () => {
     });
   });
 
-  it('loader 缺失时用默认值（不该让整条部署失败）', async () => {
-    expect((await resolveFabricDownload('1.21.4', undefined)).url).toContain('/1.21.4/0.16.10/');
+  it('loader 缺失时取上游最新稳定版（不写死版本）', async () => {
+    jsonImpl.current = (url) => {
+      expect(url).toContain('/v2/versions/loader');
+      // 上游由新到旧，且含不稳定项：必须跳过 unstable 取第一条 stable
+      return Promise.resolve([
+        { version: '0.20.2', stable: false },
+        { version: '0.20.1', stable: true },
+        { version: '0.20.0', stable: true },
+      ]);
+    };
+    expect((await resolveFabricDownload('1.21.4', undefined)).url).toContain('/1.21.4/0.20.1/');
+  });
+
+  it('上游取不到稳定 loader → 抛可操作错误（不给一个必然 404 的地址）', async () => {
+    jsonImpl.current = () => Promise.resolve([{ version: '0.20.2', stable: false }]);
+    await expect(resolveFabricDownload('1.21.4', undefined)).rejects.toThrow(/Fabric Loader/);
   });
 });

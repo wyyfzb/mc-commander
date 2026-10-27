@@ -58,15 +58,26 @@ export async function resolvePurpurDownload(mcVersion) {
   return { url, expectedHash: digest ? { algorithm: 'md5', digest } : null };
 }
 
+/** 上游最新稳定 loader 版本（列表由新到旧，取第一条 stable） */
+async function latestFabricLoader() {
+  const data = await httpJson('https://meta.fabricmc.net/v2/versions/loader', UPSTREAM_OPTIONS);
+  const stable = (Array.isArray(data) ? data : []).find((v) => v?.stable === true && v?.version);
+  if (!stable) throw new Error('无法从上游取得可用的 Fabric Loader 版本，请稍后重试');
+  return stable.version;
+}
+
 /**
  * fabric 服务端 jar 的下载地址。
  *
  * 上游给的是**按 loader 版本拼出来的固定路径**，没有独立的构建查询接口，也**不提供摘要**
  * ⇒ 返回的 `expectedHash` 恒为 `null`（如实表达「上游没给」，而不是拿别的字段凑一个）。
- * `loader` 省略时用一个已知可用的默认值——loader 版本由请求带上来，缺失时不该让整条部署失败。
+ *
+ * loader 缺省取**上游最新稳定版**，不写死：写死的版本会随时间沉底，而模组按 loader 版本
+ * 声明硬依赖（实测 Chunky 1.4.40 要 `fabricloader >= 0.16.14`），装上去直接 HARD_DEP
+ * 导致开服失败——用户看到的只是「装完模组服务器起不来」。
  */
 export async function resolveFabricDownload(mcVersion, loaderVersion) {
-  const loader = loaderVersion || '0.16.10';
+  const loader = loaderVersion || (await latestFabricLoader());
   return {
     url: `https://meta.fabricmc.net/v2/versions/loader/${mcVersion}/${loader}/1.0.1/server/jar`,
     expectedHash: null,

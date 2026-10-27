@@ -54,6 +54,11 @@ vi.mock('../src/utils/java-detector.js', () => ({
   findJavaPath: vi.fn(() => '/usr/bin/java'),
 }));
 
+// 面板自供 Java：本组只验证部署主链，不触达真实运行时下载
+vi.mock('../src/services/java-runtime.service.js', () => ({
+  ensureJavaRuntime: vi.fn(async () => '/usr/bin/java'),
+}));
+
 vi.mock('../src/services/mc_server.js', async () => {
   const fsSync = await import('node:fs');
   return { atomicWriteFile: (p, c) => fsSync.writeFileSync(p, c) };
@@ -129,6 +134,13 @@ vi.mock('../src/utils/http-client.js', async () => {
         md5: art?.hash,
       });
     }
+    // fabric loader 缺省值取上游最新稳定版：列表由新到旧，须跳过 unstable
+    if (u.includes('/v2/versions/loader')) {
+      return Promise.resolve([
+        { version: '0.20.2', stable: false },
+        { version: '0.20.1', stable: true },
+      ]);
+    }
     if (u.includes('promotions_slim')) {
       return Promise.resolve({
         promos: { '1.21.4-recommended': '51.0.0', '1.21.4-latest': '51.0.0' },
@@ -142,6 +154,7 @@ vi.mock('../src/utils/http-client.js', async () => {
 });
 
 const { createServerJarRoutes } = await import('../src/routes/server-jar.js');
+const { ensureJavaRuntime } = await import('../src/services/java-runtime.service.js');
 const { InstanceModel, AuditLogModel } = await import('../src/db/index.js');
 const { errorHandler } = await import('../src/middleware/error_handler.js');
 
@@ -210,6 +223,8 @@ beforeEach(() => {
   testState.dbCreateError = null;
   httpState.jsonTable = {};
   httpState.streamImpl = defaultStreamImpl(JAR_BYTES);
+  // 面板自供 Java：默认视为本机已满足，用例可覆盖
+  ensureJavaRuntime.mockImplementation(async () => '/usr/bin/java');
 });
 
 afterEach(() => {
@@ -815,7 +830,7 @@ describe('POST /instances/deploy · 下载异常与核心回退', () => {
     );
   });
 
-  it('fabric：core 失败 → 回退 meta.fabricmc 直链（loaderVersion 缺省 0.16.10）下载成功', async () => {
+  it('fabric：core 失败 → 回退 meta.fabricmc 直链（loaderVersion 缺省取上游最新稳定版）下载成功', async () => {
     testState.mcCoreThrow = true;
     const { app } = buildApp();
 
@@ -826,7 +841,7 @@ describe('POST /instances/deploy · 下载异常与核心回退', () => {
     expect(res.status).toBe(200);
     const { httpStream } = await import('../src/utils/http-client.js');
     expect(httpStream.mock.calls[0][0]).toBe(
-      'https://meta.fabricmc.net/v2/versions/loader/1.21.4/0.16.10/1.0.1/server/jar',
+      'https://meta.fabricmc.net/v2/versions/loader/1.21.4/0.20.1/1.0.1/server/jar',
     );
   });
 
@@ -1243,5 +1258,89 @@ describe('runFirstLaunch 首启行为', () => {
       expect(stages).not.toContain('starting');
       expect(stages).toContain('complete');
     });
+  });
+});
+
+/* 面板自供 Java：缺目标 Java 时自动下载并落地（用户零操作） */
+describe('POST /instances/deploy · 面板自供 Java', () => {
+  beforeEach(() => {
+    testState.latestBuild = {
+      downloads: { application: { url: 'https://piston-data.mojang.com/jar/server.jar' } },
+    };
+  });
+
+  it('缺 Java 时先补齐并推 prepare_java 进度，实例落地面板自供路径', async () => {
+    const suppliedPath = '/home/steve/mc/var/jre/21/bin/java';
+    ensureJavaRuntime.mockImplementation(async (_major, opts) => {
+      opts.onProgress?.(0.5);
+      return suppliedPath;
+    });
+    const { app, manager } = buildApp();
+
+    const res = await request(app)
+      .post('/api/instances/deploy')
+      .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Java Supply', eula: false });
+
+    expect(res.status).toBe(200);
+    expect(ensureJavaRuntime).toHaveBeenCalledWith(
+      '21',
+      expect.objectContaining({ mcVersion: '1.21.4' }),
+    );
+    const prepare = manager.emit.mock.calls
+      .filter((c) => c[0] === 'deployProgress')
+      .map((c) => c[1])
+      .filter((p) => p.stage === 'prepare_java');
+    expect(prepare.length).toBeGreaterThan(0);
+    expect(prepare[0].percent).toBe(0.5);
+    expect(prepare[0].detail).toBe('正在准备 Java 21…');
+    expect(InstanceModel.create.mock.calls[0][0].javaPath).toBe(suppliedPath);
+    expect(res.body.data.javaVersion).toBe('21');
+  });
+
+  it('Java 主版本以 jar 内 version.json 为准（不按 MC 版本号猜）', async () => {
+    const AdmZip = (await import('adm-zip')).default;
+    const zip = new AdmZip();
+    zip.addFile(
+      'version.json',
+      Buffer.from(JSON.stringify({ id: '1.21.4', java_version: 25, protocol_version: 1 })),
+    );
+    httpState.streamImpl = defaultStreamImpl(zip.toBuffer());
+    const { app } = buildApp();
+
+    const res = await request(app)
+      .post('/api/instances/deploy')
+      .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Jar Authority', eula: false });
+
+    expect(res.status).toBe(200);
+    // 推荐表（mock 恒返 '21'）被 jar 的 java_version=25 覆盖
+    expect(ensureJavaRuntime).toHaveBeenCalledWith(
+      '25',
+      expect.objectContaining({ mcVersion: '1.21.4' }),
+    );
+    expect(res.body.data.javaVersion).toBe('25');
+  });
+
+  it('自动补齐失败 → 部署失败并回报可操作中文提示，不静默回落系统 java', async () => {
+    const message =
+      '无法自动准备 Java 21：Mojang 未提供 linux/arm64 平台的官方运行时，本平台需自行安装 Java 21 后重试';
+    ensureJavaRuntime.mockImplementation(async () => {
+      throw new Error(message);
+    });
+    const { app, manager } = buildApp();
+
+    const res = await request(app)
+      .post('/api/instances/deploy')
+      .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Java Missing', eula: false });
+
+    expect(res.status).toBe(502);
+    expect(res.body.message).toContain('无法自动准备 Java 21');
+    const events = manager.emit.mock.calls
+      .filter((c) => c[0] === 'deployProgress')
+      .map((c) => c[1]);
+    expect(events.find((p) => p.stage === 'error').error).toContain('无法自动准备 Java 21');
+    // 一个后续阶段都不该出现：失败即终态，不能假装继续
+    expect(events.some((p) => ['first_launch', 'starting', 'complete'].includes(p.stage))).toBe(
+      false,
+    );
   });
 });
