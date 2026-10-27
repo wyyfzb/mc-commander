@@ -84,16 +84,35 @@ export function runtimePackageJson(pkg) {
  * 内网域名在用户机上不存在 ⇒ 装不上。故这里 fail-closed，而不是信任生成参数。
  */
 export function findForeignResolved(lockText, allowedHost = 'registry.npmjs.org') {
+  // 按条目判，不用全文正则抓 resolved：判据要的是「这一条是不是本地链接」，只有
+  // 条目级才看得见 link 标志。
+  //
+  // 本地链接条目形如 {"resolved": "mc-schemas", "link": true}——指向产物内的 vendor
+  // 目录，装机时随包就在盘上，不经 registry。它的 resolved 是裸相对路径、解析不出
+  // host，按 host 比对会判成外域而中止打包。
+  //
+  // 解析成对象再遍历：lock 条目里可以出现嵌套对象（engines / dependencies 等），
+  // 用 `[^{}]` 圈范围的正则会在嵌套时整体匹配失败，把带嵌套对象的坏条目静默漏掉。
+  let lock
+  try {
+    lock = JSON.parse(lockText)
+  } catch {
+    return ['package-lock.json 不是合法 JSON']
+  }
   const bad = []
-  for (const m of lockText.matchAll(/"resolved":\s*"([^"]+)"/g)) {
+  for (const [name, entry] of Object.entries(lock.packages ?? {})) {
+    if (!entry || typeof entry !== 'object') continue
+    if (entry.link === true) continue
+    const resolved = entry.resolved
+    if (typeof resolved !== 'string') continue
     let host
     try {
-      host = new URL(m[1]).host
+      host = new URL(resolved).host
     } catch {
-      bad.push(m[1])
+      bad.push(`${name}: ${resolved}`)
       continue
     }
-    if (host !== allowedHost) bad.push(m[1])
+    if (host !== allowedHost) bad.push(`${name}: ${resolved}`)
   }
   return bad
 }
