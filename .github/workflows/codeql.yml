@@ -1,0 +1,42 @@
+name: CodeQL
+
+# 代码扫描的判据住仓库：哪些路径不扫、哪条规则已知误报，都按 PR 评审，
+# 而不是在仓库设置里点。默认扫描（不改仓库就能开的那种）没有这两项能力。
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # 每周一次：未改动的代码也可能因规则更新而出现新问题
+    - cron: '17 3 * * 1'
+
+# 默认最小权限；写 security-events 才能上传结果
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  analyze:
+    name: 代码扫描（${{ matrix.language }}）
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [javascript-typescript, actions]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          config-file: ./.github/codeql/codeql-config.yml
+      # JS/TS 与 actions 都不需要先构建：跳过 autobuild，省一轮安装
+      - uses: github/codeql-action/analyze@v4
+        with:
+          category: /language:${{ matrix.language }}
