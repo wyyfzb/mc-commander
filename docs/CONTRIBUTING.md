@@ -84,7 +84,7 @@ npm run format:check    # 只检查不改写（CI 与 tools/ci/local-check.sh �
 ```
 
 - 范围：全仓 `.ts/.tsx/.js/.mjs` 与配置文件；**不含 CSS 与 Markdown**（设计 token 样式表由门禁脚本
-  解析、文档为手写排版），也不含 `dist/`、`public/`、`coverage/`、e2e 产物、锁文件与 `.ai/`、`.mimosa/`。
+  解析、文档为手写排版），也不含 `dist/`、`public/`、`coverage/`、e2e 产物、锁文件与本地工具目录。
 - 风格参数向各包主导风格收敛（2 空格缩进、单引号、JSX 属性双引号、尾逗号 all、行宽 100；
   分号按包分流：服务端有、前端/契约/e2e 无）。接入时少数偏离既有风格的现场被一并归一
   （shadcn 生成的 `components/ui/*.tsx` 由双引号改单引号、个别服务端文件补分号），属一次性收敛。

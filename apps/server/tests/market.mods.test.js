@@ -67,7 +67,7 @@ const JAR = makeJar();
 /// 官方哈希只对上游那一份字节成立：夹具字节变了就得重算，否则会撞上完整性闸门
 const JAR_SHA512 = crypto.createHash('sha512').update(JAR).digest('hex');
 
-/** 搜索结果：Sodium 纯客户端 + Chunky 服务端可用（字段取自 .ai/temp 真实响应） */
+/** 搜索结果：Sodium 纯客户端 + Chunky 服务端可用（字段形态与上游响应一致） */
 const MOD_SEARCH_FIXTURE = {
   total_hits: 2,
   hits: [

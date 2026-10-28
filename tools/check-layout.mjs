@@ -158,7 +158,7 @@ if (existsSync(configPath)) {
 // ⑤ 前端包里不得再长出工具链目录
 // 判据＝「谁消费」：E2E、mock 后端、门禁脚本判定/驱动的是整个前端，故住 tools/。
 // 只列具体路径，不按「脚本」泛判——交付给用户的脚本（apps/server/scripts/deploy-*.sh）
-// 与一次性探针（.ai/）各有归属，泛判会三者混一误报。
+// 与不入库的私人脚本各有归属，泛判会三者混一误报。
 for (const banned of ['e2e', 'scripts', 'playwright.config.ts']) {
   if (
     tracked.has(`apps/web/${banned}`) ||

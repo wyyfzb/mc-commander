@@ -115,7 +115,7 @@ describe('安装期 fail-closed', () => {
 describe('载荷 lock 的依赖地址必须用户机可达', () => {
   const STAGER = readFileSync(join(REPO, 'tools/deploy/stage-payload.mjs'), 'utf8');
 
-  it('内网镜像域被判违规（本机 npm 默认走内网镜像，lock 会照抄它）', () => {
+  it('内网镜像域被判违规（打包机的 registry 会被 lock 照抄）', () => {
     const lock = JSON.stringify({
       packages: {
         'node_modules/x': {
