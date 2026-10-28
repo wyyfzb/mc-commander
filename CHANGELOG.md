@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.0](https://github.com/wyyfzb/mc-commander/compare/v0.10.3...v0.11.0) (2026-10-28)
+
+
+### Features
+
+* **panel:** 运维闭环收口——部署、升级、接管与插件市场 ([#688](https://github.com/wyyfzb/mc-commander/issues/688)) ([e6f0845](https://github.com/wyyfzb/mc-commander/commit/e6f084546e1ea06d093cd9cd6ba72e411aae536d))
+
 ## [0.10.3](https://github.com/wyyfzb/mc-commander/compare/v0.10.2...v0.10.3) (2026-10-26)
 
 
