@@ -176,6 +176,16 @@ describe('market.service 分支补测', () => {
       expect(sanitizeMarketFileName('dir\\back\\file.jar', opts)).toBe('file.jar');
     });
 
+    it('保留上游文件名里的 + 构建标记（剥掉会变成看着像别的版本的名字）', () => {
+      // 实测 Modrinth：fabric-api-0.136.1+1.21.8.jar；剥掉 + 得到 0.136.11.21.8
+      expect(
+        sanitizeMarketFileName('fabric-api-0.136.1+1.21.8.jar', {
+          slug: 'fabric-api',
+          versionNumber: '0.136.1+1.21.8',
+        }),
+      ).toBe('fabric-api-0.136.1+1.21.8.jar');
+    });
+
     it('非字母数字开头补 mc- 前缀（满足上传白名单首字符要求）', () => {
       expect(sanitizeMarketFileName('-weird.jar', opts)).toBe('mc--weird.jar');
     });
@@ -274,7 +284,9 @@ describe('market.service 分支补测', () => {
 
 // ── 更新检测域补测（comparePluginVersions / matchProjectByPluginName / checkPluginUpdates）──
 
-vi.mock('../src/services/plugin.service.js', () => ({
+// 只替身读写盘的两个函数；装载目标表是纯数据（目录名/启停能力），保留真实现
+vi.mock('../src/services/plugin.service.js', async (importOriginal) => ({
+  ...(await importOriginal()),
   listPlugins: vi.fn(),
   uploadPlugin: vi.fn(),
 }));
@@ -530,6 +542,40 @@ describe('checkPluginUpdates 行为级（更新检测域收口）', () => {
     expect(res.results.some((r) => r.file === 'nometa.jar')).toBe(false);
     expect(res.results.some((r) => r.file === 'p24.jar')).toBe(false);
     expect(res.results.some((r) => r.file === 'p4.jar')).toBe(true);
+  });
+
+  it('未检测的插件按原因计数上报（界面不能把「没查」说成「已是最新」）', async () => {
+    const plugins = [
+      plugin({ file: 'off1.jar', enabled: false }),
+      plugin({ file: 'off2.jar', enabled: false }),
+      plugin({ file: 'nometa.jar', meta: {} }),
+      ...Array.from({ length: 23 }, (_, i) =>
+        plugin({ file: `p${i}.jar`, meta: { name: `Plug ${i}`, version: '1.0' } }),
+      ),
+    ];
+    listPlugins.mockReturnValue({ plugins });
+    httpJson.mockImplementation(async (url) => {
+      if (String(url).includes('/search')) return { total_hits: 0, hits: [] };
+      throw new Error('unexpected');
+    });
+
+    const res = await checkPluginUpdates('/tmp/server');
+
+    // 两类不参与原因必须分开计：处置办法不同（停用的要用户自己启用，超限的要分批）
+    expect(res.skipped).toEqual({ disabled: 2, overLimit: 3, noMeta: 1 });
+    // 三类加起来必须等于没被检测的全部插件，不能有第四个静默出口
+    expect(
+      res.results.length + res.skipped.disabled + res.skipped.overLimit + res.skipped.noMeta,
+    ).toBe(plugins.length);
+  });
+
+  it('全部插件都被检测时三个计数为 0（不是缺字段）', async () => {
+    listPlugins.mockReturnValue({ plugins: [plugin()] });
+    httpJson.mockImplementation(routeUpstream());
+
+    const res = await checkPluginUpdates('/tmp/server');
+
+    expect(res.skipped).toEqual({ disabled: 0, overLimit: 0, noMeta: 0 });
   });
 });
 

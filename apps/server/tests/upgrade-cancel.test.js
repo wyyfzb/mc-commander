@@ -314,6 +314,7 @@ describe('取消窗口与收尾口径', () => {
     expect(InstanceModel.update).toHaveBeenCalledWith('inst-1', {
       jarFile: OLD_JAR_NAME,
       mcVersion: '1.20.4',
+      modLoader: 'Vanilla',
     });
     expect(manager._instance.jarFile).toBe(OLD_JAR_NAME);
     expect(manager._instance.mcVersion).toBe('1.20.4');

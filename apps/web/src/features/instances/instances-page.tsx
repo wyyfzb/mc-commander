@@ -51,7 +51,10 @@ function DeployingBanner() {
   const deploying = useDeployStore((s) => s.deploying)
   const progress = useDeployStore((s) => s.progress)
   if (!deploying) return null
-  const stageLabel = progress ? (DEPLOY_STAGE_LABELS[progress.stage] ?? '正在部署…') : '正在部署…'
+  // detail 优先：带版本号的阶段（如「正在准备 Java 21…」）无法用固定标签表达
+  const stageLabel = progress
+    ? (progress.detail ?? DEPLOY_STAGE_LABELS[progress.stage] ?? '正在部署…')
+    : '正在部署…'
   const nameSuffix = progress?.instanceName ? `「${progress.instanceName}」` : ''
   const pctSuffix =
     progress != null && progress.stage === 'download' && progress.total > 0

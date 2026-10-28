@@ -53,6 +53,30 @@ export async function resolveVanillaDownload(mcVersion) {
 }
 
 /**
+ * 取指定 MC 版本在 Mojang 版本元数据里声明的 Java 运行时组件（权威映射）。
+ *
+ * 面板自供 Java 时用它决定下载哪个 java-runtime 组件：组件名随版本变化
+ * （1.16.5 是 jre-legacy、1.20.4 是 java-runtime-gamma、26.x 是 java-runtime-epsilon），
+ * 只有版本元数据能给出权威值；取不到（快照未收录/上游字段变更）返回 null，由调用方查表。
+ *
+ * @param {string} mcVersion 目标 MC 版本
+ * @returns {Promise<{ component: string, majorVersion: number } | null>}
+ */
+export async function resolveVanillaJavaRuntime(mcVersion) {
+  const manifest = await fetchVanillaManifest();
+  const versionEntry = manifest?.versions?.find((v) => v.id === mcVersion);
+  if (!versionEntry?.url) return null;
+  const detail = await httpJson(versionEntry.url, UPSTREAM_OPTIONS);
+  const javaVersion = detail?.javaVersion;
+  const component = javaVersion?.component;
+  const majorVersion = javaVersion?.majorVersion;
+  if (typeof component !== 'string' || component === '' || !Number.isInteger(majorVersion)) {
+    return null;
+  }
+  return { component, majorVersion };
+}
+
+/**
  * 正式版列表（按清单顺序＝由新到旧），供部署对话框的版本选择器使用。
  * @param {number} limit 上限（端点历来只给前 30 个）
  */

@@ -18,17 +18,25 @@ import {
 } from '../utils/jar-download-guard.js';
 import { logger } from '../utils/logger.js';
 import { resolveVanillaDownload } from './vanilla-manifest.js';
+import { syncInstanceJson } from './mc_server.js';
 import { resolvePurpurDownload } from './loader-upstreams.js';
 import {
   findJavaPathStrict,
   getRecommendedJavaVersion,
   isJavaSatisfied,
 } from '../utils/java-detector.js';
+import { ensureJavaRuntime } from './java-runtime.service.js';
 import { readJarVersionInfo } from './mc-server/jar-version.js';
 import { getServerVersion } from '../utils/version.js';
 import { beginCancellableTask, TASK_KINDS, TaskCancelledError } from '../utils/cancellable-task.js';
 
 const VALID_TYPES = new Set(['vanilla', 'paper', 'purpur']);
+
+/** DB `mod_loader` 列的取值形态（首字母大写，与部署写入一致） */
+function typeLabel(type) {
+  const t = String(type || 'vanilla').toLowerCase();
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
 
 /// mcVersion 白名单：1-3 位数字段、最多 4 段点分形态（1 / 1.21 /
 /// 1.21.4 / 265）。从源头杜绝 '..'、'/'、'\\'、空白、控制字符与 URL 特殊
@@ -69,6 +77,8 @@ function assertSafeInstancePath(serverPath, fileName) {
 const UPGRADE_STAGES = {
   BACKUP: 'backup',
   DOWNLOAD: 'download',
+  // 补齐目标版本要求的 Java（面板自供 JRE）：与 download 分档，进度含义是「准备 Java」
+  PREPARE_JAVA: 'prepare_java',
   REPLACE: 'replace',
   VERIFY: 'verify',
   COMPLETED: 'completed',
@@ -458,9 +468,15 @@ export class UpgradeService {
         InstanceModel.update(instanceId, {
           jarFile: oldJarFile,
           mcVersion: instance._originalMcVersion,
+          // 类型与磁盘上的 jar 必须同步回写：只在内存里还原会让 panel 记录的类型
+          // 与真实 jar 各自停在升级前后两端
+          modLoader: typeLabel(instance._originalModLoader),
         });
         instance.jarFile = oldJarFile;
         instance.mcVersion = instance._originalMcVersion;
+        instance.modLoader = instance._originalModLoader;
+        // 兜底文件同口径：DB 丢失后按 instance.json 恢复时，类型与版本必须与磁盘一致
+        syncInstanceJson(instance);
       }
     } finally {
       // 清理临时旧 JAR（await：回滚完成（含清理）后才 resolve，
@@ -519,9 +535,13 @@ export class UpgradeService {
     );
 
     let backupId = null;
+    // 备份恢复失败的原因：非空时终态不能说「已回滚」
+    let restoreFailure = null;
 
-    // 保存原始版本用于回滚
+    // 保存原始版本与类型用于回滚：升级允许换服务端类型（vanilla/paper/purpur），
+    // 回滚必须把类型一并还原：只还原版本会让实例记录与实际 jar 脱节
     instance._originalMcVersion = oldMcVersion;
+    instance._originalModLoader = instance.modLoader;
 
     // 可取消登记：取消端点据注册表定位本次升级（与部署共用同一注册表实现）。
     // 取消语义 = 以 TaskCancelledError 打断被 await 的步骤，收尾交给下面的 catch
@@ -553,6 +573,24 @@ export class UpgradeService {
       if (requiredJava) {
         const currentJava = instance.javaPath;
         if (!isJavaSatisfied(currentJava, requiredJava)) {
+          // 缺目标 Java 时面板自己补齐（用户零操作）：下载期间推「正在准备 Java」进度，
+          // 补齐失败会抛中文可操作错误，交给外层回滚（备份与旧 jar 都还在）
+          const prepared = await ensureJavaRuntime(requiredJava, {
+            mcVersion,
+            signal: task.signal,
+            onProgress: (percent) =>
+              this._emitProgress(
+                instanceId,
+                UPGRADE_STAGES.PREPARE_JAVA,
+                Math.round(percent * 100),
+                `正在准备 Java ${requiredJava}...`,
+              ),
+          });
+          logger.info(
+            `[upgrade ${instanceId}] Java ${currentJava} 不满足 ${requiredJava}，已准备 ${prepared}`,
+          );
+          // 补齐后再走一次严格查找：本机 Java 集合可能在下载期间变化，且「落地成功」
+          // 与「面板能选到」是两件事，选不到就仍按失败处理
           const replacement = findJavaPathStrict(requiredJava);
           if (!replacement) {
             // 找不到满足要求的 Java ⇒ 中止升级，交给外层回滚（备份与旧 jar 都还在）
@@ -590,11 +628,21 @@ export class UpgradeService {
       }
       if (jarCopied) await fs.promises.rename(backupTmpPath, backupJarPath);
       task.throwIfCancelled();
-      // 更新 DB：jarFile + mcVersion
+      // 更新 DB：jarFile + mcVersion + 类型
+      // 升级请求里的 type 是新 jar 的服务端类型，可能与原类型不同（Paper → Vanilla 这类
+      // 转换）。类型不跟着写就会出现「面板标 Paper、磁盘装 Vanilla」——插件照装不加载，
+      // 而界面没有任何异常。DB 的列沿用首字母大写的取值形态（部署写入即此形态）。
       const { InstanceModel } = await import('../db/index.js');
-      InstanceModel.update(instanceId, { jarFile: newJarName, mcVersion });
+      InstanceModel.update(instanceId, {
+        jarFile: newJarName,
+        mcVersion,
+        modLoader: typeLabel(type),
+      });
       instance.jarFile = newJarName;
       instance.mcVersion = mcVersion;
+      instance.modLoader = String(type || 'vanilla').toLowerCase();
+      // 兜底文件同口径：DB 丢失后按 instance.json 恢复时，类型与版本必须与磁盘一致
+      syncInstanceJson(instance);
       this._emitProgress(instanceId, UPGRADE_STAGES.REPLACE, 100, '替换完成');
       // 替换已落定但校验未开始的窗口：此处的取消必须走「替换后」的收尾（回滚），
       // 漏掉这一步会让取消被吞掉、最终以「升级失败」收场并触发一次世界恢复
@@ -644,12 +692,17 @@ export class UpgradeService {
             `升级失败: ${err.message}，正在回滚...`,
           );
           await this._doRollback(instanceId, backupJarPath, oldJarFile);
-          // 回滚后尝试恢复备份
+          // 回滚后尝试恢复备份。恢复失败不阻塞主流程，但绝不能静默：
+          // 此时磁盘上的世界仍是「新版本首启失败」后的状态，与「已回滚」相反
           if (backupId) {
             try {
               await this.backupService.restoreBackup(backupId);
-            } catch {
-              // 恢复备份失败不阻塞主流程
+            } catch (restoreErr) {
+              restoreFailure = restoreErr.message;
+              logger.error(
+                `[UpgradeService] 备份恢复失败（${backupId}），世界未回滚到升级前状态:`,
+                restoreErr.message,
+              );
             }
           }
         } else {
@@ -685,7 +738,11 @@ export class UpgradeService {
         instanceId,
         cancelled ? UPGRADE_STAGES.CANCELLED : UPGRADE_STAGES.FAILED,
         0,
-        cancelled ? cancelDetail : `升级失败并已回滚: ${err.message}`,
+        cancelled
+          ? cancelDetail
+          : restoreFailure
+            ? `升级失败，回滚未完成：世界备份恢复失败（${restoreFailure}），请用备份 ${backupId} 手动恢复`
+            : `升级失败并已回滚: ${err.message}`,
       );
       this._activeUpgrades.delete(instanceId);
       // 取消不是故障：终态已按 cancelled 发出，正常返回而不是抛错——抛出会让

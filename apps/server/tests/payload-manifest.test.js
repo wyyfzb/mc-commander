@@ -7,12 +7,15 @@
  *      契约包源码）：它们对运行时进程与安装过程都没有消费者；
  *   ③ 契约包清单只保留运行期字段（`exports.types` 指向不进产物的 `src/`，留着就是死指针）；
  *   ④ 打包入口唯一：发布流程必须调用组装器，不得再出现「拷整包 + 排除清单」的写法；
- *   ⑤ 安装脚本在解包阶段拦住缺契约包产物的包（缺了它安装照样成功，启动才崩）。
+ *   ⑤ 安装脚本在解包阶段拦住缺契约包产物的包（缺了它安装照样成功，启动才崩）；
+ *   ⑥ lock 里的依赖地址必须是公共 registry——`npm ci` 严格按 `resolved` 取包，
+ *      内网镜像域名在用户机上解析不到，安装会停在「装 npm 依赖」一步。
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
+  findForeignResolved,
   findViolations,
   PAYLOAD,
   runtimePackageJson,
@@ -106,5 +109,42 @@ describe('安装期 fail-closed', () => {
   it('依赖按 lock 精确重建（npm ci 而非 npm install）', () => {
     expect(INSTALLER).toContain('npm ci --omit=dev');
     expect(INSTALLER).not.toMatch(/^npm install --omit=dev$/m);
+  });
+});
+
+describe('载荷 lock 的依赖地址必须用户机可达', () => {
+  const STAGER = readFileSync(join(REPO, 'tools/deploy/stage-payload.mjs'), 'utf8');
+
+  it('内网镜像域被判违规（打包机的 registry 会被 lock 照抄）', () => {
+    const lock = JSON.stringify({
+      packages: {
+        'node_modules/x': {
+          resolved: 'http://mirrors.tencentyun.com/npm/x/-/x-1.0.0.tgz',
+        },
+      },
+    });
+    expect(findForeignResolved(lock)).toHaveLength(1);
+  });
+
+  it('公共 registry 放行（正向）', () => {
+    const lock = JSON.stringify({
+      packages: {
+        'node_modules/x': {
+          resolved: 'https://registry.npmjs.org/x/-/x-1.0.0.tgz',
+        },
+      },
+    });
+    expect(findForeignResolved(lock)).toEqual([]);
+  });
+
+  it('生成 lock 时显式钉住公共 registry，不继承打包机的 npm 配置', () => {
+    // 只钉住「传入 --registry」这一件事：若改成信任环境（去掉该参数），
+    // 打包机换一台（CI 与维护者机器 registry 不同）就会静默产出装不上的包
+    expect(STAGER).toMatch(/'--registry=https:\/\/registry\.npmjs\.org'/);
+  });
+
+  it('生成后仍要自检一遍：参数被 npm 忽略时也要在打包期拦下', () => {
+    // 变异：删掉 assertPublicLock 调用 ⇒ 转红
+    expect(STAGER).toMatch(/assertPublicLock\(staging\)/);
   });
 });

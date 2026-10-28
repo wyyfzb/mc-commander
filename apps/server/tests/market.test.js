@@ -225,8 +225,10 @@ describe('market.service - getMarketProjectVersions', () => {
 
     expect(projectSlug).toBe('essentialsx');
     expect(httpJson).toHaveBeenCalledTimes(1);
-    const [url] = vi.mocked(httpJson).mock.calls[0];
+    const [url, opts] = vi.mocked(httpJson).mock.calls[0];
     expect(url).toBe('https://api.modrinth.com/v2/project/essentialsx/version');
+    // Modrinth 明确要求携带可联系的 UA：三个调用点都必须带，漏一个就是整条链路失联
+    expect(opts.headers['User-Agent']).toContain('MC_Commander');
 
     // 2.20.1 无 files → 被过滤，只剩 2.21.0
     expect(versions).toHaveLength(1);
@@ -284,8 +286,9 @@ describe('market.service - sanitizeMarketFileName', () => {
 
   it('回退名：空/全非法字符输入 → slug-version.jar（回退名同样净化）', () => {
     expect(sanitizeMarketFileName('', { slug: 'ess', versionNumber: '2.0' })).toBe('ess-2.0.jar');
+    // 保留 `+`（上游版本号与文件名普遍带它做构建标记）
     expect(sanitizeMarketFileName('???', { slug: 'ess', versionNumber: '2.0+build.1' })).toBe(
-      'ess-2.0build.1.jar',
+      'ess-2.0+build.1.jar',
     );
     // 全非法回退 → 终极兜底
     expect(sanitizeMarketFileName('///', { slug: '??', versionNumber: '+' })).toBe(

@@ -17,9 +17,12 @@ vi.mock('../src/utils/http-client.js', () => ({
   httpPost: vi.fn(),
 }));
 
-const { resolveVanillaDownload, listVanillaReleases, PISTON_MANIFEST_URL } = await import(
-  '../src/services/vanilla-manifest.js'
-);
+const {
+  resolveVanillaDownload,
+  resolveVanillaJavaRuntime,
+  listVanillaReleases,
+  PISTON_MANIFEST_URL,
+} = await import('../src/services/vanilla-manifest.js');
 
 const DETAIL_URL = 'https://piston-meta.mojang.com/v1/packages/abc/1.21.4.json';
 
@@ -114,6 +117,36 @@ describe('resolveVanillaDownload', () => {
   it('manifest 形状异常（缺 versions）→ 抛错而不是崩在 .find 上', async () => {
     jsonImpl.current = () => Promise.resolve({});
     await expect(resolveVanillaDownload('1.21.4')).rejects.toThrow(/not found/);
+  });
+});
+
+describe('resolveVanillaJavaRuntime', () => {
+  it('取版本元数据里的权威组件与主版本', async () => {
+    // 详情换成带 javaVersion 的形态：组件名随版本变化，只有元数据能给出权威值
+    const base = defaultUpstream();
+    jsonImpl.current = (url) =>
+      url === DETAIL_URL
+        ? Promise.resolve({ javaVersion: { component: 'java-runtime-delta', majorVersion: 21 } })
+        : base(url);
+
+    expect(await resolveVanillaJavaRuntime('1.21.4')).toEqual({
+      component: 'java-runtime-delta',
+      majorVersion: 21,
+    });
+  });
+
+  it('版本不在清单里 → null（由调用方查主版本表）', async () => {
+    jsonImpl.current = defaultUpstream();
+    expect(await resolveVanillaJavaRuntime('9.9.9')).toBe(null);
+  });
+
+  it('详情缺 javaVersion 或主版本不是整数 → null', async () => {
+    const base = defaultUpstream();
+    jsonImpl.current = (url) =>
+      url === DETAIL_URL
+        ? Promise.resolve({ javaVersion: { component: 'java-runtime-delta', majorVersion: '21' } })
+        : base(url);
+    expect(await resolveVanillaJavaRuntime('1.21.4')).toBe(null);
   });
 });
 

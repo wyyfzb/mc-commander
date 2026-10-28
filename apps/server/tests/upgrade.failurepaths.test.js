@@ -471,6 +471,7 @@ describe('_createBackupAndWait 失败与超时', () => {
     expect(InstanceModel.update).toHaveBeenCalledWith('inst-1', {
       jarFile: 'server-1.20.4.jar',
       mcVersion: '1.20.4',
+      modLoader: 'Vanilla',
     });
   });
 
@@ -592,10 +593,12 @@ describe('_startAndVerify 失败与超时', () => {
     expect(InstanceModel.update).toHaveBeenCalledWith('inst-1', {
       jarFile: 'server-1.21.4.jar',
       mcVersion: '1.21.4',
+      modLoader: 'Purpur',
     });
     expect(InstanceModel.update).toHaveBeenCalledWith('inst-1', {
       jarFile: 'server-1.20.4.jar',
       mcVersion: '1.20.4',
+      modLoader: 'Vanilla',
     });
   });
 
@@ -641,6 +644,7 @@ describe('_startAndVerify 失败与超时', () => {
     expect(InstanceModel.update).toHaveBeenCalledWith('inst-1', {
       jarFile: 'server-1.21.4.jar',
       mcVersion: '1.21.4',
+      modLoader: 'Purpur',
     });
   });
 
@@ -704,6 +708,7 @@ describe('_doRollback 分支行为', () => {
     expect(InstanceModel.update).toHaveBeenCalledWith('inst-1', {
       jarFile: 'server-1.20.4.jar',
       mcVersion: '1.20.4',
+      modLoader: 'Vanilla',
     });
   });
 

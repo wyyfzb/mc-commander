@@ -88,7 +88,10 @@ const config = {
   serversDir: path.resolve(PACKAGE_ROOT, process.env.SERVERS_DIR || './var/servers'),
   dataDir: path.resolve(PACKAGE_ROOT, process.env.DATA_DIR || './var/data'),
   backupsDir: path.resolve(PACKAGE_ROOT, process.env.BACKUPS_DIR || './var/backups'),
-  // 四项落点全部锚定「包根」而非 cwd（不能锚 __dirname：源码挪进 src/ 后会漂）：
+  // 面板自供的 Java 运行时落点（Mojang java-runtime，按主版本分子目录）：
+  // 与其它运行期产物同处 var/，不读写系统 java 目录
+  jreDir: path.resolve(PACKAGE_ROOT, process.env.JRE_DIR || './var/jre'),
+  // 五项落点全部锚定「包根」而非 cwd（不能锚 __dirname：源码挪进 src/ 后会漂）：
   // 从任意工作目录启动，运行期产物都落在安装目录内，不会写进启动目录（曾误把
   // data/ servers/ backups/ 写进仓库根）。运行期产物统一进 var/，包内只剩代码与
   // 构建产物；env 传绝对路径时 path.resolve 以它为准，用户可指到任意位置

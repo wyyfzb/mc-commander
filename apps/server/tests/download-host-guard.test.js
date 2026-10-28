@@ -13,7 +13,12 @@ import {
   DOWNLOAD_HOSTS_BY_TYPE,
   allowedDownloadHosts,
   assertAllowedDownloadHost,
+  checkDeployDiskSpace,
+  DEPLOY_MIN_FREE_BYTES,
 } from '../src/utils/jar-download-guard.js';
+import { mkdtempSync, rmSync, statfsSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 /** 五个部署类型与各自真实下载 URL（部署链路支持的全部类型，一个都不能少） */
 const REAL_DOWNLOAD_URLS = {
@@ -92,5 +97,50 @@ describe('下载域白名单', () => {
     expect(() =>
       assertAllowedDownloadHost('https://evil.example.com/x.jar', allowedDownloadHosts(['typo'])),
     ).toThrow();
+  });
+});
+
+/* 磁盘余量预检：磁盘满时服务端不是干净报错——jar 写一半、世界生成到一半、
+   save 被截断（世界损坏的第一大诱因）。故必须在动手之前判死。 */
+describe('部署前磁盘余量预检', () => {
+  it('返回实际可用空间，并按可用与否给出 ok', () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), 'mcs-disk-'));
+    try {
+      const r = checkDeployDiskSpace(dir);
+      const stat = statfsSync(dir);
+      expect(r.freeBytes).toBe(stat.bavail * stat.bsize);
+      expect(r.requiredBytes).toBe(DEPLOY_MIN_FREE_BYTES);
+      expect(typeof r.ok).toBe('boolean');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('余量不足时 ok=false（阈值抬到不可能达到的高度，等价于「磁盘已满」）', () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), 'mcs-disk-'));
+    try {
+      const r = checkDeployDiskSpace(dir, Number.MAX_SAFE_INTEGER);
+      expect(r.ok).toBe(false);
+      expect(r.freeBytes).toBeGreaterThanOrEqual(0);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('阈值内时有足够空间即 ok=true（同一目录、阈值降到 0）', () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), 'mcs-disk-'));
+    try {
+      expect(checkDeployDiskSpace(dir, 0).ok).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('目录不存在时跳过预检（statfs 不可用不阻断部署）', () => {
+    // 罕见平台差异下宁可放行：预检是「提前发现」而非安全边界，
+    // 按不可用即拒绝会把「statfs 不支持」变成「装不上」
+    const r = checkDeployDiskSpace(path.join(os.tmpdir(), 'mcs-nonexistent-probe-dir'));
+    expect(r.ok).toBe(true);
+    expect(r.freeBytes).toBe(-1);
   });
 });

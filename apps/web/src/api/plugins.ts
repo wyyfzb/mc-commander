@@ -1,12 +1,15 @@
 /**
- * 插件管理域 API 函数（对照服务端 routes/plugins.js 契约）
+ * 插件/模组管理域 API 函数（对照服务端 routes/plugins.js 契约）
  * config 由调用方从 useConnectionStore 传入（与 src/api/tasks.ts 同模式）。
- * 启停 = jar ↔ jar.disabled 重命名（服务端原子执行），重启实例后生效。
+ * 装载目标由 kind 决定端点前缀：plugin → plugins/、mod → mods/（同一套后端模型）。
+ * 启停 = jar ↔ jar.disabled 重命名（服务端原子执行），仅插件有此语义，重启实例后生效。
  * 上传走 client.ts 共享 apiUploadFile（XHR 进度 + 双通道凭据 + 网关适配）。
  */
 import { apiDelete, apiGet, apiPost, apiPut, apiUploadFile, type ConnectionConfig } from './client'
 import type {
   MarketInstallResult,
+  MarketKind,
+  MarketProfile,
   MarketSearchResult,
   MarketVersionsResult,
   PluginList,
@@ -15,9 +18,18 @@ import type {
   PluginUploadResult,
 } from './types'
 
-/** 插件列表（GET /instances/:id/plugins） */
-export function apiGetPlugins(config: ConnectionConfig, instanceId: string) {
-  return apiGet<PluginList>(`/api/v1/instances/${instanceId}/plugins`, config)
+/** 装载目标 → 端点目录（与服务端的 LOAD_TARGETS 目录同名，API 路径的一部分） */
+function targetDir(kind: MarketKind): 'plugins' | 'mods' {
+  return kind === 'mod' ? 'mods' : 'plugins'
+}
+
+/** 条目列表（GET /instances/:id/{plugins|mods}） */
+export function apiGetPlugins(
+  config: ConnectionConfig,
+  instanceId: string,
+  kind: MarketKind = 'plugin',
+) {
+  return apiGet<PluginList>(`/api/v1/instances/${instanceId}/${targetDir(kind)}`, config)
 }
 
 /** 启用/禁用插件（PUT /instances/:id/plugins/:file/enabled，body: {enabled}） */
@@ -34,10 +46,15 @@ export function apiSetPluginEnabled(
   )
 }
 
-/** 删除插件 jar（DELETE /instances/:id/plugins/:file） */
-export function apiDeletePlugin(config: ConnectionConfig, instanceId: string, file: string) {
+/** 删除条目 jar（DELETE /instances/:id/{plugins|mods}/:file） */
+export function apiDeletePlugin(
+  config: ConnectionConfig,
+  instanceId: string,
+  file: string,
+  kind: MarketKind = 'plugin',
+) {
   return apiDelete<{ deleted: string }>(
-    `/api/v1/instances/${instanceId}/plugins/${encodeURIComponent(file)}`,
+    `/api/v1/instances/${instanceId}/${targetDir(kind)}/${encodeURIComponent(file)}`,
     config,
   )
 }
@@ -51,10 +68,16 @@ export function apiUploadPlugin(
   config: ConnectionConfig,
   instanceId: string,
   file: File,
-  opts?: { overwrite?: boolean; onProgress?: (pct: number) => void; signal?: AbortSignal },
+  opts?: {
+    overwrite?: boolean
+    kind?: MarketKind
+    onProgress?: (pct: number) => void
+    signal?: AbortSignal
+  },
 ) {
+  const dir = targetDir(opts?.kind ?? 'plugin')
   return apiUploadFile<PluginUploadResult>(
-    `/api/v1/instances/${instanceId}/plugins/upload`,
+    `/api/v1/instances/${instanceId}/${dir}/upload`,
     config,
     file,
     {
@@ -67,6 +90,23 @@ export function apiUploadPlugin(
 }
 
 // ── 插件市场（延伸：Modrinth 代理，全部经服务端转发，前端不直连外网）──
+
+/**
+ * 本实例的市场装载目标（GET /instances/:id/plugins/market/profile）。
+ * 类型由服务端的实例记录推导（客户端不传）：这一页是「插件」还是「模组」、
+ * 默认过滤哪个 loader，都以它为准，前端不按 modLoader 再算一遍。
+ */
+export function apiMarketProfile(
+  config: ConnectionConfig,
+  instanceId: string,
+  signal?: AbortSignal,
+) {
+  return apiGet<MarketProfile>(
+    `/api/v1/instances/${instanceId}/plugins/market/profile`,
+    config,
+    signal,
+  )
+}
 
 export interface MarketSearchParams {
   q: string

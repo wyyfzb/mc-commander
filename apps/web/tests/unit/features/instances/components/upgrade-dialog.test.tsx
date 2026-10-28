@@ -1,6 +1,7 @@
 /**
  * UpgradeDialog 测试（实例版本升级）：
- * - 渲染：类型三卡（默认 vanilla）+ 警示条 + 版本下拉（当前版本禁选）
+ * - 渲染：类型三卡（默认选中实例当前类型）+ 警示条 + 版本下拉（当前版本禁选）
+ * - 类型与当前不同：显示「会更换服务端」提示，按钮文案随之变为「转换成 X 并升级」
  * - 交互：类型切换重置版本选择；版本选中后开始升级 POST 202 受理
  * - 受理失败：alert 友好文案（错误码 50000）
  * - WS 进度注入：applyUpgradeProgress → 进度条 + 中文 stage 标签 + 45%
@@ -129,9 +130,34 @@ describe('UpgradeDialog', () => {
 
     await user.click(screen.getByRole('radio', { name: 'Paper' }))
     expect(screen.getByRole('radio', { name: 'Paper' })).toHaveAttribute('aria-checked', 'true')
-    // 版本已重置为占位，且按钮回到禁用
+    // 版本已重置为占位，且按钮回到禁用（类型变了，按钮文案同时切到转换式）
     expect(screen.getByRole('combobox')).toHaveTextContent('选择版本')
+    expect(screen.getByRole('button', { name: '转换成 Paper 并升级' })).toBeDisabled()
+  })
+
+  it('默认选中实例当前类型（Paper 实例不会被默认改成 Vanilla）', () => {
+    const paper: InstanceStatus = { ...alpha, id: 'beta', name: '虚构乙服', modLoader: 'paper' }
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <UpgradeDialog instance={paper} open onOpenChange={vi.fn()} />
+      </QueryClientProvider>,
+    )
+    expect(screen.getByRole('radio', { name: 'Paper' })).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByRole('radio', { name: 'Vanilla' })).toHaveAttribute('aria-checked', 'false')
+    // 同类型升级不该出现「会更换服务端」的提示
+    expect(screen.queryByText(/这会更换服务端/)).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '开始升级' })).toBeDisabled()
+  })
+
+  it('选了与当前不同的类型 → 出现转换提示，说清插件/模组不再加载', async () => {
+    renderDialog()
+    const user = userEvent.setup()
+    expect(screen.queryByText(/这会更换服务端/)).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('radio', { name: 'Purpur' }))
+    expect(screen.getByText(/这会更换服务端：Vanilla → Purpur/)).toBeInTheDocument()
+    expect(screen.getByText(/插件或模组不再被加载/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '转换成 Purpur 并升级' })).toBeDisabled()
   })
 
   it('开始升级：POST 202 受理成功（无 alert，按钮回可用）', async () => {
@@ -172,6 +198,23 @@ describe('UpgradeDialog', () => {
     // 升级中：取消与开始均禁用
     expect(screen.getByRole('button', { name: '取消' })).toBeDisabled()
     expect(screen.getByRole('button', { name: '开始升级' })).toBeDisabled()
+  })
+
+  it('准备 Java 阶段：中文阶段标签 + detail 写明目标主版本', () => {
+    renderDialog()
+    act(() => {
+      applyUpgradeProgress({
+        instanceId: 'alpha',
+        stage: 'prepare_java',
+        percent: 30,
+        detail: '正在准备 Java 25...',
+        timestamp: Date.now(),
+      })
+    })
+
+    expect(screen.getByText('准备 Java 运行时')).toBeInTheDocument()
+    expect(screen.getByText('正在准备 Java 25...')).toBeInTheDocument()
+    expect(screen.getByText('30%')).toBeInTheDocument()
   })
 
   it('终态（completed）：成功块 + 关闭按钮 + 关闭清空该实例进度', async () => {

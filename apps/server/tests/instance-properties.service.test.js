@@ -114,7 +114,23 @@ describe('instance-properties.service · 单键值校验 validatePropertyValue',
 // max-players 负数即永远满员）⇒ 保存前必须拦下。区间表只收有服务端依据的键，
 // 未收录者一律放行——宁可让越界值写进去由服务端钳制，也不猜一个边界把合法值挡在门外。
 describe('instance-properties.service · 数值属性区间校验', () => {
-  const RANGE_KEYS = Object.entries(NUMERIC_PROPERTY_RANGES);
+  // 期望表独立于实现写死：拿 NUMERIC_PROPERTY_RANGES 当 it.each 的参数源时，
+  // 表里删掉一项，用例就跟着少一条，永远绿（实测五键各删一次均全绿）。
+  const EXPECTED_RANGES = {
+    'query.port': { min: 0, max: 65535 },
+    'view-distance': { min: 2, max: 32 },
+    'max-players': { min: 0, max: 2147483647 },
+    'max-world-size': { min: 1, max: 29999984 },
+    'entity-broadcast-range-percentage': { min: 10, max: 1000 },
+    'op-permission-level': { min: 0, max: 4 },
+    'function-permission-level': { min: 0, max: 4 },
+    'text-filtering-version': { min: 0, max: 1 },
+  };
+  const RANGE_KEYS = Object.entries(EXPECTED_RANGES);
+
+  it('实现里的区间表与期望表逐键逐值一致（多收、少收、改边界都会红）', () => {
+    expect(NUMERIC_PROPERTY_RANGES).toEqual(EXPECTED_RANGES);
+  });
 
   it('区间表只收录数值属性（表里混进字符串键会让校验恒不触发）', () => {
     const stray = RANGE_KEYS.map(([key]) => key).filter((key) => !NUMERIC_PROPERTIES.has(key));

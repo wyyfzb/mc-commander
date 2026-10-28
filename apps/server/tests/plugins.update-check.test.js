@@ -206,6 +206,20 @@ describe('checkPluginUpdates（服务端聚合）', () => {
     });
   });
 
+  it('响应带上未检测计数（前端要据此说清「全部最新」覆盖了哪些插件）', async () => {
+    writePluginJar('EssentialsX', '2.20.0');
+    routeUpstream({
+      queryToHits: { EssentialsX: [hit({ slug: 'essentialsx', title: 'EssentialsX' })] },
+      slugToVersions: { essentialsx: '2.21.0' },
+    });
+
+    const res = await request(app).post('/api/v1/instances/i1/plugins/check-updates');
+
+    // 契约里 skipped 是必填三键：缺了路由的 validatedSuccess 会直接 500
+    expect(res.body.data.skipped).toEqual({ disabled: 0, overLimit: 0, noMeta: 0 });
+    expect(res.body.data.checkedAt).toEqual(expect.any(String));
+  });
+
   it('搜索命中但 title/slug 均不匹配前 5 候选 → 不误配', async () => {
     writePluginJar('MyPlugin', '1.0.0');
     routeUpstream({

@@ -7,11 +7,27 @@ export interface PanelDataItem {
   path: string
   entries: number
   bytes: number
+  /** 所在文件系统剩余字节；-1 = 读不到（此时前端显示「未知」而不是 0） */
+  freeBytes?: number
+  /** 所在挂载点，空串 = 未能解析 */
+  mountPoint?: string
 }
 
 /** 面板当前存了多少东西；entries 为 0 表示该目录没内容，不能当成「已保留」 */
 export function apiPanelData(config: ConnectionConfig) {
   return apiGet<{ items: PanelDataItem[] }>('/api/v1/panel/data', config)
+}
+
+/**
+ * 数据目录迁移：把某一类数据搬到另一个分区。
+ *
+ * 搬运期间实例会被停掉、面板会暂停；失败时服务端退回原配置（数据仍留在原目录）。
+ */
+export function apiMigrateData(
+  config: ConnectionConfig,
+  payload: { key: PanelDataItem['key']; target: string },
+) {
+  return apiPost<null>('/api/v1/panel/migrate', config, payload, { timeoutMs: 30_000 })
 }
 
 /** 停用面板（保留全部数据）。响应返回后服务端才真正停止，故调用方能收到确认文案 */
@@ -38,6 +54,15 @@ export interface RemovalRequest {
   confirmText: string
   /** true = 只删程序保留存档 */
   keepData?: boolean
+}
+
+/**
+ * 面板内自更新：服务端触发 root 更新单元并回包，更新在本面板进程之外进行。
+ *
+ * `tag` 必须形如 v0.10.4——服务端只接受这个形态，它会拼进下载 URL。
+ */
+export function applyPanelUpdate(config: ConnectionConfig, tag: string) {
+  return apiPost<null>('/api/v1/panel/update', config, { tag }, { timeoutMs: 30_000 })
 }
 
 /** 面板内彻底删除：服务端触发清理单元并回包，清理在本面板进程之外进行 */

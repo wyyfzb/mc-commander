@@ -61,10 +61,16 @@ vi.mock('../src/utils/java-detector.js', () => ({
   findJavaPathStrict: vi.fn(() => javaState.replacement),
 }));
 
+// 面板自供 Java：本文件测接线与顺序，下载与落地由 java-runtime 单测负责
+vi.mock('../src/services/java-runtime.service.js', () => ({
+  ensureJavaRuntime: vi.fn(async () => javaState.replacement),
+}));
+
 import { UpgradeService, UPGRADE_STAGES } from '../src/services/upgrade.service.js';
 import { InstanceModel } from '../src/db/index.js';
 import { isJavaSatisfied, findJavaPathStrict } from '../src/utils/java-detector.js';
 import { readJarVersionInfo } from '../src/services/mc-server/jar-version.js';
+import { ensureJavaRuntime } from '../src/services/java-runtime.service.js';
 
 let tmpDir;
 const serverManagerRef = { current: null };
@@ -130,6 +136,7 @@ beforeEach(() => {
   jarInfo.current = { id: '26.3', javaVersion: 25, protocolVersion: 769 };
   javaState.satisfied = false;
   javaState.replacement = '/usr/lib/jvm/java-25/bin/java';
+  ensureJavaRuntime.mockImplementation(async () => javaState.replacement);
   // vanilla 详情 + 成功的下载流（写入目标文件）
   // 清单按请求回显目标版本（升级到哪个版本由用例决定，写死单条会让换版本的用例
   // 停在「版本不存在」而不是待测阶段）
@@ -252,5 +259,50 @@ describe('升级路径的 Java 校验', () => {
     await service.upgrade('inst-1', '1.20.5', 'vanilla');
 
     expect(isJavaSatisfied).toHaveBeenCalledWith(expect.any(String), '17');
+  });
+
+  it('缺目标 Java → 先自动补齐并推 prepare_java 进度，补齐后才重选', async () => {
+    javaState.satisfied = false;
+    javaState.replacement = '/home/steve/mc/var/jre/25/bin/java';
+    ensureJavaRuntime.mockImplementation(async (major, opts) => {
+      opts.onProgress?.(0.5);
+      return `/home/steve/mc/var/jre/${major}/bin/java`;
+    });
+    const manager = createMockServerManager();
+    const service = new UpgradeService(manager);
+
+    await service.upgrade('inst-1', '26.3', 'vanilla');
+
+    expect(ensureJavaRuntime).toHaveBeenCalledWith(
+      '25',
+      expect.objectContaining({ mcVersion: '26.3' }),
+    );
+    const prepare = manager._emitted
+      .filter((e) => e.data?.stage === UPGRADE_STAGES.PREPARE_JAVA)
+      .map((e) => e.data);
+    expect(prepare.length).toBeGreaterThan(0);
+    expect(prepare[0].percent).toBe(50);
+    expect(prepare[0].detail).toContain('正在准备 Java 25');
+    expect(manager._instance.javaPath).toBe('/home/steve/mc/var/jre/25/bin/java');
+  });
+
+  it('自动补齐失败 → 抛错且替换尚未发生（新版本 jar 未写、无 replace 阶段）', async () => {
+    javaState.satisfied = false;
+    ensureJavaRuntime.mockImplementation(async () => {
+      throw new Error(
+        '自动准备 Java 25 失败（上游返回 HTTP 503），请检查网络后重试或手动安装 Java 25',
+      );
+    });
+    const manager = createMockServerManager();
+    const service = new UpgradeService(manager);
+
+    await expect(service.upgrade('inst-1', '26.3', 'vanilla')).rejects.toThrow(
+      /自动准备 Java 25 失败/,
+    );
+    expect(manager._emitted.some((e) => e.data?.stage === UPGRADE_STAGES.REPLACE)).toBe(false);
+    expect(InstanceModel.update).not.toHaveBeenCalledWith('inst-1', {
+      jarFile: 'server-26.3.jar',
+      mcVersion: '26.3',
+    });
   });
 });

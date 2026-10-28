@@ -1,10 +1,12 @@
 /**
- * 插件市场服务（延伸：Modrinth 一键安装）
+ * 插件/模组市场服务（延伸：Modrinth 一键安装）
  *
  * 数据源：Modrinth API v2（无需鉴权；要求携带可联系的 User-Agent，尊重其
  * ~300 req/min 限速 → 服务端代理 + 60s 内存 TTL 缓存，前端不直连外网）。
  *
- * 范围：project_type=plugin（Bukkit 系：paper/spigot/bukkit/purpur/folia）。
+ * 范围：两类条目按实例类型分流——Bukkit 系 `project_type=plugin` 落 `plugins/`，
+ * Fabric/Forge 系 `project_type=mod` 落 `mods/`。模组只保留服务端可用的项目
+ * （`server_side=unsupported` 的纯客户端模组装到服务端不会生效）。
  * 安装 = 服务端解析版本 primary 文件 → CDN 下载（域名白名单 + 100MB 上限 +
  * zip 魔数校验）→ 复用 uploadPlugin 落盘（同名 40912 / overwrite 显式覆盖，
  * 与手动上传完全同一套安全语义）。
@@ -23,9 +25,15 @@ import path from 'path';
 import crypto from 'crypto';
 import { PassThrough } from 'stream';
 import { pipeline } from 'stream/promises';
+import { MARKET_LOADERS } from '@mc-commander/schemas';
 import { AppError, ErrorCodes } from '../utils/response.js';
 import { httpJson, httpStream } from '../utils/http-client.js';
-import { uploadPlugin, listPlugins } from './plugin.service.js';
+import {
+  uploadPlugin,
+  listPlugins,
+  DEFAULT_LOAD_TARGET,
+  resolveLoadTarget,
+} from './plugin.service.js';
 import { getServerVersion } from '../utils/version.js';
 import { logger } from '../utils/logger.js';
 
@@ -49,21 +57,18 @@ const MARKET_DOWNLOAD_MAX_SIZE = 100 * 1024 * 1024;
 const CACHE_TTL_MS = 60_000;
 const CACHE_MAX_ENTRIES = 200;
 
-/**
- * Modrinth `project_type` → 可接受的 loader 白名单。
- *
- * **两类 loader 不能混**：Bukkit 系（plugin）与 Fabric/Forge 系（mod）在 Modrinth 上是
- * 不同的 loader 取值，混用会让 facets 过滤出空集（用户搜到零结果却不知为什么）。
- * 白名单按 project_type 分组，而不是合成一张大表——合成后 `project_type:plugin`
- * 配上 `loaders:fabric` 这种自相矛盾的组合会被放行。
- */
-const LOADERS_BY_PROJECT_TYPE = Object.freeze({
-  plugin: Object.freeze(['paper', 'spigot', 'bukkit', 'purpur', 'folia']),
-  mod: Object.freeze(['fabric', 'forge', 'neoforge', 'quilt']),
-});
+/// 依赖类型取 Modrinth 的四个取值；未知值归 null（不臆造语义）
+const DEPENDENCY_TYPES = Object.freeze(['required', 'optional', 'incompatible', 'embedded']);
 
-/** 市场条目类型（与插件/模组装载目标同名的两类） */
-export const MARKET_PROJECT_TYPES = Object.freeze(Object.keys(LOADERS_BY_PROJECT_TYPE));
+/// 单次批量解析依赖项目名的上限：避免超长依赖表拼出巨量 URL
+const DEPENDENCY_RESOLVE_MAX = 20;
+
+/**
+ * 市场条目类型（与插件/模组装载目标同名的两类）。
+ * loader 白名单取自共享契约（服务端校验与前端筛选项同一份），两类不能混：
+ * Bukkit 系与 Fabric/Forge 系在 Modrinth 上是不同取值，混用会让 facets 过滤出空集。
+ */
+export const MARKET_PROJECT_TYPES = Object.freeze(Object.keys(MARKET_LOADERS));
 
 /** 默认条目类型：既有调用方不传时行为逐字不变（仍是插件市场） */
 const DEFAULT_PROJECT_TYPE = 'plugin';
@@ -165,7 +170,7 @@ function sanitizeGameVersion(v) {
  */
 function sanitizeLoader(v, projectType = DEFAULT_PROJECT_TYPE) {
   if (v === undefined || v === null || v === '') return null;
-  const allowed = LOADERS_BY_PROJECT_TYPE[projectType] ?? [];
+  const allowed = MARKET_LOADERS[projectType] ?? [];
   if (typeof v !== 'string' || !allowed.includes(v)) {
     throw new AppError(ErrorCodes.VALIDATION_ERROR, `Invalid loader for ${projectType}: ${v}`);
   }
@@ -175,6 +180,12 @@ function sanitizeLoader(v, projectType = DEFAULT_PROJECT_TYPE) {
 /** 组装 Modrinth facets（project_type 由调用方定；版本/加载器可选） */
 function buildFacets({ gameVersion, loader, projectType = DEFAULT_PROJECT_TYPE }) {
   const facets = [[`project_type:${projectType}`]];
+  if (projectType === 'mod') {
+    // 维度组内 OR、组间 AND：只留服务端可用的项目。server_side=unsupported 是纯客户端
+    // 模组（如 Sodium），装到服务端不加载甚至报缺失依赖；required 与 optional 都保留
+    // （optional 表示两端可选，服务端仍可用）。
+    facets.push(['server_side:required', 'server_side:optional']);
+  }
   if (gameVersion) facets.push([`game_versions:${gameVersion}`]);
   if (loader) facets.push([`loaders:${loader}`]);
   return facets;
@@ -182,7 +193,7 @@ function buildFacets({ gameVersion, loader, projectType = DEFAULT_PROJECT_TYPE }
 
 /** 该条目类型的可选 loader 列表（供前端渲染筛选项，避免前端另抄一份白名单） */
 export function loadersForProjectType(projectType) {
-  return [...(LOADERS_BY_PROJECT_TYPE[sanitizeProjectType(projectType)] ?? [])];
+  return [...(MARKET_LOADERS[sanitizeProjectType(projectType)] ?? [])];
 }
 
 /**
@@ -230,23 +241,27 @@ export async function searchMarketPlugins({
     const result = {
       totalHits: typeof data.total_hits === 'number' ? data.total_hits : 0,
       // 字段白名单：只透出列表页所需字段，避免上游结构变化泄漏到响应
-      hits: (Array.isArray(data.hits) ? data.hits : []).map((h) => ({
-        projectId: h.project_id ?? null,
-        slug: h.slug ?? null,
-        title: h.title ?? null,
-        description: h.description ?? null,
-        author: h.author ?? null,
-        downloads: typeof h.downloads === 'number' ? h.downloads : 0,
-        follows: typeof h.follows === 'number' ? h.follows : 0,
-        iconUrl:
-          typeof h.icon_url === 'string' && h.icon_url.startsWith('https://') ? h.icon_url : null,
-        dateModified: h.date_modified ?? null,
-        categories: Array.isArray(h.display_categories)
-          ? h.display_categories.filter((c) => typeof c === 'string').slice(0, 8)
-          : [],
-        serverSide: h.server_side ?? null,
-        clientSide: h.client_side ?? null,
-      })),
+      hits: (Array.isArray(data.hits) ? data.hits : [])
+        // facets 之外的兜底：上游 facet 语义若变化，客户端专用模组仍不得进列表——
+        // 装到服务端不加载，还占 mods/ 名额
+        .filter((h) => pt !== 'mod' || h?.server_side !== 'unsupported')
+        .map((h) => ({
+          projectId: h.project_id ?? null,
+          slug: h.slug ?? null,
+          title: h.title ?? null,
+          description: h.description ?? null,
+          author: h.author ?? null,
+          downloads: typeof h.downloads === 'number' ? h.downloads : 0,
+          follows: typeof h.follows === 'number' ? h.follows : 0,
+          iconUrl:
+            typeof h.icon_url === 'string' && h.icon_url.startsWith('https://') ? h.icon_url : null,
+          dateModified: h.date_modified ?? null,
+          categories: Array.isArray(h.display_categories)
+            ? h.display_categories.filter((c) => typeof c === 'string').slice(0, 8)
+            : [],
+          serverSide: h.server_side ?? null,
+          clientSide: h.client_side ?? null,
+        })),
       cached: false,
     };
     cacheSet(cacheKey, result);
@@ -312,6 +327,19 @@ export async function getMarketProjectVersions(
           loaders: Array.isArray(v.loaders)
             ? v.loaders.filter((l) => typeof l === 'string').slice(0, 8)
             : [],
+          // 版本声明的依赖（多为 version_id=null、只有 project_id）：仅用于安装后
+          // 提示「还缺哪些前置」，不参与自动下载
+          dependencies: Array.isArray(v.dependencies)
+            ? v.dependencies
+                .filter((d) => d && typeof d.project_id === 'string')
+                .slice(0, DEPENDENCY_RESOLVE_MAX)
+                .map((d) => ({
+                  projectId: d.project_id,
+                  dependencyType: DEPENDENCY_TYPES.includes(d.dependency_type)
+                    ? d.dependency_type
+                    : null,
+                }))
+            : [],
           file: primary
             ? {
                 url: typeof primary.url === 'string' ? primary.url : null,
@@ -341,27 +369,29 @@ export async function getMarketProjectVersions(
  * PLUGIN_UPLOAD_NAME_REGEX 语义）。输出必须匹配上传白名单。
  */
 export function sanitizeMarketFileName(filename, { slug, versionNumber }) {
+  // `+` 与上传白名单同步放行：上游真实文件名普遍用它标构建标记
+  // （fabric-api-0.136.1+1.21.8.jar），剥掉会得到 0.136.11.21.8 这种看着像别的版本的名字
+  const ALLOWED = /[^A-Za-z0-9._+-]/g;
+  const FINAL = /^[A-Za-z0-9][A-Za-z0-9._+-]*\.jar$/;
+
   const fallback = (() => {
     const raw = `${slug || 'plugin'}-${versionNumber || 'file'}.jar`
       .replace(/\s+/g, '-')
-      .replace(/[^A-Za-z0-9._-]/g, '')
+      .replace(ALLOWED, '')
       .replace(/^\.+/, '');
-    return /^[A-Za-z0-9][A-Za-z0-9._-]*\.jar$/.test(raw) ? raw : 'modrinth-plugin.jar';
+    return FINAL.test(raw) ? raw : 'modrinth-plugin.jar';
   })();
 
   const base = String(filename || '')
     .split(/[/\\]/)
     .pop();
-  const stripped = base
-    .replace(/\s+/g, '-')
-    .replace(/[^A-Za-z0-9._-]/g, '')
-    .replace(/^\.+/, '');
+  const stripped = base.replace(/\s+/g, '-').replace(ALLOWED, '').replace(/^\.+/, '');
   // 净化后为空（空文件名/全白名单外字符）→ 直接走回退名
   if (!stripped) return fallback;
   let cleaned = /^[A-Za-z0-9]/.test(stripped) ? stripped : `mc-${stripped}`;
   // 扩展名统一为小写 .jar（Plugin.JAR → Plugin.jar；大写形式不满足上传白名单）
   cleaned = cleaned.replace(/\.jar$/i, '.jar');
-  if (cleaned.length > 255 || !/^[A-Za-z0-9][A-Za-z0-9._-]*\.jar$/.test(cleaned)) {
+  if (cleaned.length > 255 || !FINAL.test(cleaned)) {
     return fallback;
   }
   return cleaned;
@@ -441,19 +471,24 @@ export async function downloadMarketFile(url) {
 }
 
 /**
- * 从 Modrinth 安装插件到实例 plugins/ 目录（延伸核心端点）。
+ * 从 Modrinth 安装条目到实例的装载目标目录（plugin → plugins/、mod → mods/）。
  * 流程：拉取版本列表 → 按 versionNumber 定位版本 → 取 primary 文件 →
  * CDN 白名单校验 → 下载到临时目录 → uploadPlugin 复用落盘（zip 魔数 +
  * 文件名白名单 + 同名 40912/overwrite 语义 + 元数据读取）→ 清理临时文件。
  *
+ * 模组额外做两件事：loader 过滤（装错 loader 的 jar 起不来）、把版本声明的必需
+ * 前置解析成可读名称随结果返回（**不自动下载**，由用户自行决定是否再装）。
+ *
  * 注意：不从客户端接收下载 URL（服务端重新解析，防 SSRF/任意下载）。
- * @returns {object} uploadPlugin 结果 + { slug, versionNumber, source }
+ * @returns {object} uploadPlugin 结果 + { slug, versionNumber, source, kind, installedTo,
+ *   requiredDependencies }
  */
 export async function installPluginFromMarket(
   serverPath,
   { slug, versionNumber },
-  { overwrite = false } = {},
+  { overwrite = false, kind = DEFAULT_LOAD_TARGET, loader = null } = {},
 ) {
+  const loadTarget = resolveLoadTarget(kind);
   if (typeof slug !== 'string' || !/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(slug)) {
     throw new AppError(ErrorCodes.VALIDATION_ERROR, `Invalid project slug: ${slug}`);
   }
@@ -465,46 +500,59 @@ export async function installPluginFromMarket(
     throw new AppError(ErrorCodes.VALIDATION_ERROR, `Invalid version number: ${versionNumber}`);
   }
 
-  // 重新拉取版本列表定位目标版本（绕过缓存会浪费配额；60s TTL 内数据新鲜度足够）
-  const { versions } = await getMarketProjectVersions(slug, {});
-  const target = versions.find((v) => v.versionNumber === versionNumber);
-  if (!target) {
+  // 重新拉取版本列表定位目标版本（绕过缓存会浪费配额；60s TTL 内数据新鲜度足够）。
+  // 模组按实例 loader 过滤：同一 version_number 可能分别发布 fabric/forge 构建，
+  // 不过滤就会把另一 loader 的字节装进本实例的 mods/。
+  const { versions } = await getMarketProjectVersions(slug, {
+    loader: kind === 'mod' ? loader : null,
+    projectType: kind,
+  });
+  const version = versions.find((v) => v.versionNumber === versionNumber);
+  if (!version) {
     throw new AppError(
       ErrorCodes.MARKET_VERSION_NOT_FOUND,
       `Version not found on Modrinth: ${versionNumber}`,
     );
   }
-  if (!target.file?.url) {
+  if (!version.file?.url) {
     throw new AppError(ErrorCodes.MARKET_VERSION_NOT_FOUND, 'Version has no downloadable file');
   }
+  const requiredDependencies =
+    kind === 'mod' ? await resolveRequiredDependencies(version.dependencies) : [];
 
-  const { tmpPath, sha512: actualSha512 } = await downloadMarketFile(target.file.url);
+  const { tmpPath, sha512: actualSha512 } = await downloadMarketFile(version.file.url);
   try {
     // sha512 完整性闸门（供应链防护）：与 Modrinth 官方哈希比对后再落盘，
     // 拦截截断/位翻转/文件头完好的损坏 jar。文案只含文件名不含哈希明细
     // （避免哈希值进入日志/前端渲染面）。上游未提供哈希时降级放行，
     // 不新增阻断面（与「缺 hashes 字段的旧版本/异常上游」保持兼容）。
-    const expectedSha512 = target.file.sha512;
+    const expectedSha512 = version.file.sha512;
     if (expectedSha512) {
       if (actualSha512 !== expectedSha512.toLowerCase()) {
         throw new AppError(
           ErrorCodes.MARKET_CHECKSUM_MISMATCH,
-          `File integrity check failed: ${target.file.filename}`,
+          `File integrity check failed: ${version.file.filename}`,
         );
       }
     } else {
       logger.info(
-        `Market install skipped sha512 check (upstream provided no hash): ${target.file.filename}`,
+        `Market install skipped sha512 check (upstream provided no hash): ${version.file.filename}`,
       );
     }
-    const fileName = sanitizeMarketFileName(target.file.filename, { slug, versionNumber });
-    const result = uploadPlugin(serverPath, tmpPath, fileName, { overwrite });
+    const fileName = sanitizeMarketFileName(version.file.filename, { slug, versionNumber });
+    const result = uploadPlugin(serverPath, tmpPath, fileName, {
+      overwrite,
+      kind: loadTarget.kind,
+    });
     return {
       ...result,
       slug,
       versionNumber,
       source: 'modrinth',
-      originalFileName: target.file.filename,
+      originalFileName: version.file.filename,
+      kind: loadTarget.kind,
+      installedTo: loadTarget.dir,
+      requiredDependencies,
     };
   } finally {
     try {
@@ -512,6 +560,48 @@ export async function installPluginFromMarket(
     } catch {
       /* 已清理 */
     }
+  }
+}
+
+/**
+ * 解析必需前置依赖的项目名（`/v2/projects?ids=[...]` 批量查询）。
+ * 名称只是提示的增强，**不是安装成功的前提**：上游失败时仍按 project_id 回报，
+ * 让「模组已落盘」不至于因为一次展示性查询而变成「安装失败」。
+ */
+async function resolveRequiredDependencies(dependencies) {
+  const ids = [
+    ...new Set(
+      (Array.isArray(dependencies) ? dependencies : [])
+        .filter((d) => d?.dependencyType === 'required')
+        .map((d) => d.projectId),
+    ),
+  ].slice(0, DEPENDENCY_RESOLVE_MAX);
+  if (ids.length === 0) return [];
+
+  const fallback = () => ids.map((projectId) => ({ projectId, slug: null, title: null }));
+  try {
+    const data = await httpJson(`${MODRINTH_API_BASE}/projects`, {
+      searchParams: { ids: JSON.stringify(ids) },
+      headers: { 'User-Agent': USER_AGENT },
+      timeoutMs: API_TIMEOUT_MS,
+      retryLimit: 1,
+    });
+    const byId = new Map(
+      (Array.isArray(data) ? data : [])
+        .filter((p) => p && typeof p.id === 'string')
+        .map((p) => [p.id, p]),
+    );
+    return ids.map((projectId) => {
+      const project = byId.get(projectId);
+      return {
+        projectId,
+        slug: typeof project?.slug === 'string' ? project.slug : null,
+        title: typeof project?.title === 'string' ? project.title : null,
+      };
+    });
+  } catch (err) {
+    logger.info(`Market dependency name lookup failed: ${err?.message || 'unknown'}`);
+    return fallback();
   }
 }
 
@@ -598,16 +688,22 @@ function matchProjectByPluginName(hits, pluginName) {
  * 名称命中后取最新版本号（getMarketProjectVersions 缓存复用）→ 版本比对。
  * 单个插件失败（上游错误/无结果）不拖垮整批：该插件 matched:false。
  *
- * @returns {{ checkedAt: string, results: Array<{
- *   file, name, installedVersion, enabled,
- *   matched, slug, title, iconUrl, latestVersion, updateAvailable, hasNewer
- * }> }}
+ * 三类插件不参与检测：已停用、读不出名称、超出单次上限。调用方要能说清「这次查了哪些、
+ * 漏了哪些」——只回 results 会让界面把「没查」说成「已是最新」。
+ *
+ * @returns {{ checkedAt: string, skipped: { disabled: number, overLimit: number, noMeta: number },
+ *   results: Array<{ file, name, installedVersion, enabled,
+ *   matched, slug, title, iconUrl, latestVersion, updateAvailable, hasNewer }> }}
  */
 export async function checkPluginUpdates(serverPath) {
   const { plugins } = listPlugins(serverPath);
-  const candidates = plugins
-    .filter((p) => p.meta?.name && p.enabled)
-    .slice(0, UPDATE_CHECK_MAX_PLUGINS);
+  const eligible = plugins.filter((p) => p.meta?.name && p.enabled);
+  const candidates = eligible.slice(0, UPDATE_CHECK_MAX_PLUGINS);
+  const skipped = {
+    disabled: plugins.filter((p) => !p.enabled).length,
+    overLimit: Math.max(0, eligible.length - UPDATE_CHECK_MAX_PLUGINS),
+    noMeta: plugins.filter((p) => p.enabled && !p.meta?.name).length,
+  };
 
   const results = new Map();
   for (const p of candidates) {
@@ -653,6 +749,7 @@ export async function checkPluginUpdates(serverPath) {
 
   return {
     checkedAt: new Date().toISOString(),
+    skipped,
     results: [...results.values()],
   };
 }

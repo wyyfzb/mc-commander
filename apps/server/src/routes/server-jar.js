@@ -14,7 +14,9 @@ import {
 } from '../services/loader-upstreams.js';
 import config from '../config.js';
 import { success, error, ErrorCodes, AppError } from '../utils/response.js';
-import { getRecommendedJavaVersion, findJavaPath } from '../utils/java-detector.js';
+import { getRecommendedJavaVersion } from '../utils/java-detector.js';
+import { ensureJavaRuntime } from '../services/java-runtime.service.js';
+import { readJarVersionInfo } from '../services/mc-server/jar-version.js';
 import { InstanceModel } from '../db/index.js';
 import { atomicWriteFile } from '../services/mc_server.js';
 import { recordAudit, AuditActions } from '../utils/audit.js';
@@ -36,6 +38,7 @@ import {
   JAR_DOWNLOAD_MAX_BYTES,
   assertDownloadIntegrity,
   assertSizeWithinLimit,
+  checkDeployDiskSpace,
 } from '../utils/jar-download-guard.js';
 import { assertAllowedDownloadHost, allowedDownloadHosts } from '../utils/jar-download-guard.js';
 import { logger } from '../utils/logger.js';
@@ -132,6 +135,7 @@ function trackDeployProgress(serverManager, meta, payload) {
         percent: payload.percent,
         transferred: payload.transferred,
         total: payload.total,
+        detail: payload.detail,
         updatedAt: Date.now(),
       });
     }
@@ -503,6 +507,7 @@ export function createServerJarRoutes(serverManager) {
         transferred: snapshot.transferred ?? 0,
         total: snapshot.total ?? 0,
         updatedAt: snapshot.updatedAt,
+        ...(snapshot.detail ? { detail: snapshot.detail } : {}),
       }),
     );
   });
@@ -550,6 +555,16 @@ export function createServerJarRoutes(serverManager) {
       let instanceCreatedInDb = false;
 
       try {
+        // 磁盘余量预检：放在 mkdir 之前，此时还没有任何落盘。
+        // 磁盘满时服务端不是干净报错——jar 写一半、世界生成到一半、save 被截断，
+        // 而 save 截断是世界损坏的第一大诱因；当场拒绝比中途失败好排查得多。
+        const disk = checkDeployDiskSpace(config.serversDir);
+        if (!disk.ok) {
+          throw new AppError(
+            ErrorCodes.DISK_INSUFFICIENT,
+            `磁盘剩余空间不足（需约 ${Math.round(disk.requiredBytes / 1024 / 1024)} MB，实际剩余 ${Math.round(disk.freeBytes / 1024 / 1024)} MB），请清理后重试`,
+          );
+        }
         // 必须在 try 内：mkdirSync 抛错（ENOTDIR/EACCES/EPERM）时由 catch 统一返回 502 并清理，
         // 否则裸 async handler 的 rejection 不被 Express 4 捕获 → 请求挂起 + unhandledRejection
         fs.mkdirSync(instancePath, { recursive: true });
@@ -627,8 +642,26 @@ export function createServerJarRoutes(serverManager) {
         }
 
         const ramSize = maxMemory || '2G';
-        const javaVersion = getRecommendedJavaVersion(mcVersion);
-        const javaPath = findJavaPath(javaVersion);
+        // jar 内 version.json 的 java_version 是权威值（vanilla/paper 均带；Forge 安装器读不到），
+        // 读不到才退回与版本列表同一套推荐表
+        const jarJavaVersion = readJarVersionInfo(jarPath)?.javaVersion ?? null;
+        const javaVersion =
+          jarJavaVersion !== null ? String(jarJavaVersion) : getRecommendedJavaVersion(mcVersion);
+        // 缺合适 Java 时由面板自己补齐（用户零操作）；补不齐会抛中文可操作错误，
+        // 缺档即报中文错误：回落系统 `java` 会把失败推迟到首启，用户看不出缺哪一档
+        task.throwIfCancelled();
+        const javaPath = await ensureJavaRuntime(javaVersion, {
+          mcVersion,
+          signal: task.signal,
+          onProgress: (percent) =>
+            trackDeployProgress(serverManager, deployMeta, {
+              stage: 'prepare_java',
+              percent,
+              transferred: 0,
+              total: 0,
+              detail: `正在准备 Java ${javaVersion}…`,
+            }),
+        });
 
         let jarFile = 'server.jar';
 
@@ -724,6 +757,11 @@ export function createServerJarRoutes(serverManager) {
           generateServerProperties(instanceId, mcVersion, gamePort),
         );
 
+        // 收尾阶段的失败都不会让部署本身失败，但会让「部署成功」变成假承诺：
+        // 没入库的实例重启后消失、没启动起来的服务器谁也连不上。逐条记下来随响应回报。
+        const deployWarnings = [];
+        let autoStarted = false;
+
         try {
           InstanceModel.create({
             id: instanceId,
@@ -741,6 +779,9 @@ export function createServerJarRoutes(serverManager) {
           instanceCreatedInDb = true;
         } catch (dbErr) {
           logger.warn(`Failed to write instance to DB:`, dbErr.message);
+          deployWarnings.push(
+            `实例未能写入数据库（${dbErr.message}）：重启面板后该实例会从列表消失`,
+          );
         }
 
         // 首启用于生成世界与校验 jar，而 MC 首启强制要求 eula=true；
@@ -761,6 +802,7 @@ export function createServerJarRoutes(serverManager) {
             // 否则「取消」会走到下面的 complete 分支，用户看到的是部署成功
             if (e.cancelled) throw e;
             logger.warn('First launch failed (may require manual setup):', e.message);
+            deployWarnings.push(`首次启动失败（${e.message}）：世界可能未生成，需手动启动一次`);
           }
         }
 
@@ -785,10 +827,14 @@ export function createServerJarRoutes(serverManager) {
             try {
               launched.start();
               InstanceModel.update(instanceId, { status: 'running' });
+              autoStarted = true;
               logger.info(`Instance ${instanceId} auto-started after deploy`);
             } catch (e) {
               logger.warn(`Auto-start after deploy failed: ${e.message}`);
+              deployWarnings.push(`服务器未能自动启动（${e.message}）：请到实例页手动启动`);
             }
+          } else {
+            deployWarnings.push('服务器未能自动启动（实例未注册到运行管理器）：请到实例页手动启动');
           }
         }
 
@@ -812,6 +858,8 @@ export function createServerJarRoutes(serverManager) {
               javaVersion,
               path: instancePath,
               maxMemory: ramSize,
+              warnings: deployWarnings,
+              started: autoStarted,
             },
             'Instance deployed successfully',
           ),

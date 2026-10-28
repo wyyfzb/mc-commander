@@ -99,6 +99,27 @@ describe('InstancesPage 部署进行中横幅', () => {
     ).toBeInTheDocument()
   })
 
+  it('准备 Java 阶段：横幅显示 detail（带目标主版本）', () => {
+    act(() => {
+      useDeployStore.setState({
+        deploying: true,
+        progress: {
+          stage: 'prepare_java',
+          percent: 0.3,
+          transferred: 0,
+          total: 0,
+          detail: '正在准备 Java 25…',
+          instanceId: 'vanilla-abc3',
+          instanceName: '新版服',
+        },
+        lastResult: null,
+      })
+    })
+    renderPage()
+
+    expect(screen.getByText('有实例正在部署：「新版服」正在准备 Java 25…')).toBeInTheDocument()
+  })
+
   it('无进行中部署：横幅不渲染', () => {
     renderPage()
 

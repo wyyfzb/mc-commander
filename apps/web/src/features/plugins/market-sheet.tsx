@@ -18,7 +18,7 @@ import { toast } from 'sonner'
 import { ApiError } from '@/api/client'
 import { ErrorCode, getFriendlyErrorText } from '@/api/errors'
 import { apiMarketInstall, apiMarketSearch, apiMarketVersions } from '@/api/plugins'
-import type { MarketSearchHit, MarketVersion } from '@/api/types'
+import type { MarketKind, MarketSearchHit, MarketVersion } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import {
   Sheet,
@@ -36,7 +36,7 @@ import { queryFailed } from '@/lib/query-phase'
 import { useConnectionStore } from '@/stores/connection'
 import { useServerStore } from '@/stores/server'
 import { usePlugins } from './queries'
-import { GAME_VERSION_RE, PAGE_SIZE } from './market-config'
+import { GAME_VERSION_RE, LOADER_OPTIONS, PAGE_SIZE, TARGET_TEXT } from './market-config'
 import { MarketFilterBar } from './market-filter-bar'
 import { MarketHitCard, type VersionsPanel } from './market-hit-card'
 
@@ -44,6 +44,13 @@ interface MarketSheetProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   instanceId: string | null
+  /** 装载目标：决定标题用语、落盘目录与已装比对集合的读取目录 */
+  kind?: MarketKind
+  /**
+   * 模组实例固定的 loader（服务端同样强制它）：模组的 jar 与 loader 绑定，
+   * 不让用户在「全部加载器」里选到装上去起不来的构建。null＝由用户自选
+   */
+  lockedLoader?: string | null
   /** 打开时预填搜索词（插件页「更新」入口带 plugin.yml name 直达搜索） */
   initialQuery?: string | null
 }
@@ -52,8 +59,11 @@ export function MarketSheet({
   open,
   onOpenChange,
   instanceId,
+  kind = 'plugin',
+  lockedLoader = null,
   initialQuery = null,
 }: MarketSheetProps) {
+  const text = TARGET_TEXT[kind]
   const instanceMcVersion = useServerStore((s) => s.status?.mcVersion)
 
   const [query, setQuery] = useState('')
@@ -61,7 +71,17 @@ export function MarketSheet({
 
   // 防抖回调（由 SearchInput 内部管理 debounce 定时器；清除时立即同步）
   const handleDebouncedChange = useCallback((v: string) => setDebouncedQuery(v), [])
-  const [loader, setLoader] = useState<string>('')
+  const [userLoader, setUserLoader] = useState<string>('')
+  const loader = lockedLoader ?? userLoader
+  /** 模组只有自身 loader 一个可选项，不给「全部加载器」这种会搜到别家构建的入口 */
+  const loaderOptions = lockedLoader
+    ? [
+        {
+          value: lockedLoader,
+          label: lockedLoader.charAt(0).toUpperCase() + lockedLoader.slice(1),
+        },
+      ]
+    : LOADER_OPTIONS
   const [gameVersion, setGameVersion] = useState('')
 
   // 打开时预填当前实例 MC 版本（服务端探测的 mcVersion，'unknown' 不填）
@@ -92,7 +112,7 @@ export function MarketSheet({
   const firstLoadDoneRef = useRef(false)
 
   // 已安装文件名集合（卡片「已安装同名」提示 + 安装后即时刷新）
-  const pluginsQuery = usePlugins(open ? instanceId : null)
+  const pluginsQuery = usePlugins(open ? instanceId : null, kind)
   /* 查询失败时集合为空会让「已安装同名」标记整体消失——用户可能因此对**已安装**的插件
      再点安装。失败与「确实没装」必须可分，故把失败态一并传下去（卡片据此改显提示）。 */
   const installedFiles = useMemo(
@@ -218,9 +238,18 @@ export function MarketSheet({
         )
         toast.success(
           result.overwritten
-            ? `已覆盖安装 ${result.file}（${hit.title ?? hit.slug}），重启实例后生效`
-            : `已安装 ${result.file}（${hit.title ?? hit.slug} ${version.versionNumber}），重启实例后生效`,
+            ? `已覆盖安装 ${result.file}（${hit.title ?? hit.slug}），已装入 ${text.emptyDir}/，重启实例后生效`
+            : `已安装 ${result.file}（${hit.title ?? hit.slug} ${version.versionNumber}），已装入 ${text.emptyDir}/，重启实例后生效`,
         )
+        // 依赖不自动拉：把「还差什么」说清，用户可再到市场里搜装
+        const missing = result.requiredDependencies ?? []
+        if (missing.length > 0) {
+          toast.info(`${hit.title ?? hit.slug} 声明了 ${missing.length} 个必需前置`, {
+            description: `${missing
+              .map((d) => d.title ?? d.slug ?? d.projectId)
+              .join('、')}（不会自动安装，可在本市场搜索安装）`,
+          })
+        }
         void pluginsQuery.refetch()
         setPanel(null) // 安装成功收起版本面板，回列表继续浏览
       } catch (e) {
@@ -233,7 +262,7 @@ export function MarketSheet({
         setInstallingKey(null)
       }
     },
-    [instanceId, pluginsQuery],
+    [instanceId, pluginsQuery, text.emptyDir],
   )
 
   const hasMore = hits.length < totalHits
@@ -248,21 +277,21 @@ export function MarketSheet({
         <SheetHeader className="border-b border-mcs-border-muted px-5 py-4">
           <SheetTitle className="flex items-center gap-2 text-mcs-text-default">
             <Package className="size-4 text-mcs-accent-fg" aria-hidden />
-            插件市场
+            {text.noun}市场
             {cached && <StatusPill tone="muted">缓存</StatusPill>}
           </SheetTitle>
-          <SheetDescription className="text-mcs-xs">
-            从 Modrinth 社区搜索并一键安装 Bukkit 系插件；安装后需重启实例生效
-          </SheetDescription>
+          <SheetDescription className="text-mcs-xs">{text.marketHint}</SheetDescription>
         </SheetHeader>
 
         {/* ── 过滤栏 ── */}
         <MarketFilterBar
+          kind={kind}
           query={query}
           onQueryChange={setQuery}
           onDebouncedChange={handleDebouncedChange}
           loader={loader}
-          onLoaderChange={setLoader}
+          loaderOptions={loaderOptions}
+          onLoaderChange={setUserLoader}
           gameVersion={gameVersion}
           onGameVersionChange={setGameVersion}
           loading={loading}
@@ -298,15 +327,15 @@ export function MarketSheet({
           ) : hits.length === 0 ? (
             <EmptyState
               icon={Package}
-              title="没有找到匹配的插件"
-              hint="尝试更换关键词、放宽版本/加载器过滤，或清空过滤条件浏览热门插件"
+              title={`没有找到匹配的${text.noun}`}
+              hint={`尝试更换关键词、放宽版本过滤，或清空过滤条件浏览热门${text.noun}`}
               action={{
                 label: '清空过滤',
                 onClick: () => {
                   // 一键回到「热门浏览」：清关键词 + 版本/加载器过滤（防抖词同步清，避免重搜旧词）
                   setQuery('')
                   setDebouncedQuery('')
-                  setLoader('')
+                  setUserLoader('')
                   setGameVersion('')
                 },
               }}
@@ -352,7 +381,9 @@ export function MarketSheet({
         {/* ── 底注：数据来源常驻（请求去向属须知情的信息）；安装处理细节收进浮层 ── */}
         <div className="flex items-center gap-1 border-t border-mcs-border-muted px-5 py-2.5 text-mcs-xs text-mcs-text-muted">
           <span>数据源 modrinth.com（服务端代理转发，面板不出网）</span>
-          <InfoHint label="插件文件处理说明">文件经 zip 校验与文件名净化后落入 plugins/</InfoHint>
+          <InfoHint label={`${text.noun}文件处理说明`}>
+            文件经 zip 校验与文件名净化后落入 {text.emptyDir}/
+          </InfoHint>
         </div>
       </SheetContent>
 
@@ -362,8 +393,8 @@ export function MarketSheet({
         onOpenChange={(o) => {
           if (!o) setOverwriteTarget(null)
         }}
-        title="同名插件文件已存在"
-        description={`plugins/ 目录已存在 ${overwriteTarget?.version.file.filename ?? ''}（净化后同名）。覆盖安装将替换旧文件，插件升级/降级可能影响存档兼容性。`}
+        title={`同名${text.noun}文件已存在`}
+        description={`${text.emptyDir}/ 目录已存在 ${overwriteTarget?.version.file.filename ?? ''}（净化后同名）。覆盖安装将替换旧文件，升级/降级可能影响存档兼容性。`}
         confirmText="覆盖安装"
         danger
         loading={false}

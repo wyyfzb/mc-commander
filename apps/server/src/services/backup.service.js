@@ -20,7 +20,8 @@ const WORLD_NAME_REGEX = /^[A-Za-z0-9_-]+$/;
 // 顶层 world_nether/world_the_end）、plugins、mods、config、datapacks、
 // server.properties、whitelist.json、ops.json、banned-*.json 全部纳入备份。
 // libraries/versions 为加载器依赖（可重新下载）、logs/crash-reports 为日志
-// （运行时持续增长）、cache 为缓存——全部排除。
+// （运行时持续增长）、cache 为缓存、dumps 为堆转储（约等于堆大小的二进制快照，
+// 单份可达 GB 级）——全部排除。
 const EXCLUDED_DIRS = new Set([
   'logs',
   'crash-reports',
@@ -28,6 +29,7 @@ const EXCLUDED_DIRS = new Set([
   'versions',
   'cache',
   'backups',
+  'dumps',
 ]);
 
 // 路径包含校验走 utils/fs-utils.js 的解析面 resolveContainedPath
@@ -402,6 +404,10 @@ export class BackupService {
     const controller = new AbortController();
     const activeEntry = { controller, backupId, kind: 'create' };
     activeOperations.set(instanceId, activeEntry);
+    // 本轮是否真的发出过 save-off：只有发过才欠一个 save-on。
+    // 不能拿「此刻 isRconConnected」倒推——RCON 可能在 save-off 之后掉线，
+    // 那时服务器已停止自动保存，而连接状态已看不出这件事
+    let saveOffSent = false;
     // 进度推送（1s 节流）；robocopy/ditto 降级路径无 stdout 进度，前端保持不确定态
     const pushProgress = this.serverManager
       ? createProgressPush(this.serverManager, instanceId, backupId, 'instance:backupProgress')
@@ -426,6 +432,7 @@ export class BackupService {
           try {
             logger.info(`[Backup] Sending save-off for ${instanceId}...`);
             await instance.sendCommandWithResponse('save-off', { timeout: 3000 });
+            saveOffSent = true;
             logger.info(`[Backup] Sending save-all flush for ${instanceId}...`);
             await instance.saveWorld();
             // 等待磁盘写入完成
@@ -584,7 +591,7 @@ export class BackupService {
       // 恢复自动保存：save-off 与 save-on 必须成对。
       // 无论快照/统计成功与否都补发 save-on，否则异常路径会
       // 让 MC 服务器永久停留在自动保存关闭状态，崩溃/断电时世界数据回退。
-      await this._restoreSaveOn(instanceId);
+      await this._restoreSaveOn(instanceId, saveOffSent);
     }
   }
 
@@ -810,10 +817,23 @@ export class BackupService {
   // save-on 失败时通过 backupFailed 事件暴露（phase='save-on'）——若只
   // console.warn 静默跳过，save-off 已生效后 RCON 断连，MC 服务器
   // 会永久停留在自动保存关闭状态，崩溃/断电时世界数据回退且无人知晓。
-  async _restoreSaveOn(instanceId) {
+  async _restoreSaveOn(instanceId, saveOffSent = false) {
     if (!this.serverManager) return;
     const instance = this.serverManager.getInstance(instanceId);
-    if (!instance || !instance.isRconConnected) return;
+    if (!instance) return;
+    if (!instance.isRconConnected) {
+      // 本轮发过 save-off 却补不上 save-on：服务器已停自动保存，必须让用户知道
+      // 要手动执行 save-on，否则崩溃/断电时世界数据回退且无人知晓
+      if (saveOffSent) {
+        logger.error(`[Backup] save-on 无法补发（RCON 已断开），${instanceId} 已停止自动保存`);
+        this.serverManager.emit('instance:backupFailed', {
+          instanceId,
+          error: 'RCON 连接已断开，自动保存仍处于关闭状态，请在服务器控制台执行 save-on',
+          phase: 'save-on',
+        });
+      }
+      return;
+    }
     try {
       logger.info(`[Backup] Sending save-on for ${instanceId}...`);
       await instance.sendCommandWithResponse('save-on', { timeout: 3000 });
@@ -1430,6 +1450,20 @@ export function spawnProcess(cmd, args, options = {}) {
 // 操作必须登记在模块层，取消 API 才能命中任意入口发起的操作。key=实例 id：
 // 同实例的创建/恢复经 status 互斥状态机保证同时至多一个，无需复合键
 const activeOperations = new Map();
+
+/**
+ * 正在进行中的备份/恢复操作快照（实例 id → 类型）。
+ *
+ * 停机要据此判断「现在退出会不会把一个已经 save-off 的世界留在危险状态」：
+ * 备份发出 save-off 后、save-on 之前被打断，服务端会永久停止自动保存，
+ * 而那一刻没有任何界面能再把它打开。
+ */
+export function inFlightBackupOps() {
+  return [...activeOperations.entries()].map(([instanceId, entry]) => ({
+    instanceId,
+    kind: entry.kind,
+  }));
+}
 
 /** 请求取消该实例进行中的备份/恢复；无进行中操作返回 null */
 export function requestCancelBackup(instanceId) {

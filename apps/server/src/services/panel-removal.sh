@@ -10,17 +10,22 @@
 # 用法：panel-removal.sh --purge|--keep-data
 #   --purge      删除程序与全部数据（实例、存档、备份）
 #   --keep-data  只删程序，保留 var/servers、var/data、var/backups
-set -uo pipefail
+# -e 必须有：这份脚本以 root 身份删东西，任何一步失败都不该继续往下走并报「清理完成」。
+# 面板侧只看退出码判定删除成功，静默继续等于把失败报成成功。
+set -euo pipefail
 
 MODE="${1:-}"
-# 安装目录：显式传入优先，未传时按脚本位置反推（脚本位于 <安装目录>/src/services/）。
-# 可注入是必需的：按脚本位置反推在开发树里会把源码目录当成安装目录，
-# 一次误跑就会删掉整个仓库。
-if [ -n "${MC_COMMANDER_DIR:-}" ]; then
-  INSTALL_DIR="${MC_COMMANDER_DIR}"
-else
-  INSTALL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# 安装目录：必须由调用方显式传入，不接受按脚本位置反推。
+#
+# 这份脚本在生产上装在 /usr/local/lib/mc-commander/，反推「脚本位置的上两级」得到
+# 的是 /usr/local —— 一个以 root 身份执行删除的工具，默认值错到删系统目录。
+# 两个删除单元都带 Environment=MC_COMMANDER_DIR，正常路径不依赖默认值；
+# 缺了就明确拒绝，而不是猜一个「看起来合理」的目录。
+if [ -z "${MC_COMMANDER_DIR:-}" ]; then
+  echo "必须通过 MC_COMMANDER_DIR 指定要删除的安装目录" >&2
+  exit 2
 fi
+INSTALL_DIR="${MC_COMMANDER_DIR}"
 MANIFEST="$INSTALL_DIR/.install-manifest"
 # 第三方软件源与密钥的合法落点：清单可被写坏，只有这几个目录下的文件允许删。
 # 可注入是为了让用例在沙箱目录里验证同一条判定（生产环境不需要改它）
@@ -117,7 +122,7 @@ if command -v systemctl &>/dev/null && unit_belongs_here; then
   # 三个单元一并删：面板本体 + 两个删除执行单元
   rm -f "$UNIT" \
         /etc/systemd/system/mc-commander-removal.service \
-        /etc/systemd/system/mc-commander-removal-keep.service
+        /etc/systemd/system/mc-commander-removal-keep.service || true
   systemctl daemon-reload 2>/dev/null || true
   systemctl reset-failed mc-commander 2>/dev/null || true
   log "已移除 systemd 服务"
@@ -125,11 +130,11 @@ fi
 
 # sudoers 白名单与本脚本的 root 副本都是本项目加的，一并撤掉
 if [ -f /etc/sudoers.d/mc-commander ]; then
-  rm -f /etc/sudoers.d/mc-commander
+  rm -f /etc/sudoers.d/mc-commander || true
   log "已移除 sudoers 白名单"
 fi
 # 正在执行的就是这个副本：删掉它不影响已加载进内存的后续语句
-rm -rf /usr/local/lib/mc-commander
+rm -rf /usr/local/lib/mc-commander || true
 
 # 4. 按安装清单回滚系统改动。
 #    只动清单里记过的条目：用户机器原有的 Java/Node 不能碰（他别的程序要用）。
@@ -218,10 +223,21 @@ fi
 # 6. 删目录
 if [ "$MODE" = "--purge" ]; then
   rm -rf "$INSTALL_DIR"
+  # 删完复查：rm -rf 对部分不可删的条目只报错不中止（set -e 也拦不住已部分删除的目录），
+  # 而「已删除安装目录」是全链路唯一的用户可见结论
+  if [ -e "$INSTALL_DIR" ]; then
+    echo "删除安装目录失败：$INSTALL_DIR 仍有残留（可能是权限或占用）" >&2
+    exit 1
+  fi
   log "已删除安装目录（含全部实例与存档）"
 else
   for item in src public mc-schemas node_modules package.json package-lock.json .env .install-manifest; do
-    rm -rf "${INSTALL_DIR:?}/$item"
+    rm -rf "${INSTALL_DIR:?}/$item" || true
+    # 删不掉必须报出来：面板侧只看退出码，静默失败会让用户以为程序已清干净
+    if [ -e "${INSTALL_DIR:?}/$item" ]; then
+      echo "未能删除 $INSTALL_DIR/$item（权限或占用）" >&2
+      exit 1
+    fi
   done
   kept=""
   for d in var/servers var/data var/backups; do

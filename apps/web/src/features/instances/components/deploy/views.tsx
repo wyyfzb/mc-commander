@@ -2,12 +2,12 @@
  * DeployDialog 结果视图：部署中 / 成功 / 失败 / 已取消
  * - 部署中：进度条（percent×100）+ stage 中文标签（DEPLOY_STAGE_LABELS）+ transferred/total MB
  *   +「取消部署」（服务端中断下载/安装/首启并清理实例目录）
- * - 成功：绿色结果块（实例 id/名称/版本）+ 自动启动状态（首启闭环）
+ * - 成功：绿色结果块（实例 id/名称/版本）+ 自动启动状态（首启闭环）+ 收尾未完成项
  *   + 白名单提示（新实例默认已开白名单、名单为空则谁都进不去；服务器启动后先加人）+「完成」
  * - 失败：error 块 + 取消/重试
  * - 已取消：中性结果块 + 关闭/重新部署（用户动作而非故障，故不占 error 档）
  */
-import { Ban, CheckCircle2, Info, Loader2, UserPlus, XCircle } from 'lucide-react'
+import { AlertTriangle, Ban, CheckCircle2, Info, Loader2, UserPlus, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { DialogFooter } from '@/components/ui/dialog'
 import { SERVER_TYPE_LABELS, recommendedJavaVersion, type ServerType } from '@/lib/mc-deploy'
@@ -27,8 +27,9 @@ interface DeployProgressViewProps {
 /** 部署中视图：进度条 + 阶段文案 + 传输量（进度为 null 时显示不确定占位）+ 取消入口 */
 export function DeployProgressView({ progress, cancelling, onCancel }: DeployProgressViewProps) {
   const pct = progress != null ? Math.round(progress.percent * 100) : 0
+  // detail 优先：带版本号的阶段（如「正在准备 Java 21…」）无法用固定标签表达
   const stageLabel = progress
-    ? (DEPLOY_STAGE_LABELS[progress.stage] ?? progress.stage)
+    ? (progress.detail ?? DEPLOY_STAGE_LABELS[progress.stage] ?? progress.stage)
     : '正在部署…'
   const showTransfer = progress != null && progress.total > 0
   const stageError = progress?.stage === 'error' ? progress.error : undefined
@@ -124,6 +125,19 @@ export function DeploySuccessView({ result, autoStart, onComplete }: DeploySucce
             {autoStart === 'ok' && '已发送启动指令，服务器正在启动（状态可在仪表盘查看）'}
             {autoStart === 'failed' && '自动启动失败，可稍后在实例页手动启动'}
           </span>
+        </NoticeBanner>
+      )}
+      {/* 收尾未完成项：部署本身成功，但这些事没做成，用户必须知道。
+          只发 toast 不够——toast 会自动消失，而「实例重启后会从列表消失」这类
+          后果需要留在结果块里可回看。 */}
+      {result.warnings.length > 0 && (
+        <NoticeBanner variant="warning" form="card" icon={AlertTriangle}>
+          <p className="font-medium">部署已完成，但有以下未完成项</p>
+          <ul className="list-disc pl-4 text-mcs-text-muted">
+            {result.warnings.map((w) => (
+              <li key={w}>{w}</li>
+            ))}
+          </ul>
         </NoticeBanner>
       )}
       {/* 新实例必然处于「白名单已开 + 名单为空」：部署写的 server.properties 跟随上游默认

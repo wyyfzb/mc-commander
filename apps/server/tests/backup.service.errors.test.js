@@ -416,7 +416,7 @@ describe('executeBackup：RCON 保存序列与对称恢复', () => {
     expect(failed.content).toContain('恢复自动保存失败');
   });
 
-  it('_restoreSaveOn 早退：无 serverManager / 实例不存在 / RCON 不可用均静默返回', async () => {
+  it('_restoreSaveOn 早退：无 serverManager / 实例不存在 / 未发过 save-off 时静默返回', async () => {
     const bare = new BackupService(null);
     await expect(bare._restoreSaveOn('s1')).resolves.toBeUndefined();
 
@@ -431,7 +431,25 @@ describe('executeBackup：RCON 保存序列与对称恢复', () => {
       }),
     );
     const noRcon = new BackupService(manager);
-    await expect(noRcon._restoreSaveOn('s1')).resolves.toBeUndefined();
+    // 未发过 save-off ⇒ 不欠 save-on，静默返回是对的
+    await expect(noRcon._restoreSaveOn('s1', false)).resolves.toBeUndefined();
+  });
+
+  it('发过 save-off 但 RCON 已断 → 必须报 backupFailed(phase=save-on)，不能静默', async () => {
+    // 这条路径下服务器已停自动保存，而连接状态已看不出这件事：
+    // 静默返回等于让世界永久停写、且用户以为备份一切正常
+    const failed = waitForEvent(manager, 'instance:backupFailed');
+    manager.getInstance = vi.fn(() =>
+      asInstance({
+        isRconConnected: false,
+        sendCommandWithResponse: vi.fn(),
+      }),
+    );
+    const svc = new BackupService(manager);
+    await svc._restoreSaveOn('s1', true);
+    const ev = await failed;
+    expect(ev.phase).toBe('save-on');
+    expect(ev.error).toContain('save-on');
   });
 });
 

@@ -2,10 +2,20 @@ import { execSync, spawnSync } from 'child_process';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import config from '../config.js';
 import { logger } from './logger.js';
 
 // 默认推荐的 Java 版本
 const DEFAULT_JAVA_VERSION = '17';
+
+/**
+ * 面板自供 Java 运行时的落点：`<包根>/var/jre/<主版本>/`。
+ * 与 config 的其它运行期产物同锚包根，不随 cwd 漂移。
+ * @returns {string}
+ */
+export function getPanelJreDir() {
+  return config.jreDir;
+}
 
 /**
  * 解析 MC 版本字符串为 [major, minor, patch] 数字数组
@@ -86,7 +96,7 @@ export function getRecommendedJavaVersion(mcVersion) {
  * @param {string} javaPath java 可执行文件路径
  * @returns {string|null} Java 主版本号字符串，失败时返回 null
  */
-function getJavaVersionFromPath(javaPath) {
+export function getJavaVersionFromPath(javaPath) {
   // java -version 把版本写到 **stderr** 且**退出码为 0**，故不能只读 stdout：
   // execFileSync 在成功路径丢弃 stderr，返回空串 ⇒ 解析恒得 null，且 catch 永不触发
   // （实测：默认 java=17 时面板仍判「未找到 Java」，用 17 启动 26.3 会 UnsupportedClassVersionError）。
@@ -206,9 +216,10 @@ function expandGlob(pattern) {
   return results;
 }
 
-// 扫描系统已安装的 Java 版本
+// 扫描已安装的 Java 版本
 // 返回数组 [{ version: '17', path: '/usr/lib/jvm/...' }, ...]
 // 检测路径（按优先级）：
+// 0. 面板自供的 JRE（config.jreDir/<主版本>/bin/java）
 // 1. JAVA_HOME 环境变量
 // 2. Linux: /usr/lib/jvm/java-X-openjdk-X/bin/java, /usr/lib/jvm/java-X-amazon-corretto/bin/java, /usr/lib/jvm/jdk-X/bin/java
 // 3. Windows: C:\Program Files\Java\jdk-X/bin/java.exe, C:\Program Files\Eclipse Adoptium\jdk-X/bin/java.exe
@@ -222,10 +233,27 @@ export function getAllJavaVersions() {
   const isMac = platform === 'darwin';
   const isLinux = platform === 'linux';
 
+  // 0. 面板自供的 JRE 先入列：同主版本精确匹配时优先返回它。
+  // 路径由面板自己写入、版本按 Mojang 运行时组件钉死，不受发行版升级删包与
+  // PATH 改序影响；系统 java 可能被替换成另一实现而面板无从察觉
+  const javaBinary = isWindows ? 'java.exe' : 'java';
+  const panelJreDir = getPanelJreDir();
+  // expandGlob 按 '/' 切段（与下方硬编码模式同口径），故这里显式换成 '/'，
+  // 不用 path.join 拼——Windows 上拼出 '\' 会让通配段整段失效
+  const panelJrePattern = panelJreDir
+    ? `${panelJreDir.split(path.sep).join('/')}/*/bin/${javaBinary}`
+    : null;
+  for (const p of panelJrePattern ? expandGlob(panelJrePattern) : []) {
+    const version = getJavaVersionFromPath(p);
+    if (version) {
+      found.set(p, version);
+    }
+  }
+
   // 1. JAVA_HOME 环境变量
   const javaHome = process.env.JAVA_HOME;
   if (javaHome) {
-    const javaBin = path.join(javaHome, 'bin', isWindows ? 'java.exe' : 'java');
+    const javaBin = path.join(javaHome, 'bin', javaBinary);
     if (fileExists(javaBin)) {
       const version = getJavaVersionFromPath(javaBin);
       if (version) {
@@ -368,9 +396,9 @@ export function findJavaPath(requiredVersion) {
 /**
  * 严格版查找：**找不到满足要求的 Java 时返回 null**，不回落系统 `java`。
  *
- * 为什么与 `findJavaPath` 分开：部署路径要保持「回落系统 java」的既有行为
- * （用户机器上只有系统 java 时也得能装上），而升级路径必须能区分「确实找到了」
- * 与「只能碰运气」——后者意味着升级完极可能起不来，此时应当中止而不是照升。
+ * 与 `findJavaPath` 的差别只在缺省值：后者回落裸命令 `java`，适合「找不到也照常
+ * 继续、由首启暴露问题」的同步调用点；需要区分「确实找到了」与「只能碰运气」的
+ * 调用方（自动供给、升级校验）必须用本函数——null 意味着补装或中止。
  * @param {string} requiredVersion 需要的 Java 主版本号字符串
  * @returns {string|null}
  */

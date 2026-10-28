@@ -86,6 +86,8 @@ beforeEach(() => {
   deployMock.cancelEcho = false
   deployMock.cancelEchoDetails = null
   deployMock.lastBody = null
+  deployMock.started = true
+  deployMock.warnings = []
   deployCancelMock.notInFlight = false
   deployCancelMock.lastBody = null
   deployStatusMock.active = false
@@ -185,7 +187,9 @@ describe('DeployDialog', () => {
     expect(autoStartBanner.className).not.toContain('text-mcs-info-fg')
     expect(deployMock.lastBody?.eula).toBe(true)
     expect(eulaMock.calls).toBe(0)
-    expect(startMock.calls).toBe(1)
+    // 启动由服务端在部署收尾时完成，前端不得再发一次：
+    // 服务端此时已置 isRunning，第二个请求必然撞「already running」→ 假失败提示
+    expect(startMock.calls).toBe(0)
 
     // 完成 → onDeployed(result) + 关闭
     await user.click(screen.getByRole('button', { name: '完成' }))
@@ -230,6 +234,27 @@ describe('DeployDialog', () => {
     expect(screen.queryByRole('button', { name: '关闭弹窗' })).not.toBeInTheDocument()
     // 无步骤导航
     expect(screen.queryByRole('button', { name: '上一步' })).not.toBeInTheDocument()
+  })
+
+  it('准备 Java 阶段：detail 带目标主版本且优先于固定阶段标签', () => {
+    renderDialog()
+    act(() => {
+      useDeployStore.setState({
+        deploying: true,
+        progress: {
+          stage: 'prepare_java',
+          percent: 0.3,
+          transferred: 0,
+          total: 0,
+          detail: '正在准备 Java 25…',
+        },
+      })
+    })
+
+    expect(screen.getByText('正在准备 Java 25…')).toBeInTheDocument()
+    // 固定标签会丢掉目标主版本，用户无从知道在等哪个 Java
+    expect(screen.queryByText('正在准备 Java 运行时…')).not.toBeInTheDocument()
+    expect(screen.getByText('30%')).toBeInTheDocument()
   })
 
   it('部署中（progress 为 null）：不确定进度占位文案', () => {
@@ -352,8 +377,8 @@ describe('DeployDialog', () => {
     expect(screen.queryByText('请填写实例名称')).not.toBeInTheDocument()
   })
 
-  it('EULA 同意随请求下发；自动启动失败展示降级提示', async () => {
-    startMock.shouldFail = true // 同意已随部署下发，但启动指令失败
+  it('EULA 同意随请求下发；服务端回报未启动时展示降级提示', async () => {
+    deployMock.started = false // 服务端已尝试启动但失败，结果随响应回来
     renderDialog()
     const user = userEvent.setup()
 
@@ -364,7 +389,21 @@ describe('DeployDialog', () => {
     expect(await screen.findByText('自动启动失败，可稍后在实例页手动启动')).toBeInTheDocument()
     expect(deployMock.lastBody?.eula).toBe(true)
     expect(eulaMock.calls).toBe(0)
-    expect(startMock.calls).toBe(1)
+    expect(startMock.calls).toBe(0)
+  })
+
+  it('服务端回报的收尾未完成项逐条呈现，不被「部署成功」盖过去', async () => {
+    deployMock.warnings = ['实例未能写入数据库（disk I/O error）：重启面板后该实例会从列表消失']
+    renderDialog()
+    const user = userEvent.setup()
+
+    await gotoStep3AndAgreeEula(user)
+    await user.click(screen.getByRole('button', { name: '部署并启动' }))
+    expect(await screen.findByText('部署成功')).toBeInTheDocument()
+    // 收尾有未完成项时仍报「部署成功」是事实，但必须让用户看见还有事没做完。
+    // 断言结果块而非 toast：toast 会自动消失，这些后果需要可回看。
+    expect(await screen.findByText('部署已完成，但有以下未完成项')).toBeInTheDocument()
+    expect(await screen.findByText(/未能写入数据库/)).toBeInTheDocument()
   })
 
   it('未勾选 EULA 仍可部署：eula=false 下发且不自动启动', async () => {

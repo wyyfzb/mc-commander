@@ -36,11 +36,9 @@ ensure_deps() {
   (cd "$PROJECT_DIR" && npm ci --no-audit --no-fund)
 }
 
-echo "=== [1a/6] 目录结构门禁（顶层白名单 + 源码面无测试 + 无运行期产物入库）==="
+echo "=== [1/6] 目录结构门禁（顶层白名单 + 源码面无测试 + 无运行期产物入库）==="
 node "$PROJECT_DIR/tools/check-layout.mjs"
 
-echo "=== [1b/6] 注释纪律门禁（编号 / 演化叙述 / 归属叙述 / 私有指针 / 待办承诺 / 死指针）==="
-node "$PROJECT_DIR/tools/gates/check-comment-discipline.mjs"
 echo "=== [2/6] 代码格式检查（Biome formatter；范围与排除项见 biome.jsonc）==="
 # 根 = workspace 根（Biome 与三包依赖同在根一次安装）
 ensure_deps

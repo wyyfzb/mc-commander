@@ -3,14 +3,17 @@
  * 复选框 + 元数据主列 + 状态/操作列；行点击打开详情
  */
 import { Package, Power, PowerOff, Trash2 } from 'lucide-react'
-import type { PluginInfo, PluginUpdateStatus } from '@/api/types'
+import type { MarketKind, PluginInfo, PluginUpdateStatus } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { StatusPill } from '@/components/mcs/status-pill'
 import { formatFileSize, formatModifiedAt } from '@/lib/mc-files'
+import { TARGET_TEXT } from '../market-config'
 
 interface PluginRowProps {
   plugin: PluginInfo
+  /** 装载目标：模组没有文件层启停，行内不出现启停按钮与启停状态 */
+  kind?: MarketKind
   checked: boolean
   onCheckedChange: (checked: boolean) => void
   toggling: boolean
@@ -26,6 +29,7 @@ interface PluginRowProps {
 
 export function PluginRow({
   plugin,
+  kind = 'plugin',
   checked,
   onCheckedChange,
   toggling,
@@ -36,6 +40,8 @@ export function PluginRow({
   updateInfo,
   onUpdate,
 }: PluginRowProps) {
+  const supportsToggle = kind === 'plugin'
+  const noun = TARGET_TEXT[kind].noun
   const displayName = plugin.meta?.name ?? plugin.name
   const version = plugin.meta?.version
   const apiVersion = plugin.meta?.apiVersion
@@ -56,7 +62,7 @@ export function PluginRow({
       }}
       role="button"
       tabIndex={0}
-      aria-label={`查看插件 ${displayName} 详情`}
+      aria-label={`查看${noun} ${displayName} 详情`}
     >
       {/* 复选框（阻止行点击）：容器与图标块同顶同高（mt-0.5 + h-9），
           16px 的框在其中垂直居中 → 与 36px 图标块中线一致 */}
@@ -88,9 +94,11 @@ export function PluginRow({
           </span>
           {version && <StatusPill tone="muted">v{version}</StatusPill>}
           {apiVersion && <StatusPill tone="info">API {apiVersion}</StatusPill>}
-          <StatusPill tone={plugin.enabled ? 'success' : 'muted'}>
-            {plugin.enabled ? '已启用' : '已禁用'}
-          </StatusPill>
+          {supportsToggle && (
+            <StatusPill tone={plugin.enabled ? 'success' : 'muted'}>
+              {plugin.enabled ? '已启用' : '已禁用'}
+            </StatusPill>
+          )}
           {updateInfo?.hasNewer && (
             <button
               type="button"
@@ -129,31 +137,32 @@ export function PluginRow({
         onKeyDown={(e) => e.stopPropagation()}
         role="presentation"
       >
-        {plugin.enabled ? (
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={toggling}
-            onClick={() => void onToggle(plugin, false)}
-            aria-label={`禁用 ${displayName}`}
-            title="禁用（重启实例后生效）"
-          >
-            <PowerOff className="size-3.5" aria-hidden />
-            禁用
-          </Button>
-        ) : (
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={toggling}
-            onClick={() => void onToggle(plugin, true)}
-            aria-label={`启用 ${displayName}`}
-            title="启用（重启实例后生效）"
-          >
-            <Power className="size-3.5" aria-hidden />
-            启用
-          </Button>
-        )}
+        {supportsToggle &&
+          (plugin.enabled ? (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={toggling}
+              onClick={() => void onToggle(plugin, false)}
+              aria-label={`禁用 ${displayName}`}
+              title="禁用（重启实例后生效）"
+            >
+              <PowerOff className="size-3.5" aria-hidden />
+              禁用
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={toggling}
+              onClick={() => void onToggle(plugin, true)}
+              aria-label={`启用 ${displayName}`}
+              title="启用（重启实例后生效）"
+            >
+              <Power className="size-3.5" aria-hidden />
+              启用
+            </Button>
+          ))}
         <Button
           variant="ghost"
           size="sm"

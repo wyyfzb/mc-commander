@@ -95,6 +95,8 @@ function createMockInstance(overrides = {}) {
     name: 'Test Server',
     mcVersion: '1.20.4',
     jarFile: 'server-1.20.4.jar',
+    // 当前是 Paper：升级请求带 purpur ⇒ 同时是一次服务端类型转换
+    modLoader: 'paper',
     serverPath: tmpDir,
     isRunning: false,
     start: vi.fn(() => {}),
@@ -212,11 +214,31 @@ describe('成功路径：被替换旧版本 jar 清理（实锤①）', () => {
     // 进度收官：COMPLETED
     const stages = progressStages(manager);
     expect(stages[stages.length - 1]).toBe(UPGRADE_STAGES.COMPLETED);
-    // DB 已指向新版本
+    // DB 已指向新版本与新类型：类型不跟着写会让面板标 Paper、磁盘装 Purpur
     expect(InstanceModel.update).toHaveBeenCalledWith('inst-1', {
       jarFile: 'server-1.21.4.jar',
       mcVersion: '1.21.4',
+      modLoader: 'Purpur',
     });
+    // 内存同步（对外可见的类型立即变成新类型）
+    expect(manager._instance.modLoader).toBe('purpur');
+  });
+
+  it('升级成功后 instance.json 的类型与版本同步（DB 丢失后按它恢复不会回到旧类型）', async () => {
+    const manager = createMockServerManager({ start: startEmitsReady() });
+    const service = new UpgradeService(manager);
+    fs.writeFileSync(OLD_JAR(), 'OLD_JAR_CONTENT');
+    fs.writeFileSync(
+      path.join(tmpDir, 'instance.json'),
+      JSON.stringify({ id: 'inst-1', name: 'Test Server', type: 'paper', mcVersion: '1.20.4' }),
+    );
+
+    await service.upgrade('inst-1', '1.21.4', 'purpur');
+
+    const saved = JSON.parse(fs.readFileSync(path.join(tmpDir, 'instance.json'), 'utf8'));
+    expect(saved.type).toBe('purpur');
+    expect(saved.mcVersion).toBe('1.21.4');
+    expect(saved.jarFile).toBe('server-1.21.4.jar');
   });
 
   it('连续两次升级：实例目录最终仅保留最新版本 jar（无残留旧版本/备份副本）', async () => {

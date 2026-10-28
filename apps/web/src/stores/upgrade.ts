@@ -5,6 +5,8 @@ import type { UpgradeProgress, UpgradeStage } from '@/api/types'
 export const UPGRADE_STAGE_LABELS: Record<UpgradeStage, string> = {
   backup: '备份中',
   download: '下载中',
+  // 面板自供 JRE：缺目标 Java 时自动下载，detail 会写明目标主版本
+  prepare_java: '准备 Java 运行时',
   replace: '替换中',
   verify: '启动校验',
   completed: '升级完成',

@@ -61,7 +61,9 @@ apps/server/data/
 apps/server/node_modules/
 apps/server/.env
 apps/server/backups/
-# servers/ 整体忽略（含 jar/world/logs 等运行时文件）由 apps/server/.gitignore 的 servers/ 规则覆盖
+# 实例目录兜底：默认落点 var/servers 已被上面的 apps/server/var/ 覆盖，
+# 这里挡的是 SERVERS_DIR 被改到包根（含 jar/world/logs 等运行时文件）
+apps/server/servers/
 #
 # 根锚定兜底（防回归）：服务端 dataDir/serversDir/backupsDir 锚定安装目录
 # （config.js 的 path.resolve(__dirname, process.env.X || './x')），从仓库根启动
@@ -93,7 +95,7 @@ repowiki/
 # 环境变量文件（保留 .env.example 模板）
 .env
 .env.local
-.env.*.local
+.env.*
 *.env.local
 !.env.example
 
@@ -198,13 +200,15 @@ tools/e2e/playwright-report/
 !docs/assets/screenshots/
 !docs/assets/screenshots/*.png
 *.webp
-!archived/mc_manager_app/assets/**
+# archived/ 已整体排除，目录内的 ! 规则不会生效（git 不进入被排除目录）；
+# 归档内容一律不入库，确需入库的放 docs/ 或包内 assets/
 !apps/web/assets/**
 
 # 编译产物与二进制文件
 *.exe
 *.dll
 *.so
+*.jar
 *.dylib
 *.bin
 *.o

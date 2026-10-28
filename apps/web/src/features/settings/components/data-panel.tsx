@@ -17,6 +17,7 @@ import {
   type RemovalRequest,
 } from '@/api/panel'
 import { DangerZonePanel, RemovalProgress } from './danger-zone-panel'
+import { MigrateDataSection } from './migrate-data-section'
 
 export function DataPanel() {
   const config = useConnectionStore()
@@ -99,18 +100,21 @@ export function DataPanel() {
   }
 
   return (
-    <DangerZonePanel
-      items={dataQuery.data?.items ?? []}
-      loading={dataQuery.isLoading}
-      exporting={exporting}
-      stopping={stopping || stopMutation.isPending}
-      onExport={handleExport}
-      onStop={() => stopMutation.mutate()}
-      totpEnabled={previewQuery.data?.totpEnabled ?? false}
-      initialKeepData={startedKeepData}
-      removing={removeMutation.isPending}
-      removeError={removeError}
-      onRemove={(payload) => removeMutation.mutate(payload)}
-    />
+    <div className="flex flex-col gap-3">
+      <MigrateDataSection items={dataQuery.data?.items ?? []} loading={dataQuery.isLoading} />
+      <DangerZonePanel
+        items={dataQuery.data?.items ?? []}
+        loading={dataQuery.isLoading}
+        exporting={exporting}
+        stopping={stopping || stopMutation.isPending}
+        onExport={handleExport}
+        onStop={() => stopMutation.mutate()}
+        totpEnabled={previewQuery.data?.totpEnabled ?? false}
+        initialKeepData={startedKeepData}
+        removing={removeMutation.isPending}
+        removeError={removeError}
+        onRemove={(payload) => removeMutation.mutate(payload)}
+      />
+    </div>
   )
 }

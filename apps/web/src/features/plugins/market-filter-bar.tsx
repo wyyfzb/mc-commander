@@ -16,13 +16,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { LOADER_OPTIONS, SEARCH_DEBOUNCE_MS } from './market-config'
+import type { MarketKind } from '@/api/types'
+import { LOADER_OPTIONS, SEARCH_DEBOUNCE_MS, TARGET_TEXT } from './market-config'
 
 interface MarketFilterBarProps {
+  /** 装载目标：只影响措辞；筛选项由 loaderOptions 决定 */
+  kind?: MarketKind
   query: string
   onQueryChange: (v: string) => void
   onDebouncedChange: (v: string) => void
   loader: string
+  /** 加载器下拉选项；缺省为 Bukkit 系全量（模组实例只给自身 loader 一项） */
+  loaderOptions?: ReadonlyArray<{ value: string; label: string }>
   onLoaderChange: (v: string) => void
   gameVersion: string
   onGameVersionChange: (v: string) => void
@@ -32,10 +37,12 @@ interface MarketFilterBarProps {
 }
 
 export function MarketFilterBar({
+  kind = 'plugin',
   query,
   onQueryChange,
   onDebouncedChange,
   loader,
+  loaderOptions = LOADER_OPTIONS,
   onLoaderChange,
   gameVersion,
   onGameVersionChange,
@@ -43,6 +50,8 @@ export function MarketFilterBar({
   onRefresh,
   totalHits,
 }: MarketFilterBarProps) {
+  const text = TARGET_TEXT[kind]
+
   return (
     <div className="space-y-2 border-b border-mcs-border-muted px-5 py-3">
       <SearchInput
@@ -50,8 +59,8 @@ export function MarketFilterBar({
         onValueChange={onQueryChange}
         onDebouncedChange={onDebouncedChange}
         debounceMs={SEARCH_DEBOUNCE_MS}
-        placeholder="搜索插件（留空浏览热门）…"
-        aria-label="搜索插件关键词"
+        placeholder={`搜索${text.noun}（留空浏览热门）…`}
+        aria-label={`搜索${text.noun}关键词`}
         testId="market-search-input"
       />
       <div className="flex items-center gap-2">
@@ -60,7 +69,7 @@ export function MarketFilterBar({
             <SelectValue placeholder="全部加载器" />
           </SelectTrigger>
           <SelectContent>
-            {LOADER_OPTIONS.map((o) => (
+            {loaderOptions.map((o) => (
               <SelectItem key={o.value} value={o.value}>
                 {o.label}
               </SelectItem>

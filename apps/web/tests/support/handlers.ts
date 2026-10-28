@@ -28,6 +28,7 @@ import {
   backupItemSchema,
   instanceStatusSchema,
   taskRunHistorySchema,
+  updateCheckResultSchema,
 } from '@mc-commander/schemas'
 
 /**
@@ -603,11 +604,17 @@ export const deployMock: {
   cancelEcho: boolean
   /** 取消回声携带的收尾明细（服务端 details.cleanup；null = 收尾正常） */
   cancelEchoDetails: unknown
+  /** 服务端回报的自动启动结果（部署收尾由服务端负责，前端只消费） */
+  started: boolean
+  /** 服务端回报的收尾未完成项 */
+  warnings: string[]
   lastBody: { eula?: boolean } | null
 } = {
   shouldFail: false,
   cancelEcho: false,
   cancelEchoDetails: null,
+  started: true,
+  warnings: [],
   lastBody: null,
 }
 
@@ -874,7 +881,16 @@ export const handlers = [
   ),
   http.get('*/api/v1/system-stats', () => ok(systemStatsSchema.parse(mockSystemStats))),
   http.get('*/api/v1/check-update', () =>
-    ok({ current: '0.1.0', latest: null, hasUpdate: false, offline: true }),
+    // 走契约校验：手造字面量会让「前端用的字段名」与契约脱钩，
+    // 契约改了字段类型也不会有一条用例变红
+    ok(
+      updateCheckResultSchema.parse({
+        current: '0.1.0',
+        latest: null,
+        hasUpdate: false,
+        offline: true,
+      }),
+    ),
   ),
   http.get('*/api/v1/instances', () =>
     ok([
@@ -1154,6 +1170,8 @@ export const handlers = [
       javaVersion: '21',
       path: '/opt/mc/instances/inst-deploy-001',
       maxMemory: body.maxMemory ?? '2G',
+      warnings: deployMock.warnings,
+      started: deployMock.started,
     })
   }),
   // ── 升级域──

@@ -55,13 +55,20 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
-import { instanceLabel } from '@/lib/instance-label'
+import { instanceLabel, serverTypeLabel } from '@/lib/instance-label'
 
 const SERVER_TYPES = [
   { value: 'vanilla', label: 'Vanilla' },
   { value: 'paper', label: 'Paper' },
   { value: 'purpur', label: 'Purpur' },
 ] as const
+
+type UpgradeTargetType = (typeof SERVER_TYPES)[number]['value']
+
+/** 升级入口能产出的服务端类型；Fabric/Forge 实例不在其中（升级会换成这里选中的类型） */
+function isUpgradableType(value: string | null | undefined): value is UpgradeTargetType {
+  return SERVER_TYPES.some((t) => t.value === (value ?? '').toLowerCase())
+}
 
 function StageIcon({ stage }: { stage: UpgradeStage }) {
   if (stage === 'completed') return <CheckCircle2 className="h-5 w-5 text-mcs-success-fg" />
@@ -80,7 +87,12 @@ interface UpgradeDialogProps {
 export function UpgradeDialog({ instance, open, onOpenChange }: UpgradeDialogProps) {
   // ConnectionState extends ConnectionConfig：全 store 即 config（与 queries.ts 同模式）
   const config = useConnectionStore()
-  const [type, setType] = useState<'vanilla' | 'paper' | 'purpur'>('vanilla')
+  // 默认选中实例当前的类型：升级最常发生在同类型换版本，默认落到 Vanilla 会把
+  // Paper 实例换成 Vanilla——用户只选了版本，却换了服务端
+  const currentType = (instance.modLoader ?? '').toLowerCase()
+  const [type, setType] = useState<UpgradeTargetType>(
+    isUpgradableType(currentType) ? currentType : 'vanilla',
+  )
   const [mcVersion, setMcVersion] = useState('')
   const [starting, setStarting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -183,18 +195,21 @@ export function UpgradeDialog({ instance, open, onOpenChange }: UpgradeDialogPro
   }
 
   /** 类型切换与版本重置合并为一次事件驱动更新（不走 useEffect） */
-  const handleTypeChange = (next: 'vanilla' | 'paper' | 'purpur') => {
+  const handleTypeChange = (next: UpgradeTargetType) => {
     setType(next)
     setMcVersion('')
   }
 
   // 服务端类型是单选组：语义与方向键由 hook 统一提供（切换仍走 handleTypeChange 以连带重置版本）
-  const typeGroup = useRadioGroup<'vanilla' | 'paper' | 'purpur'>({
+  const typeGroup = useRadioGroup<UpgradeTargetType>({
     label: '服务端类型',
     value: type,
     values: SERVER_TYPES.map((t) => t.value),
     onChange: handleTypeChange,
   })
+
+  /** 选中的类型与实例当前类型不同 = 这是一次服务端转换，不是单纯换版本 */
+  const typeChanging = type !== currentType
 
   const handleUpgrade = async () => {
     if (!mcVersion || mcVersion === instance.mcVersion) return
@@ -243,6 +258,20 @@ export function UpgradeDialog({ instance, open, onOpenChange }: UpgradeDialogPro
               升级前自动创建备份，随后下载并替换服务端 JAR，启动校验失败将自动回滚。
             </p>
           </NoticeBanner>
+
+          {/* 类型转换提示：选中的类型与当前不同＝换服务端，代价必须说在前面 */}
+          {!progress && typeChanging && (
+            <NoticeBanner variant="warning" form="card" icon={AlertTriangle}>
+              <p className="font-medium">
+                这会更换服务端：{serverTypeLabel(currentType)} → {serverTypeLabel(type)}
+              </p>
+              <p className="mt-1 text-mcs-text-muted">
+                世界存档保留可继续用；原服务端的插件或模组不再被加载（plugins/ 与 mods/
+                目录会原样留在实例里，删不删由你决定）。想只换版本、保留原服务端，请把类型选回
+                {serverTypeLabel(currentType)}。
+              </p>
+            </NoticeBanner>
+          )}
 
           {/* 升级进行中：进度 + 取消入口（升级中唯一的可用出口） */}
           {upgrading && progress && (
@@ -365,7 +394,7 @@ export function UpgradeDialog({ instance, open, onOpenChange }: UpgradeDialogPro
                 disabled={!mcVersion || mcVersion === instance.mcVersion || upgrading || starting}
               >
                 {starting && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />}
-                开始升级
+                {typeChanging ? `转换成 ${serverTypeLabel(type)} 并升级` : '开始升级'}
               </Button>
             </div>
           )}

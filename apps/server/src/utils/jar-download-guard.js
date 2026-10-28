@@ -59,6 +59,19 @@ export function allowedDownloadHosts(types) {
 }
 
 /**
+ * 面板自供 Java 运行时的下载域（清单 → manifest → JRE 文件各一个域）。
+ *
+ * 为什么是这三条、且不用通配：清单只从 launchermeta 取；manifest 地址由清单给出，
+ * 实测落在 piston-meta（路径段即该文件的 sha1）；JRE 文件实测落在 piston-data。
+ * 少一条安装直接失败，多一条等于放宽「被污染的上游响应可把下载导向任意主机」的面。
+ */
+export const RUNTIME_DOWNLOAD_HOSTS = new Set([
+  'launchermeta.mojang.com',
+  'piston-meta.mojang.com',
+  'piston-data.mojang.com',
+]);
+
+/**
  * 断言下载 URL 的 host 在给定白名单内。畸形 URL 与非白名单域一律 VALIDATION_ERROR。
  * @param {string} rawUrl
  * @param {Set<string>} allowedHosts
@@ -78,6 +91,30 @@ export function assertAllowedDownloadHost(rawUrl, allowedHosts) {
 /// JAR 下载体积上限（字节）：主流服务端 jar 均在 50MB 内，放宽至 512MB
 /// 兼容大型核心包；超过即视为恶意/损坏上游。
 export const JAR_DOWNLOAD_MAX_BYTES = 512 * 1024 * 1024;
+
+/// 部署前的磁盘余量下限（字节）：26.3 的 server.jar 实测 62MB，首启世界在默认
+/// 视距下约 100MB 量级，再留日志与崩溃报告的空间，取 1GB。
+export const DEPLOY_MIN_FREE_BYTES = 1024 * 1024 * 1024;
+
+/**
+ * 部署前检查落点所在文件系统的剩余空间。
+ *
+ * 磁盘满时服务端不是干净报错：jar 写一半、世界生成到一半、save 被截断，
+ * 而 save 截断会让存档损坏。故在动手之前判死，让用户先清理。
+ *
+ * @param {string} dir 落点目录（必须已存在，否则 statfs 报 ENOENT）
+ * @returns {{ok: boolean, freeBytes: number, requiredBytes: number}}
+ */
+export function checkDeployDiskSpace(dir, requiredBytes = DEPLOY_MIN_FREE_BYTES) {
+  try {
+    const statfs = fs.statfsSync(dir);
+    const freeBytes = statfs.bavail * statfs.bsize;
+    return { ok: freeBytes >= requiredBytes, freeBytes, requiredBytes };
+  } catch {
+    // statfs 不可用（罕见平台差异）：跳过预检，不阻断部署
+    return { ok: true, freeBytes: -1, requiredBytes };
+  }
+}
 
 /**
  * 认可的摘要算法白名单（白名单外一律视为「无摘要」跳过：拿未知摘要当 sha256

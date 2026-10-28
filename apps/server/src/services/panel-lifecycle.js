@@ -35,8 +35,48 @@ export function surveyData() {
       };
       if (fs.existsSync(item.dir)) walk(item.dir);
     } catch {}
-    return { key: item.key, label: item.label, path: item.dir, entries, bytes };
+    // 所在文件系统的余量：用户问「要不要清理」时唯一能回答这个问题的数字，
+    // 只报占用不报余量等于让他自己想办法
+    let freeBytes = -1;
+    let mountPoint = '';
+    try {
+      const st = fs.statfsSync(item.dir);
+      freeBytes = st.bavail * st.bsize;
+      mountPoint = mountOf(item.dir);
+    } catch {
+      /* 目录不存在或平台不支持：留 -1，前端显示「未知」而不是 0 */
+    }
+    return {
+      key: item.key,
+      label: item.label,
+      path: item.dir,
+      entries,
+      bytes,
+      freeBytes,
+      mountPoint,
+    };
   });
+}
+
+/** 逐级上溯找挂载点：读 /proc/mounts 里出现的最长前缀 */
+function mountOf(dir) {
+  try {
+    const mounts = fs
+      .readFileSync('/proc/mounts', 'utf8')
+      .split('\n')
+      .map((line) => line.split(' ')[1])
+      .filter(Boolean)
+      .map((p) => p.replace(/\\040/g, ' '));
+    let best = '';
+    for (const m of mounts) {
+      if ((dir === m || dir.startsWith(m.endsWith('/') ? m : `${m}/`)) && m.length > best.length) {
+        best = m;
+      }
+    }
+    return best;
+  } catch {
+    return '';
+  }
 }
 
 /** 有内容的目录才算「会被删掉的数据」；全空时如实说没有数据，不虚报 */
@@ -50,12 +90,12 @@ export function hasAnyData(survey) {
  */
 export function collectExportSources() {
   const sources = [];
-  for (const [dir, name] of [
-    [config.serversDir, 'servers'],
-    [config.backupsDir, 'backups'],
-  ]) {
+  for (const dir of [config.serversDir, config.backupsDir]) {
     try {
-      if (fs.existsSync(dir) && fs.readdirSync(dir).length > 0) sources.push({ dir, name });
+      if (!fs.existsSync(dir) || fs.readdirSync(dir).length === 0) continue;
+      // 成员名必须取目录自己的名字：数据目录可被用户改到任意位置，
+      // 打包时按「父目录 + 成员名」定位，写死名字会 stat 不到而打出一个空包
+      sources.push({ dir, name: path.basename(dir) });
     } catch {}
   }
   return sources;

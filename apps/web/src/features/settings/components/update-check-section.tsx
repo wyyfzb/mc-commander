@@ -4,15 +4,39 @@
  * - 加载中：spinner + 文案
  * - 最新版本：绿色 CheckCircle + 当前版本号 + 重试按钮
  * - 离线：灰色 + WifiOff 图标
- * - 有更新：黄色警告 + 版本号 + 外链
+ * - 有更新：黄色警告 + 版本号 + 「立即更新」按钮 + 外链
  */
+import { useState } from 'react'
 import { CheckCircle2, ExternalLink, Loader2, RefreshCw, WifiOff } from 'lucide-react'
 import { useCheckUpdate } from '@/api/queries'
+import { applyPanelUpdate } from '@/api/panel'
+import { useConnectionStore } from '@/stores/connection'
+import { Button } from '@/components/ui/button'
 import { Card } from '@/components/mcs/card'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
+import { toast } from 'sonner'
 
 export function UpdateCheckSection() {
+  const config = useConnectionStore()
   const { data, isLoading, isError, refetch } = useCheckUpdate()
+  const [updating, setUpdating] = useState(false)
+
+  // 更新由 root 单元在面板之外执行：成功后 systemd 把面板拉起来，失败则自动回退。
+  // 面板此刻会被停掉，故这里不等结果，只把「已开始」告诉用户。
+  const startUpdate = async () => {
+    if (!data?.latest) return
+    setUpdating(true)
+    try {
+      await applyPanelUpdate(config, `v${data.latest}`)
+      toast.success('已开始更新，面板会短暂断开', {
+        description: '完成后自动恢复；失败会自动回退到当前版本。',
+        duration: 8000,
+      })
+    } catch {
+      // 具体原因由 api 层统一提示（权限缺失 / 单元不存在等），这里只解除按钮锁
+      setUpdating(false)
+    }
+  }
 
   if (isLoading) {
     return (
@@ -75,16 +99,21 @@ export function UpdateCheckSection() {
           <div className="font-semibold text-mcs-text-default">发现新版本 v{data.latest}</div>
           <div className="text-mcs-xs text-mcs-text-muted">当前 v{data.current}</div>
         </div>
-        {data.url && (
-          <a
-            href={data.url}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex shrink-0 items-center gap-1 text-mcs-xs font-medium text-mcs-warning-fg hover:underline"
-          >
-            查看 <ExternalLink className="size-3" aria-hidden />
-          </a>
-        )}
+        <div className="flex shrink-0 items-center gap-2">
+          {data.url && (
+            <a
+              href={data.url}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 text-mcs-xs font-medium text-mcs-warning-fg hover:underline"
+            >
+              查看 <ExternalLink className="size-3" aria-hidden />
+            </a>
+          )}
+          <Button size="sm" onClick={() => void startUpdate()} disabled={updating}>
+            {updating ? '正在更新…' : '立即更新'}
+          </Button>
+        </div>
       </div>
     </NoticeBanner>
   )

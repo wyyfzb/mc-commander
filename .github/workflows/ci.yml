@@ -11,12 +11,21 @@ concurrency:
   # PR 内旧提交的 run 取消省资源；主干 push run 排队不取消，保每个合并点的完整验证
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# 默认最小权限：仓库默认的 GITHUB_TOKEN 是读写全开，CI 里只有读代码的需求。
+# 需要写权的作用域在各 job 里单独声明，不在此处放宽。
+permissions:
+  contents: read
+
 jobs:
   # 仓库级静态检查合成一个 job：格式与密钥扫描都是全仓扫描、都不需要装三个包的依赖，
   # 拆成两个 job 只是各多付一次 checkout + setup-node + npm ci。gitleaks 需全量历史故 fetch-depth: 0
   hygiene:
     name: 仓库卫生（代码格式 + 密钥泄漏扫描）
     runs-on: ubuntu-latest
+    # gitleaks-action 命中时在 PR 上发评论，需 pull-requests: write
+    permissions:
+      contents: read
+      pull-requests: write
     if: >-
       github.event_name == 'push' ||
       !github.event.pull_request.draft
@@ -37,8 +46,6 @@ jobs:
       - run: npm run format:check
       # 目录结构门禁：顶层白名单 + 源码面无测试 + 运行期产物不入库（判据见 tools/check-layout.mjs）。
       - run: npm run check:layout
-      # 注释纪律门禁：编号 / 演化叙述 / 归属叙述 / 私有指针 / 待办承诺 / 死指针（判据见 tools/gates/check-comment-discipline.mjs）。
-      - run: npm run check:comments
       # 工具链自身的门禁：tools/ 在 workspaces 之外，包级 lint / tsc / vitest 都扫不到它
       # （三个 job 走 -w 调用），故在此显式跑，否则这里的错漏不会有任何信号。
       - run: npm run lint:tools

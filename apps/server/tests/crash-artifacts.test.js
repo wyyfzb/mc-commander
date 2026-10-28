@@ -49,6 +49,34 @@ function writeHsErr(name, content) {
   fs.writeFileSync(path.join(tmpDir, name), content);
 }
 
+describe('堆转储参数注入（堆耗尽是没有 hs_err 的，只能靠转储留下证据）', () => {
+  it('默认注入 +HeapDumpOnOutOfMemoryError 与固定落点，且置在最前；落点目录被创建', () => {
+    const inst = makeInstance(tmpDir);
+    const args = inst._withHeapDumpArgs(['-Xmx2G', '-jar', 'server.jar', 'nogui']);
+    expect(args.slice(0, 2)).toEqual([
+      '-XX:+HeapDumpOnOutOfMemoryError',
+      `-XX:HeapDumpPath=${path.join(tmpDir, 'dumps')}`,
+    ]);
+    expect(fs.existsSync(path.join(tmpDir, 'dumps'))).toBe(true);
+    // 原有参数顺序不变（-Xmx 仍在 -jar 之前）
+    expect(args.slice(2)).toEqual(['-Xmx2G', '-jar', 'server.jar', 'nogui']);
+  });
+
+  it('用户已显式指定堆转储参数时不覆盖，也不建目录', () => {
+    const inst = makeInstance(path.join(tmpDir, 'user-set'));
+    fs.mkdirSync(inst.serverPath, { recursive: true });
+    const userArgs = ['-XX:+HeapDumpOnOutOfMemoryError', '-XX:HeapDumpPath=/data/dumps', '-Xmx1G'];
+    expect(inst._withHeapDumpArgs(userArgs)).toBe(userArgs);
+    expect(fs.existsSync(path.join(inst.serverPath, 'dumps'))).toBe(false);
+  });
+
+  it('只写了 -XX:-HeapDumpOnOutOfMemoryError（用户明确关掉）也不覆盖', () => {
+    const inst = makeInstance(tmpDir);
+    const userArgs = ['-XX:-HeapDumpOnOutOfMemoryError'];
+    expect(inst._withHeapDumpArgs(userArgs)).toBe(userArgs);
+  });
+});
+
 describe('MC 崩溃报告解析', () => {
   it('真实样本：取出时间/描述/版本/内存等已核实字段', () => {
     const r = parseCrashReport(read('crash-invalid-secret.txt'));

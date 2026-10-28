@@ -116,10 +116,9 @@ describe('routes/index.js 聚合层', () => {
 
     it('Gitee 取不到 → 回退 GitHub，仍能拿到版本', async () => {
       fetchMock.mockRejectedValueOnce(new TypeError('fetch failed'));
-      fetchMock.mockResolvedValueOnce({
-        status: 302,
-        headers: { get: () => `https://github.com/${config.repoPath}/releases/tag/v9.9.9` },
-      });
+      // 与 redirect() 同一构造函数：写死 `get: () => 值` 的桩会吞掉参数名，
+      // 把实现改成读别的头也照样绿（实测打穿）
+      fetchMock.mockResolvedValueOnce(redirect('v9.9.9'));
 
       const res = await apiGet('/api/v1/check-update');
 
@@ -164,6 +163,40 @@ describe('routes/index.js 聚合层', () => {
       const res = await apiGet('/api/v1/check-update');
 
       expect(res.body.data.offline).toBe(true);
+    });
+
+    it('5 秒超时链路真的会 abort：请求悬挂时到点即断，不是「等上游自己失败」', async () => {
+      // 上一条只造了个 AbortError 丢给 mock，超时链路一次都没跑过——把 setTimeout 的
+      // 回调改成空函数（永不 abort）时它照样绿。
+      // 不能用假定时器：supertest 走真实 socket，假定时器会让请求永远不返回。
+      // 故只把实现里那个 5 秒定时器缩短到 0，其余定时器保持真实。
+      const realSetTimeout = globalThis.setTimeout;
+      const shorten = vi.spyOn(globalThis, 'setTimeout').mockImplementation((fn, ms, ...rest) => {
+        const real = globalThis.setTimeout === shorten ? realSetTimeout : globalThis.setTimeout;
+        return real(fn, ms >= 1000 ? 0 : ms, ...rest);
+      });
+      let aborted = 0;
+      fetchMock.mockImplementation(
+        (_url, opts) =>
+          new Promise((_resolve, reject) => {
+            opts.signal.addEventListener('abort', () => {
+              aborted += 1;
+              const err = new Error('This operation was aborted');
+              err.name = 'AbortError';
+              reject(err);
+            });
+          }),
+      );
+      try {
+        const res = await apiGet('/api/v1/check-update');
+        // 两个源各悬挂一次、各被超时掐断一次：说明第一个源超时后确实换源重试
+        expect(aborted).toBe(2);
+        expect(res.status).toBe(200);
+        expect(res.body.data.offline).toBe(true);
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+      } finally {
+        shorten.mockRestore();
+      }
     });
   });
 

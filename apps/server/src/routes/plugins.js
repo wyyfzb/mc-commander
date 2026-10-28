@@ -6,6 +6,7 @@ import path from 'path';
 import { error, AppError, ErrorCodes } from '../utils/response.js';
 import { recordAudit, AuditActions } from '../utils/audit.js';
 import {
+  resolveMarketTarget,
   marketSearchRequestSchema,
   marketVersionsRequestSchema,
   pluginOverwriteQuerySchema,
@@ -14,6 +15,7 @@ import {
   marketSearchResultSchema,
   marketVersionsResultSchema,
   marketInstallResultSchema,
+  marketProfileSchema,
   pluginUpdateCheckResultSchema,
   pluginListSchema,
   pluginUploadResultSchema,
@@ -44,10 +46,14 @@ import config from '../config.js';
  * DELETE /api/v1/instances/:id/plugins/:file              —— 删除插件 jar
  *
  * 市场延伸（Modrinth 代理，注册在 :file 参数路由之前避免匹配冲突）：
+ * GET  /api/v1/instances/:id/plugins/market/profile                      —— 本实例的市场装载目标（kind/loader）
  * GET  /api/v1/instances/:id/plugins/market/search                       —— 搜索（q/offset/limit/game_version/loader）
  * GET  /api/v1/instances/:id/plugins/market/projects/:slug/versions      —— 版本列表（game_version/loader）
  * POST /api/v1/instances/:id/plugins/market/install                      —— 一键安装（body: {slug, versionNumber}；?overwrite=true）
  * POST /api/v1/instances/:id/plugins/check-updates                       —— 批量更新检测（已装插件 vs Modrinth 最新版）
+ *
+ * 条目类型由实例的 modLoader 决定（Bukkit 系装 plugins/、Fabric/Forge 系装 mods/），
+ * 客户端不传类型：类型是实例的属性，不是一次搜索的选项。
  *
  * 模组（`mods/` 复用同一套模型，目录名由 service 的 kind 参数化）：
  * GET    /api/v1/instances/:id/mods              —— 列表
@@ -132,7 +138,37 @@ export function createPluginRoutes(serverManager) {
     return instance.serverPath || path.join(config.serversDir, id);
   }
 
+  /**
+   * 实例的市场装载目标（plugin → plugins/、mod → mods/）。
+   *
+   * 判据是实例的 `modLoader`（部署类型写入实例表、小写后挂在实例对象上）：
+   * 不嗅探启动器文件，也不在前端按同一字段再算一遍——类型是实例的属性，只有一份。
+   */
+  function resolveInstanceMarketTarget(instance) {
+    return resolveMarketTarget(instance?.modLoader ?? null);
+  }
+
   // ── 市场延伸：必须在 :file 参数路由之前注册 ──────────
+
+  // GET /api/v1/instances/:id/plugins/market/profile
+  // 前端据此决定这一页是「插件」还是「模组」（标题/落盘目录/筛选项都随它走），
+  // 不在前端重算一遍映射：两处各算一次，实例被升级成另一种类型后必然漂移
+  router.get(
+    '/instances/:id/plugins/market/profile',
+    asyncHandler(async (req, res) => {
+      const instance = serverManager.getInstance(req.params.id);
+      if (!instance) {
+        return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND, 'Instance not found'));
+      }
+      const target = resolveInstanceMarketTarget(instance);
+      res.json(
+        validatedSuccess(marketProfileSchema, {
+          kind: target.kind,
+          loader: target.loader,
+        }),
+      );
+    }),
+  );
 
   // GET /api/v1/instances/:id/plugins/market/search?q=&offset=&limit=&game_version=&loader=
   // 查询契约：q/game_version/loader 归一校验；offset/limit 为分页参数
@@ -145,12 +181,16 @@ export function createPluginRoutes(serverManager) {
       if (!serverPath) {
         return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND, 'Instance not found'));
       }
+      const target = resolveInstanceMarketTarget(serverManager.getInstance(req.params.id));
       const result = await searchMarketPlugins({
         query: req.query.q,
         offset: typeof req.query.offset === 'string' ? Number.parseInt(req.query.offset, 10) : 0,
         limit: typeof req.query.limit === 'string' ? Number.parseInt(req.query.limit, 10) : 20,
         gameVersion: req.query.game_version ?? null,
-        loader: req.query.loader ?? null,
+        // 模组不接受客户端的 loader：只能用本实例 loader 的构建，交错 loader 的
+        // jar 装进 mods/ 起不来；插件保留既有「用户可选 loader」语义
+        loader: target.kind === 'mod' ? target.loader : (req.query.loader ?? null),
+        projectType: target.kind,
       });
       res.json(validatedSuccess(marketSearchResultSchema, result));
     }),
@@ -165,9 +205,11 @@ export function createPluginRoutes(serverManager) {
       if (!serverPath) {
         return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND, 'Instance not found'));
       }
+      const target = resolveInstanceMarketTarget(serverManager.getInstance(req.params.id));
       const result = await getMarketProjectVersions(req.params.slug, {
         gameVersion: req.query.game_version ?? null,
-        loader: req.query.loader ?? null,
+        loader: target.kind === 'mod' ? target.loader : (req.query.loader ?? null),
+        projectType: target.kind,
       });
       res.json(validatedSuccess(marketVersionsResultSchema, result));
     }),
@@ -186,15 +228,17 @@ export function createPluginRoutes(serverManager) {
       }
       const { slug, versionNumber } = req.body;
       const overwrite = req.query.overwrite === 'true';
+      const target = resolveInstanceMarketTarget(serverManager.getInstance(id));
       const result = await installPluginFromMarket(
         serverPath,
         { slug, versionNumber },
-        { overwrite },
+        { overwrite, kind: target.kind, loader: target.loader },
       );
       recordAudit({
         instanceId: id,
+        // 市场安装动作沿用同一条审计 action；落盘目标由 targetType 区分
         action: AuditActions.PLUGIN_MARKET_INSTALL,
-        targetType: 'plugin',
+        targetType: result.kind,
         targetId: result.file,
         detail: {
           source: 'modrinth',
@@ -202,6 +246,7 @@ export function createPluginRoutes(serverManager) {
           versionNumber: result.versionNumber,
           sizeBytes: result.sizeBytes,
           overwritten: result.overwritten,
+          installedTo: result.installedTo,
         },
       });
       res

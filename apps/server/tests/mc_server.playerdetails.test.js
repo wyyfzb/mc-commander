@@ -128,7 +128,9 @@ describe('MCServerInstance - getPlayerDetails RCON 链路与异常降级', () =>
     const d = await instance.getPlayerDetails('Steve');
     expect(d.health).toBeNull();
     expect(d.position).toBeNull();
-    expect(d.maxHealth).toBe(20); // attribute 查询失败回退默认 20
+    // 查不到就留 null：编造一个 20 会与真实 health 组成错误比例，
+    // 而前端对 null 已有「--」兜底
+    expect(d.maxHealth).toBeNull();
     expect(d.inventory).toBeNull();
   });
 

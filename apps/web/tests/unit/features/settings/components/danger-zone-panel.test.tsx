@@ -76,8 +76,13 @@ describe('危险区面板', () => {
 
   it('停用只说保留，不暗示会删数据', () => {
     render(<DangerZonePanel {...baseProps()} />)
-    const body = screen.getByText(/停止面板服务并取消开机自启/)
+    const body = screen.getByText(/停止面板服务/)
     expect(body).toHaveTextContent('全部保留')
+  })
+
+  it('不宣称会取消开机自启（停机流程里没有 disable，说了就是假承诺）', () => {
+    render(<DangerZonePanel {...baseProps()} />)
+    expect(screen.queryByText(/取消开机自启/)).not.toBeInTheDocument()
   })
 
   it('没有任何数据时如实说「不会丢失存档」，不虚报', () => {
@@ -423,5 +428,36 @@ describe('删除完成后的收尾', () => {
     await renderGone()
     expect(screen.queryByRole('button', { name: /证书/ })).not.toBeInTheDocument()
     expect(screen.getByText(/MC Commander 面板本地 CA/)).toBeInTheDocument()
+  })
+})
+
+// 数据存放位置：只报占用不报余量，用户无法判断「要不要清理、要不要换盘」
+describe('数据存放位置', () => {
+  it('逐项给出当前路径与所在磁盘剩余', () => {
+    render(
+      <DangerZonePanel
+        {...baseProps({
+          items: [
+            item({
+              path: '/opt/mc-commander/var/servers',
+              bytes: 1024 * 1024 * 512,
+              freeBytes: 1024 * 1024 * 1024 * 5,
+              mountPoint: '/',
+            }),
+          ],
+        })}
+      />,
+    )
+    expect(screen.getByText('/opt/mc-commander/var/servers')).toBeInTheDocument()
+    expect(screen.getByText(/所在磁盘剩余/)).toBeInTheDocument()
+  })
+
+  it('读不到余量时不显示该行，不虚报为 0', () => {
+    // freeBytes = -1 是「读不到」的约定值；把它当 0 会显示「剩余 0 B」，
+    // 用户会据此判断磁盘已满并去做无谓的清理
+    render(<DangerZonePanel {...baseProps({ items: [item({ freeBytes: -1 })] })} />)
+    expect(screen.queryByText(/所在磁盘剩余/)).not.toBeInTheDocument()
+    // 只禁「剩余 0 B」这一种：体积本身为 0 时显示「0 B」是正确的
+    expect(screen.queryByText(/剩余\s*0 B/)).not.toBeInTheDocument()
   })
 })

@@ -153,6 +153,8 @@ export type {
 
 // ── 插件 ──
 export type {
+  MarketKind,
+  MarketProfile,
   PluginMeta,
   PluginInfo,
   PluginList,

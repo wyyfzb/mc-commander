@@ -87,3 +87,42 @@ describe('停机退出', () => {
     }
   }, 40_000);
 });
+
+/* 备份中途退出会把世界留在危险状态：save-off 已发、save-on 还没发，服务端从此
+   不再自动保存，而面板已经没了。停机必须等这一种收尾，其余不等但要如实告知。 */
+describe('停机时对在途备份的有界等待', () => {
+  it('inFlightBackupOps 导出且无操作时返回空表', async () => {
+    const { inFlightBackupOps } = await import('../src/services/backup.service.js');
+    expect(typeof inFlightBackupOps).toBe('function');
+    expect(inFlightBackupOps()).toEqual([]);
+  });
+
+  it('停机逻辑先查在途备份，再关调度器', () => {
+    // 顺序承重：调度器一停，正在跑的备份不会被再排期，但已经跑着的仍要等。
+    // 先停调度器再查在途会让「刚被取消的备份」漏出等待窗口。
+    const src = fs.readFileSync(SERVER, 'utf8');
+    const shutdownAt = src.indexOf('async function shutdown(signal)');
+    const body = src.slice(shutdownAt, src.indexOf('wss.close(', shutdownAt));
+    // 判据必须落在「决定要不要等」的那一处：等待循环的条件里真的调用它。
+    // 只锁 `const pending = ...` 不够——后面还有两处调用，改成 [] 后仍会匹配到别处
+    expect(body).toMatch(/while\s*\(\s*inFlightBackupOps\(\)\.length\s*>\s*0/);
+    expect(body).toMatch(/const\s+\w+\s*=\s*inFlightBackupOps\(\)/);
+    // 位置必须都在 shutdown 函数体内比：indexOf 从 shutdownAt 起找，
+    // 但 import 那行在函数之前，若写成全局 indexOf 会拿 import 的位置冒充调用点
+    const checkAt = body.indexOf('inFlightBackupOps()');
+    const stopAt = body.indexOf('taskScheduler.stop()');
+    expect(checkAt).toBeGreaterThan(-1);
+    expect(checkAt).toBeLessThan(stopAt);
+  });
+
+  it('等待有上限（不超过 30 秒），且超时后如实说明后果', () => {
+    const src = fs.readFileSync(SERVER, 'utf8');
+    const shutdownAt = src.indexOf('async function shutdown(signal)');
+    const body = src.slice(shutdownAt, src.indexOf('wss.close(', shutdownAt));
+    // 无界等待会让崩溃后的自动重启被无限拖住
+    expect(body).toMatch(/30_000/);
+    // 超时也要留证据：用户下次发现「服务器不自动保存」时得有据可查
+    expect(body).toContain('save-off');
+    expect(body).toContain('重启服务器即可恢复');
+  });
+});

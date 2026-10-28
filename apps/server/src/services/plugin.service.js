@@ -59,12 +59,14 @@ export function resolveLoadTarget(kind = DEFAULT_LOAD_TARGET) {
   return { kind, ...target };
 }
 
-/// 插件文件名白名单：字母数字开头，允许 . _ - ，以 .jar 或 .jar.disabled 结尾。
+/// 条目文件名白名单：字母数字开头，允许 . _ - + ，以 .jar 或 .jar.disabled 结尾。
+/// `+` 必须放行：上游真实文件名普遍带构建标记（fabric-api-0.136.1+1.21.8.jar、
+/// lithium-fabric-0.18.1+mc1.21.8.jar），拒绝它等于一半模组装不上。
 /// 拒绝路径分隔符/空白/控制字符/隐藏文件，路径逃逸由 resolveSafePath 兜底。
-const PLUGIN_FILE_REGEX = /^[A-Za-z0-9][A-Za-z0-9._-]*\.jar(\.disabled)?$/;
+const PLUGIN_FILE_REGEX = /^[A-Za-z0-9][A-Za-z0-9._+-]*\.jar(\.disabled)?$/;
 
 /// 上传文件名白名单：仅允许 .jar（不允许直接上传 .disabled 状态，启停走接口）
-const PLUGIN_UPLOAD_NAME_REGEX = /^[A-Za-z0-9][A-Za-z0-9._-]*\.jar$/;
+const PLUGIN_UPLOAD_NAME_REGEX = /^[A-Za-z0-9][A-Za-z0-9._+-]*\.jar$/;
 
 /// zip 容器魔数（jar 实为 zip）：PK\x03\x04。mod jar 同样是 zip，故同一校验复用
 const ZIP_MAGIC = Buffer.from([0x50, 0x4b, 0x03, 0x04]);

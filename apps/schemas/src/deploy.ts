@@ -27,6 +27,14 @@ export const deployResultSchema = z.object({
   javaVersion: z.string(),
   path: z.string(),
   maxMemory: z.string(),
+  /**
+   * 部署收尾的真实结果。终态 complete 的语义是「可以去连了」，而入库失败、
+   * 首启失败、自动启动失败都不会让部署本身失败——这些必须如实回报，
+   * 否则用户拿到「部署成功」却连不上，且不知道原因。
+   */
+  warnings: z.array(z.string()),
+  /** 本次是否已自动启动（勾了 EULA 且启动成功才为 true） */
+  started: z.boolean(),
 })
 
 /**
@@ -51,6 +59,9 @@ export const deployProgressSchema = z.object({
   transferred: z.number(),
   total: z.number(),
   error: z.string().optional(),
+  // 阶段的补充说明：stage 的中文标签是固定文案，带版本号的进度（如「正在准备 Java 21…」）
+  // 只能由 detail 承载（与 upgradeProgress 的 detail 同口径）
+  detail: z.string().optional(),
   // 实例归属（WS 连接补发恢复显示与通知文案所需）：部署实例完成前未入库，
   // 事件走全局广播，归属由 payload 携带而非信封 instanceId
   instanceId: z.string().optional(),
@@ -81,12 +92,16 @@ export const deployStatusResponseSchema = z.discriminatedUnion('deploying', [
     total: z.number(),
     updatedAt: z.number(),
     error: z.string().optional(),
+    detail: z.string().optional(),
   }),
 ])
 
 export const upgradeStageSchema = z.enum([
   'backup',
   'download',
+  // 补齐目标版本要求的 Java：面板自己下载并落地 JRE，期间没有服务端 jar 的传输，
+  // 故与 download 分档（进度条的含义是「准备 Java」而非「下载核心」）
+  'prepare_java',
   'replace',
   'verify',
   'completed',

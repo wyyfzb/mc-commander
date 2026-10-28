@@ -1009,6 +1009,8 @@ const server = createServer((req, res) => {
     if (path === '/api/v1/instances/e2e-demo/plugins/check-updates' && req.method === 'POST') {
       return res.end(
         ok({
+          checkedAt: new Date().toISOString(),
+          skipped: { disabled: 0, overLimit: 0, noMeta: 0 },
           results: plugins.map((p) => ({
             file: p.file,
             name: p.name,
@@ -1255,6 +1257,8 @@ const server = createServer((req, res) => {
             javaVersion: '21',
             path: '/mock/instances/paper-a1b2c3d4',
             maxMemory: '2G',
+            warnings: [],
+            started: true,
           },
           'Instance deployed successfully',
         ),

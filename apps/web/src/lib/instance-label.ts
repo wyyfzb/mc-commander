@@ -13,3 +13,17 @@ export function instanceLabel(instance: { id: string; name?: string | null }): s
   const name = instance.name?.trim()
   return name ? name : instance.id
 }
+
+/** 服务端类型的展示标签：`modLoader` 是小写枚举，标签集中一份，未知取值原样返回 */
+export const SERVER_TYPE_LABELS: Record<string, string> = {
+  vanilla: 'Vanilla',
+  paper: 'Paper',
+  purpur: 'Purpur',
+  fabric: 'Fabric',
+  forge: 'Forge',
+}
+
+export function serverTypeLabel(value: string | null | undefined): string {
+  const key = (value ?? '').toLowerCase()
+  return SERVER_TYPE_LABELS[key] ?? key
+}

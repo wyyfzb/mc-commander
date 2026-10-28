@@ -3,7 +3,7 @@
  * - applyUpgradeProgress 按实例累积（多实例互不覆盖）
  * - clearUpgradeProgress 只清指定实例
  * - getUpgradeProgress 缺失返回 null
- * - UPGRADE_STAGE_LABELS 覆盖全部 8 个阶段（中文标签）
+ * - UPGRADE_STAGE_LABELS 覆盖全部 9 个阶段（中文标签）
  */
 import { describe, it, expect, beforeEach } from 'vitest'
 import {
@@ -61,10 +61,11 @@ describe('upgrade store', () => {
     expect(getUpgradeProgress('ghost')).toBeNull()
   })
 
-  it('UPGRADE_STAGE_LABELS 覆盖全部 8 个阶段', () => {
+  it('UPGRADE_STAGE_LABELS 覆盖全部 9 个阶段', () => {
     const stages: UpgradeStage[] = [
       'backup',
       'download',
+      'prepare_java',
       'replace',
       'verify',
       'completed',
@@ -74,6 +75,7 @@ describe('upgrade store', () => {
     ]
     expect(Object.keys(UPGRADE_STAGE_LABELS).sort()).toEqual([...stages].sort())
     expect(UPGRADE_STAGE_LABELS.backup).toBe('备份中')
+    expect(UPGRADE_STAGE_LABELS.prepare_java).toBe('准备 Java 运行时')
     expect(UPGRADE_STAGE_LABELS.completed).toBe('升级完成')
     expect(UPGRADE_STAGE_LABELS.rolled_back).toBe('已回滚')
     expect(UPGRADE_STAGE_LABELS.cancelled).toBe('已取消')

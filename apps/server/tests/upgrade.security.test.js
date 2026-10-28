@@ -334,6 +334,7 @@ describe('服务层路径收口（真实临时目录 + 真实 fs）', () => {
     expect(InstanceModel.update).toHaveBeenCalledWith('inst-1', {
       jarFile: 'server-1.21.4.jar',
       mcVersion: '1.21.4',
+      modLoader: 'Vanilla',
     });
 
     // 落地路径：仍在实例目录内（穿越断言——resolveSafePath 收口生效）

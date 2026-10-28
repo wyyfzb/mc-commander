@@ -9,7 +9,9 @@ import { toast } from 'sonner'
 import { ApiError } from '@/api/client'
 import { getFriendlyErrorText, ErrorCode } from '@/api/errors'
 import { apiUploadPlugin } from '@/api/plugins'
+import type { MarketKind } from '@/api/types'
 import { useConnectionStore } from '@/stores/connection'
+import { TARGET_TEXT } from './market-config'
 
 /** 同名冲突上下文：触发冲突的文件 + 上传队列剩余文件（确认覆盖后继续） */
 export interface UploadConflict {
@@ -22,11 +24,18 @@ export interface UploadConflict {
 interface UsePluginUploadOptions {
   /** 当前实例 id（null 时上传早退，防御性 guard） */
   instanceId: string | null
-  /** 队列结束/中止后刷新插件列表（消费方传 pluginsQuery.refetch） */
+  /** 装载目标：决定上传端点与提示里的落盘目录 */
+  kind?: MarketKind
+  /** 队列结束/中止后刷新条目列表（消费方传 pluginsQuery.refetch） */
   refreshList: () => void
 }
 
-export function usePluginUpload({ instanceId, refreshList }: UsePluginUploadOptions) {
+export function usePluginUpload({
+  instanceId,
+  kind = 'plugin',
+  refreshList,
+}: UsePluginUploadOptions) {
+  const text = TARGET_TEXT[kind]
   /** 上传中条目（顺序队列同一时刻仅一个活跃） */
   const [uploading, setUploading] = useState<{ name: string; pct: number } | null>(null)
   /** 上传队列剩余数量（含活跃项） */
@@ -57,21 +66,22 @@ export function usePluginUpload({ instanceId, refreshList }: UsePluginUploadOpti
       try {
         const result = await apiUploadPlugin(useConnectionStore.getState(), instanceId, file, {
           overwrite,
+          kind,
           onProgress: (pct) => setUploading({ name: file.name, pct }),
           signal: controller.signal,
         })
         uploadSucceededRef.current += 1
-        // 落地目录随 toast 外显（与 files 域 toast 带路径同口径；详情页 plugins/{file} 仅次级可见）
+        // 落地目录随 toast 外显（与 files 域 toast 带路径同口径；详情页 {dir}/{file} 仅次级可见）
         toast.success(
           result.overwritten
-            ? `已覆盖上传 ${file.name}，落入 plugins/，重启实例后生效`
-            : `已上传 ${file.name}${result.meta?.name ? `（${result.meta.name}）` : ''}，落入 plugins/，重启实例后生效`,
+            ? `已覆盖上传 ${file.name}，落入 ${text.emptyDir}/，重启实例后生效`
+            : `已上传 ${file.name}${result.meta?.name ? `（${result.meta.name}）` : ''}，落入 ${text.emptyDir}/，重启实例后生效`,
         )
       } finally {
         uploadAbortRef.current = null
       }
     },
-    [instanceId],
+    [instanceId, kind, text.emptyDir],
   )
 
   /** 顺序上传队列：冲突时暂停并弹确认；取消/失败不阻断其余文件 */
@@ -123,7 +133,7 @@ export function usePluginUpload({ instanceId, refreshList }: UsePluginUploadOpti
       const jars = all.filter((f) => f.name.toLowerCase().endsWith('.jar'))
       const skipped = all.length - jars.length
       if (jars.length === 0) {
-        toast.error('仅支持上传 .jar 插件文件')
+        toast.error(`仅支持上传 .jar ${text.noun}文件`)
         return
       }
       if (skipped > 0) toast.warning(`${skipped} 个非 .jar 文件已跳过`)
@@ -131,7 +141,7 @@ export function usePluginUpload({ instanceId, refreshList }: UsePluginUploadOpti
       uploadFailedRef.current = 0
       void runUploadQueue(jars)
     },
-    [runUploadQueue],
+    [runUploadQueue, text.noun],
   )
 
   const cancelUpload = () => {
