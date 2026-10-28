@@ -1,0 +1,19 @@
+name: 代码扫描配置
+
+# 排除说明：以下路径不是交付载荷的一部分，也不是用户可达路径——
+# 测试夹具、门禁与打包工具、构建产物。扫它们只会产出与产品无关的告警。
+paths-ignore:
+  - apps/*/tests/**
+  - apps/web/tests/**
+  - tools/**
+  - '**/node_modules/**'
+  - apps/web/dist/**
+  - apps/server/public/**
+  - apps/schemas/dist/**
+
+query-filters:
+  # `js/missing-rate-limiting` 只看单个路由处理函数有没有限流器，
+  # 认不出挂在 app 上的全局中间件（本仓是 app.use('/api/', rateLimit())），
+  # 因此对所有执行系统命令或读写文件的端点都会报——结构性误报，不是个例。
+  - exclude:
+      id: js/missing-rate-limiting
