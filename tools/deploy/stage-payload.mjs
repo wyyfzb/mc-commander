@@ -12,6 +12,7 @@
  * 前置：依赖已安装（根 `npm ci`）。前端与契约包产物由本脚本现场构建（不信任既有 dist）。
  */
 import { execFileSync } from 'node:child_process'
+import os from 'node:os'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -52,6 +53,110 @@ export function allowedPaths() {
  * 校验一份产物**文件**清单是否只含白名单内容（只传文件，不传目录）。返回违规路径数组。
  * 单独导出是为了能被测试直接调用（可离线造一棵含多余文件的树来验证它真的会红）。
  */
+/**
+ * 服务端对契约包的导入必须都能在构建出的 dist 上解析成功，否则装入用户机后模块链接
+ * 就失败（`does not provide an export named ...`），面板进程起不来——这条只在运行时暴露。
+ *
+ * 判定方式是**真实模块链接**，不是正则文本匹配：Node 自己解析 import/export，
+ * 覆盖 `import {}`、`import D, {}`、`export {} from`、注释里的假 import 等全部形态。
+ * 在子进程里跑并把 dist 的真实导出喂进去，链接失败即报错，报错里带缺失的名字。
+ */
+export function findUnlinkableContractImports(files, distFile) {
+  const payload = JSON.stringify({ files, distFile })
+  const script = `
+    import vm from 'node:vm'
+    import { readFileSync } from 'node:fs'
+    import { pathToFileURL } from 'node:url'
+    // process.argv = [node, runner.mjs, payload.json]
+    const { files, distFile } = JSON.parse(readFileSync(process.argv[2], 'utf8'))
+    ;(async () => {
+      // 真导出：直接 import 构建好的 dist，导出集合以运行时为准
+      const ns = await import(pathToFileURL(distFile).href)
+      // 导出集合原样照搬，default 也留着：服务端若用默认导入而 dist 没有 default，
+      // 那本来就是装到用户机上会崩的写法，不该被判定器放过
+      const synthetic = new vm.SyntheticModule(
+        Object.keys(ns),
+        function () {
+          for (const k of this.names) this.setExport(k, ns[k])
+        },
+        { identifier: '@mc-commander/schemas' },
+      )
+      await synthetic.link(() => {})
+      // 非契约来源一律放行：抛错会让整个文件被跳过，于是「文件里还有一处真契约缺失」
+      // 就永远看不见了（文件里几乎总有其它 import）。放行意味着**只判契约包**，
+      // 其它来源的名字由 Node 自己报，不在本自检的判定面内。
+      // 名字来源：链接报错会逐个点名缺哪个导出，补上再试，直到这个来源不再报错。
+      const stubCache = new Map()
+      const stubFor = (spec) => {
+        if (!stubCache.has(spec)) stubCache.set(spec, { names: new Set(), mod: null })
+        const entry = stubCache.get(spec)
+        entry.mod = new vm.SyntheticModule([...entry.names], function () {
+          for (const n of this.names) this.setExport(n, {})
+        }, { identifier: spec })
+        return entry
+      }
+      const MISSING = /does not provide an export named '([^']+)'/
+
+      const bad = []
+      for (const f of files) {
+        let mod
+        try {
+          mod = new vm.SourceTextModule(f.code, { identifier: f.rel })
+        } catch (err) {
+          bad.push({ rel: f.rel, reason: 'SyntaxError: ' + String(err && err.message) })
+          continue
+        }
+        // 逐次补足非契约来源的导出名；补不动了还报错才是真的要报
+        for (let attempt = 0; attempt < 40; attempt += 1) {
+          try {
+            await mod.link((spec) => {
+              if (spec === '@mc-commander/schemas') return synthetic
+              const entry = stubCache.get(spec) ?? stubFor(spec)
+              entry.mod = new vm.SyntheticModule([...entry.names], function () {
+                for (const n of this.names) this.setExport(n, {})
+              }, { identifier: spec })
+              return entry.mod
+            })
+            break
+          } catch (err) {
+            const msg = String(err && err.message)
+            const hit = msg.match(MISSING)
+            // 缺的不是契约包 ⇒ 补进对应来源，再来一次；契约包缺项才记一笔
+            if (hit && !msg.includes('@mc-commander/schemas')) {
+              const spec = (mod.moduleRequests ?? [])
+                .map((r) => r.specifier)
+                .find((sp) => sp !== '@mc-commander/schemas')
+              stubFor(spec).names.add(hit[1])
+              continue
+            }
+            bad.push({ rel: f.rel, reason: msg })
+            break
+          }
+        }
+      }
+      process.stdout.write(JSON.stringify(bad))
+    })().catch((e) => {
+      process.stderr.write(String(e && e.stack || e))
+      process.exit(1)
+    })
+  `
+  // 载荷可达 10 MB 级，命令行会撞 E2BIG ⇒ 脚本与数据都走临时文件
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcc-link-'))
+  try {
+    const runner = path.join(dir, 'link.mjs')
+    const data = path.join(dir, 'payload.json')
+    fs.writeFileSync(runner, `${script}\n`)
+    fs.writeFileSync(data, payload)
+    const out = execFileSync(process.execPath, ['--experimental-vm-modules', runner, data], {
+      encoding: 'utf8',
+      maxBuffer: 1 << 28,
+    })
+    return JSON.parse(out)
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+}
+
 export function findViolations(relPaths) {
   const violations = []
   for (const rel of relPaths) {
@@ -79,7 +184,7 @@ export function runtimePackageJson(pkg) {
 /**
  * lock 里所有 `resolved` 必须落在公共 registry 上。
  *
- * 判据是「用户机上能不能解析到」：打包机的 npm registry 是可变的（本机默认内网镜像），
+ * 判据是「用户机上能不能解析到」：打包机的 npm registry 是可变的（可能指向内网镜像），
  * 而 `npm ci` 严格按 lock 的 `resolved` 取包，不匹配用户配置的 registry 时不会替换。
  * 内网域名在用户机上不存在 ⇒ 装不上。故这里 fail-closed，而不是信任生成参数。
  */
@@ -248,6 +353,25 @@ function main() {
     fs.copyFileSync(from, path.join(schemasOut, f))
   }
 
+  // ③b 契约导入自检：产物里每个源文件都必须能与 dist 完成模块链接
+  const serverJs = walkRel(path.join(staging, 'src'))
+    .filter((rel) => rel.endsWith('.js'))
+    .map((rel) => ({
+      rel: `src/${rel}`,
+      code: fs.readFileSync(path.join(staging, 'src', rel), 'utf8'),
+    }))
+  const unlinkable = findUnlinkableContractImports(
+    serverJs,
+    path.join(schemasOut, 'dist', 'index.js'),
+  )
+  if (unlinkable.length) {
+    throw new Error(
+      `产物里服务端无法与契约包完成模块链接（装入用户机后启动即失败）：\n  ${unlinkable
+        .map((m) => `${m.rel}: ${m.reason}`)
+        .join('\n  ')}`,
+    )
+  }
+
   // ④ 依赖改写：workspace 链接 -> 产物内相对引用；契约包清单收敛为运行期字段
   const pkgPath = path.join(staging, 'package.json')
   const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'))
@@ -266,7 +390,7 @@ function main() {
   // ⑤ 现场生成 lock：产物在用户机上是独立项目（没有 workspace 根），必须自备 lock
   //
   // registry 必须显式钉死：lock 里的 `resolved` 会照抄生成它的那台机器的 registry，
-  // 而打包机的 registry 是可变的（本机 npm 默认走内网镜像）。内网镜像域名在用户机上
+  // 而打包机的 registry 是可变的（可能指向内网镜像）。内网镜像域名在用户机上
   // 解析不到，`npm ci` 会以 ENOTFOUND 直接失败——安装脚本在「安装 npm 依赖」一步中断，
   // 用户拿到的是一个装不上的发布包。钉到公共源后，用户若配了自己的镜像，npm 仍会把
   // 公共源地址改写成镜像地址（实测：lock 写 registry.npmjs.org，配 npmmirror 时走
