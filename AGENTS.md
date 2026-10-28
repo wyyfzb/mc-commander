@@ -16,7 +16,7 @@ MC\_Commander 是一个自托管的 Minecraft 服务器管理面板：不装插�
 | `apps/*/src/`、`apps/*/tests/` | 源码与测试分离：`src/` 只放交付源码，测试放同包 `tests/`（web 镜像 `src/` 到 `tests/unit/`，基建在 `tests/support/`）。**包内只留产品与其测试**：E2E、mock 后端、门禁脚本、截图工具一律住 `tools/`——它们判定/驱动的是整个前端，不是包的运行时组成 |
 | `apps/server/var/` | 服务端运行期数据（实例 / SQLite 与日志 / 备份快照）：产物只进这里，包内不放数据；落点锚定包根（config.js），不随 cwd 漂移 |
 | `apps/schemas/`          | 共享契约包（zod，包名 `@mc-commander/schemas`）：web 经 vite alias 直读 `src`，服务端经 workspace 链接消费 `dist`（构建产物） |
-| `tools/`               | 维护者工具（不住包内）：`gates/`（设计 token / 对比度 / 体积 / 注释纪律）、`e2e/`（Playwright 配置 + 19 spec + mock 后端）、`ci/local-check.sh`、`check-layout.mjs`（目录结构）、`dev/`（生成器）、`ops/`（运维）、`deploy/`（发布载荷） |
+| `tools/`               | 维护者工具（不住包内）：`gates/`（设计 token / 对比度 / 体积）、`e2e/`（Playwright 配置 + 19 spec + mock 后端）、`ci/local-check.sh`、`check-layout.mjs`（目录结构）、`dev/`（生成器）、`ops/`（运维）、`deploy/`（发布载荷） |
 | `docs/`                | 使用者文档（`architecture.md`、`user-guide.md`） |
 
 仓库是 **npm workspaces**：在**仓库根**跑一次 `npm ci` 即装齐三包依赖，根 `package-lock.json`
@@ -39,7 +39,6 @@ npm ci
 npm run format               # 按 biome.jsonc 格式化全仓
 npm run format:check         # 只检查不改写（CI 与 local-check 用这条）
 npm run check:layout         # 目录结构门禁（顶层白名单 / 源码面无测试 / 无产物入库）
-npm run check:comments       # 注释纪律门禁（编号 / 演化叙述 / 归属叙述 / 私有指针 / 待办承诺 / 死指针）
 
 # 以下用 workspace 定位（也可 cd 进包目录执行同名的包内脚本）
 # 契约包 —— dist 不入库，消费方（服务端测试/运行）前先在仓库根 build
@@ -73,7 +72,7 @@ npm run dev -w apps/server           # node --watch 热重载
 
 | 检查 | 内容 |
 | --- | --- |
-| 仓库卫生 | `npm run format:check`（全仓格式）+ `npm run check:layout`（目录结构门禁）+ `npm run check:comments`（注释纪律门禁）+ `tools/` 自身三道门禁（`lint:tools` / `typecheck` / `test:tools`）+ gitleaks 密钥泄漏扫描 |
+| 仓库卫生 | `npm run format:check`（全仓格式）+ `npm run check:layout`（目录结构门禁）+ `tools/` 自身三道门禁（`lint:tools` / `typecheck` / `test:tools`）+ gitleaks 密钥泄漏扫描 |
 | 契约包 | `npm run lint` + `npm run test:coverage` + **构建产物**（`dist` 不入库，构建后断言产物存在） |
 | 服务端 | `npm run lint` + `npm run test:coverage` |
 | 前端 | `npm run lint` + `npm run test:coverage` + `check:design-tokens` + `check:contrast` |
@@ -245,9 +244,7 @@ npm run dev -w apps/server           # node --watch 热重载
   不再依赖解析」）；
   待办 → 当前实现与它的边界（不写「暂未收录这类行」，写「这类行不在词条表内」）；
   指向 → 就地最短一句（不写「详见 xxx.md」，把那句规则写在这里）。
-  其中编号、`owner`/`拍板`/`裁定`、`TODO`/`FIXME`/`HACK`、`.ai/` 深层指针、演化叙述与
-  **指向入库面之外的死指针**（含「设计文档 §4.5」这类私有文档裸名）由 `npm run check:comments`
-  机械拦截；其余靠审查——机械判据只收零歧义形态，判宽了会拿误报训练人忽略整道门禁。
+  以上五类由代码审查把关，没有机械门禁——它们大多要判断语义，机械判据会拿误报训练人忽略规则。
   **注释不得多于代码**：改动文件的注释行数不得超过代码行数——到了这一步就是在写文档，
   不是在写注释；理由属于提交信息的，不进注释。
   **实测数据与反例是允许且鼓励的**（`实测 812 vs 782 的假红`、`内联 420px 下每格仅 ~54px`）——

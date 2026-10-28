@@ -11,7 +11,6 @@
   ],
   "scripts": {
     "check:layout": "node tools/check-layout.mjs",
-    "check:comments": "node tools/gates/check-comment-discipline.mjs",
     "check:design-tokens": "node tools/gates/check-design-tokens.mjs",
     "check:contrast": "node tools/gates/check-contrast.mjs",
     "check:size": "node tools/gates/check-bundle-size.mjs",
