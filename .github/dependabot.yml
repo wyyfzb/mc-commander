@@ -40,6 +40,11 @@ updates:
       # 残留告警指向 IN_PLACE 模式，而 monaco 从不启用（仅 `IN_PLACE = cfg.IN_PLACE || false`，
       # 整包 0 处 IN_PLACE: true）⇒ 不可达。
       - dependency-name: "dompurify"
+      # 类型声明必须跟随运行时大版本：它声明「运行时的 API 长什么样」，跨大版本装上后
+      # 编译期会放过运行时没有的 API，装到用户机器上才崩。故 major 一律由维护者在切换
+      # 运行时版本时一并改，不交给依赖机器人判断。
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
     groups:
       minor-and-patch:
         update-types: [minor, patch]

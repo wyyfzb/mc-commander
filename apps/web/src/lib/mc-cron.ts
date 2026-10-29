@@ -149,8 +149,8 @@ export function parseCronFields(cron: string): string[] | null {
  * 亦然）：客户端另写一套「看起来合法」的判断只会与服务端判据漂移，把非法表达式放过去，
  * 而非法表达式入库后任务**静默永不触发**（只在运行期记日志）。
  *
- * ⚠️ 两侧是**各自独立安装**的 `croner`（本仓无 workspace 根），故判据一致靠的是
- * 同一个 caret 范围 + 同一调用形态，而非共享锁文件——升级一侧时须同步另一侧。
+ * 两侧共用同一份安装：仓库根是 workspace 根，只有一份 lock，node_modules 里也就只有
+ * 一份 croner。判据一致靠的是两侧 package.json 的版本范围保持一致，故升级时两处都要改。
  */
 export function isValidCron(cron: string): boolean {
   if (!cron.trim()) return false
