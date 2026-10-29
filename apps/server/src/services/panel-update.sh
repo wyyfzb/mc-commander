@@ -126,7 +126,23 @@ done
 log "已备份当前版本"
 
 # 2. 下载产物与摘要
+# 选源：境内用户的实际下载路径是 Gitee（跨境取 10MB 级的包常在停滞检测里放弃），
+# 但镜像可能缺某个版本，「有摘要没本体」的半截同步也真实发生过，故两个文件都探到才切。
 BASE="https://github.com/wyyfzb/mc-commander/releases/download/$TARGET_TAG"
+GITEE_BASE="https://gitee.com/wyyfzb/mc-commander/releases/download/$TARGET_TAG"
+gitee_ready() {
+  local f
+  for f in mc-commander-server.tar.gz SHA256SUMS.txt; do
+    curl -fsSL -r 0-0 --connect-timeout 10 --max-time 30 \
+      -o /dev/null "$GITEE_BASE/$f" 2>/dev/null || return 1
+  done
+}
+if gitee_ready; then
+  BASE="$GITEE_BASE"
+  log "使用 Gitee 镜像源：$BASE"
+else
+  log "Gitee 侧该版本产物不完整，改用 GitHub 权威源"
+fi
 PKG="$TMP_DIR/pkg.tar.gz"
 SUMS="$TMP_DIR/SHA256SUMS.txt"
 for url in "$BASE/SHA256SUMS.txt" "$BASE/mc-commander-server.tar.gz"; do

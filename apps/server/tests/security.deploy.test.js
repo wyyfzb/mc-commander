@@ -185,12 +185,16 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
     });
 
     it('latest 与显式 tag 走不同 download 前缀', () => {
-      // releases/latest/download 无法预知 tag，故 latest 与显式 tag 必须分开拼前缀
+      // releases/latest/download 无法预知 tag，故 latest 与显式 tag 必须分开拼前缀。
+      // latest 分支优先钉到解析出的权威 tag，解析不到才退回 latest 前缀。
       expect(script).toContain(
-        'RELEASE_BASE="https://github.com/wyyfzb/mc-commander/releases/latest/download"',
+        'RELEASE_BASE="https://github.com/$GITEE_OWNER/$GITEE_REPO/releases/download/$RESOLVED_TAG"',
       );
       expect(script).toContain(
-        'RELEASE_BASE="https://github.com/wyyfzb/mc-commander/releases/download/$VERSION"',
+        'RELEASE_BASE="https://github.com/$GITEE_OWNER/$GITEE_REPO/releases/latest/download"',
+      );
+      expect(script).toContain(
+        'RELEASE_BASE="https://github.com/$GITEE_OWNER/$GITEE_REPO/releases/download/$VERSION"',
       );
       expect(script).toMatch(/if \[ "\$VERSION" = "latest" \]; then/);
     });
@@ -260,13 +264,26 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
       // 权威源仍是 GitHub（CI 构建产物 + Immutable Releases 签名），Gitee 只是分发镜像；
       // 但**默认下载源**是 Gitee：用户链路在国内，实测两者相差约 460 倍。
       expect(script).toContain('SOURCE_PREFERENCE="${SOURCE_PREFERENCE:-gitee}"');
-      expect(script).toMatch(/RELEASE_BASE="https:\/\/github\.com\/wyyfzb\/mc-commander/);
+      expect(script).toMatch(
+        /RELEASE_BASE="https:\/\/github\.com\/\$GITEE_OWNER\/\$GITEE_REPO\/releases\/download\//,
+      );
       // 兜底必须存在且可探：Gitee 不可用时回 GitHub（latest 直接可用，无需解析 tag）
       expect(script).toMatch(/use_github\(\) \{/);
       // 兼容别名：ALLOW_GITEE_FALLBACK=0 等价于强制首选 GitHub
       expect(script).toContain(
         '[ "${ALLOW_GITEE_FALLBACK:-}" = "0" ] && SOURCE_PREFERENCE="github"',
       );
+    });
+
+    it('latest 时版本号由 GitHub 解析，镜像只能是同一版本', () => {
+      // 让镜像自己解析「最新」的后果是静默降级：镜像 Release 滞后时它解析到旧 tag，
+      // 旧版产物同样存在、同样能装，链路上没有任何一步会报告「这比最新版旧」。
+      expect(script).toMatch(/resolve_authority_tag\(\) \{/);
+      expect(script).toContain('RESOLVED_TAG=$(resolve_authority_tag)');
+      // 镜像侧取版本必须回落到已解析的 tag，而不是重新问一次「最新」
+      expect(script).toContain('gitee_release_base "${RESOLVED_TAG:-$VERSION}"');
+      // 解析失败（GitHub 不可达）不得中断安装，退回 latest 前缀
+      expect(script).toMatch(/releases\/latest\/download/);
     });
 
     it('两个源切向对称：use_github 与 use_gitee 都先探资产、再同源改写两个地址', () => {

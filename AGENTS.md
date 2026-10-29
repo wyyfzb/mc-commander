@@ -72,7 +72,7 @@ npm run dev -w apps/server           # node --watch 热重载
 
 | 检查 | 内容 |
 | --- | --- |
-| 仓库卫生 | `npm run format:check`（全仓格式）+ `npm run check:layout`（目录结构门禁）+ `tools/` 自身三道门禁（`lint:tools` / `typecheck` / `test:tools`）+ gitleaks 密钥泄漏扫描 |
+| 仓库卫生 | `npm run format:check`（全仓格式）+ `npm run check:layout`（目录结构门禁）+ `tools/` 自身三道门禁（`lint:tools` / `typecheck` / `test:tools`）+ actionlint（workflow 语法与表达式）+ gitleaks 密钥泄漏扫描 |
 | 契约包 | `npm run lint` + `npm run test:coverage` + **构建产物**（`dist` 不入库，构建后断言产物存在） |
 | 服务端 | `npm run lint` + `npm run test:coverage` |
 | 前端 | `npm run lint` + `npm run test:coverage` + `check:design-tokens` + `check:contrast` |

@@ -37,6 +37,12 @@ const SERVER_VERSION = JSON.parse(
 export const API_V1_MOUNT = '/api/v1';
 
 /**
+ * 发布页候选源，顺序即同版本时的就近顺序。
+ * 版本号取两源中较高者：镜像侧的 Release 滞后于代码同步，只信它会得出「已是最新」。
+ */
+const SOURCES = ['https://gitee.com', 'https://github.com'];
+
+/**
  * 组装 /api/v1 路由表。导出供路由表枚举测试复用**同一个**组装入口——测试自建一份
  * 路由表就失去了「新增端点自动纳入覆盖」的意义。
  *
@@ -75,42 +81,47 @@ export function createApiV1Router(serverManager, taskScheduler, tlsState) {
 
   // GET /api/v1/check-update —— 面板更新检查（Node 内置 fetch，零新增依赖）
   // 取 releases/latest 的 302 Location 读 tag：不消耗 GitHub API 配额、不需要 token。
-  // Gitee 优先（国内直连）与部署脚本同口径，取不到再回退 GitHub；两源都失败按离线返回，
-  // 不抛 500——「查不到新版本」是正常态，用户需要的是可重试的说明而不是空白。
+  // 两源并发查、取版本高者：镜像侧的 Release 会滞后于代码同步，只看第一个应答的源
+  // 会稳定得出「已是最新」，用户因此永远看不到新版本。下载地址指向该版本所在的源。
+  // 两源都失败按离线返回，不抛 500——「查不到新版本」是正常态，用户需要的是可重试的说明。
   v1Router.get(
     '/check-update',
     asyncHandler(async (req, res) => {
       const current = SERVER_VERSION;
       const offline = () =>
         res.json(success({ current, latest: null, hasUpdate: false, offline: true }));
-      for (const host of ['https://gitee.com', 'https://github.com']) {
-        const ctrl = new AbortController();
-        const timer = setTimeout(() => ctrl.abort(), 5000);
-        try {
-          const r = await fetch(`${host}/${config.repoPath}/releases/latest`, {
-            redirect: 'manual',
-            signal: ctrl.signal,
-          });
-          const location = r.headers.get('location');
-          // tag 是 Location 的最后一段（`.../releases/tag/v0.9.0`），不带 v 前缀交给比较
-          const tag = location?.split('/').pop()?.replace(/^v/, '') ?? null;
-          if (!tag || !parseVersion(tag)) continue;
-          res.json(
-            success({
-              current,
-              latest: tag,
-              hasUpdate: (compareVersions(tag, current) ?? 0) > 0,
-              url: `${host}/${config.repoPath}/releases/tag/v${tag}`,
-            }),
-          );
-          return;
-        } catch {
-          // 单源失败（超时/连接错误/无 Location）不终止：换下一个源
-        } finally {
-          clearTimeout(timer);
-        }
-      }
-      offline();
+
+      const probed = await Promise.all(
+        SOURCES.map(async (host) => {
+          const ctrl = new AbortController();
+          const timer = setTimeout(() => ctrl.abort(), 5000);
+          try {
+            const r = await fetch(`${host}/${config.repoPath}/releases/latest`, {
+              redirect: 'manual',
+              signal: ctrl.signal,
+            });
+            // tag 是 Location 的最后一段（`.../releases/tag/v0.9.0`），不带 v 前缀交给比较
+            const tag = r.headers.get('location')?.split('/').pop()?.replace(/^v/, '') ?? null;
+            return tag && parseVersion(tag) ? { host, tag } : null;
+          } catch {
+            return null;
+          } finally {
+            clearTimeout(timer);
+          }
+        }),
+      );
+
+      const found = probed.filter(Boolean);
+      if (!found.length) return offline();
+      const best = found.reduce((a, b) => ((compareVersions(b.tag, a.tag) ?? 0) > 0 ? b : a));
+      res.json(
+        success({
+          current,
+          latest: best.tag,
+          hasUpdate: (compareVersions(best.tag, current) ?? 0) > 0,
+          url: `${best.host}/${config.repoPath}/releases/tag/v${best.tag}`,
+        }),
+      );
     }),
   );
 
