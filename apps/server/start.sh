@@ -8,7 +8,7 @@ echo ""
 # 检测 Node.js
 if ! command -v node &> /dev/null; then
     echo "[错误] 未检测到 Node.js！"
-    echo "请先安装 Node.js 22+: https://nodejs.org/"
+    echo "请先安装 Node.js 24+: https://nodejs.org/"
     exit 1
 fi
 

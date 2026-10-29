@@ -21,7 +21,7 @@
 #   SOURCE_PREFERENCE=github            强制首选 GitHub（默认 gitee）
 #   ALLOW_SOURCE_FALLBACK=0             禁用主源失败后的自动换源
 #   SHA256SUMS_URL=xxx                  摘要文件地址，默认与 PACKAGE_URL 同 Release；自定义 PACKAGE_URL 时需一并设置
-#   NODE_VERSION=v22.23.2               官方二进制兜底安装时固定的 Node.js LTS 版本号
+#   NODE_VERSION=v22.23.4               指定要装的 Node.js 版本（默认动态取 22 线最新）
 #
 # 安全说明：
 #   - 代码包下载后取**同一 Release** 的 SHA256SUMS.txt 比对校验，不一致立即中止并删除临时文件。
@@ -104,6 +104,7 @@ REMOVAL_LIB_DIR="/usr/local/lib/mc-commander"
 REMOVAL_SCRIPT="$REMOVAL_LIB_DIR/panel-removal.sh"
 UPDATE_SCRIPT="$REMOVAL_LIB_DIR/panel-update.sh"
 MIGRATE_SCRIPT="$REMOVAL_LIB_DIR/panel-migrate-data.sh"
+NODE_UPGRADE_SCRIPT="$REMOVAL_LIB_DIR/panel-node-upgrade.sh"
 # 安装清单：记录「本项目在系统上加了什么」。卸载要靠它精确回滚——
 # 没有它就只能猜，而猜错的后果是删掉用户原有的 Java 或留下几百 MB 残留。
 MANIFEST="$MC_COMMANDER_DIR/.install-manifest"
@@ -558,7 +559,8 @@ do_uninstall() {
           /etc/systemd/system/mc-commander-removal.service \
           /etc/systemd/system/mc-commander-removal-keep.service \
           /etc/systemd/system/mc-commander-update.service \
-          /etc/systemd/system/mc-commander-migrate.service
+          /etc/systemd/system/mc-commander-migrate.service \
+          /etc/systemd/system/mc-commander-node.service
     rm -rf "$REMOVAL_LIB_DIR"
     rm -f /etc/sudoers.d/mc-commander
     systemctl daemon-reload 2>/dev/null || true
@@ -852,7 +854,7 @@ elif command -v apk &>/dev/null; then
 elif command -v dnf &>/dev/null; then
   PKG_MANAGER="dnf"
 else
-  err "不支持的系统包管理器，请手动安装 Java 17/21/25 和 Node.js 22+ 后重试。"
+  err "不支持的系统包管理器，请手动安装 Java 17/21/25 和 Node.js 24+ 后重试。"
   exit 1
 fi
 log "系统包管理器: $PKG_MANAGER"
@@ -1109,15 +1111,32 @@ install_java() {
 log "检查并安装 Java 17/21/25（覆盖 MC 1.17+ 所有版本）..."
 install_java
 
-# 4. 安装 Node.js 22+
+# 4. 安装 Node.js 24+
 # 安全策略：不使用第三方 nodesource 的 curl|bash 引导脚本（root 直接执行未校验代码风险高）。
 # 优先使用发行版官方源安装；若发行版源版本不足 22，改用 Node.js 官方二进制 tarball，
 # 下载前先取官方 SHASUMS256.txt，对包做 sha256 强校验后再解压。
-NODE_REQUIRED_MAJOR=22
-# 固定官方 LTS 版本号（可用 NODE_VERSION 环境变量覆盖，须为 https://nodejs.org/dist/ 下真实存在的版本）
-NODE_VERSION="${NODE_VERSION:-v22.23.2}"
+NODE_REQUIRED_MAJOR=24
+# 已知安全兜底：解析不到该线最新版时用它，避免回落到一个已知带漏洞的版本
+NODE_FALLBACK_VERSION="v24.22.2"
 
-# 从 nodejs.org 下载官方二进制包并做 sha256 校验（兜底方案，发行版源版本过旧时使用）
+# 版本号大小比较（1 表示 $1 < $2）。用 sort -V 而不是逐段算术：
+# 主版本跨线后段数可能不一致，算术比较会在空段上炸。
+version_lt() {
+  [ "$1" = "$2" ] && return 1
+  [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | head -1)" = "$1" ]
+}
+
+# 取当前 Node 大版本线的最新版：官方 index.json 按版本降序，首条即最新。
+# 动态取而不是写死补丁号——写死的版本在下一次安全发布后就成了「新装用户拿到带漏洞的运行时」。
+resolve_latest_node() {
+  local major idx
+  major="$NODE_REQUIRED_MAJOR"
+  idx=$(curl -fsSL --max-time "$PROBE_TIMEOUT" "https://nodejs.org/dist/index.json" 2>/dev/null) || return 1
+  printf '%s' "$idx" | grep -o "\"version\":\"v${major}\.[0-9]*\.[0-9]*\"" | head -1 |
+    sed 's/.*"\(v[^"]*\)".*/\1/'
+}
+
+# 从 nodejs.org 下载官方二进制包并做 sha256 校验（发行版源的补丁线常年落后于安全发布，故一律走官方）
 install_node_official() {
   local arch
   case "$(uname -m)" in
@@ -1125,7 +1144,7 @@ install_node_official() {
     aarch64|arm64) arch="arm64" ;;
     *)
       err "不支持的 CPU 架构: $(uname -m)，无法通过官方二进制包安装 Node.js"
-      err "请手动安装 Node.js 22+ 后重试"
+      err "请手动安装 Node.js 24+ 后重试"
       exit 1
       ;;
   esac
@@ -1166,56 +1185,68 @@ install_node_official() {
   log "Node.js 二进制包 sha256 校验通过"
   # 解压到 /opt 并建立软链（不污染 /usr/local 原有内容）
   tar -xJf "$tmp_dir/$file" -C /opt
-  # 只在 /usr/local/bin 原本没有同名命令时建链：覆盖用户已有的 node 会把他的环境改坏，
-  # 且卸载时无从判断这条链该不该删
+  # 链接策略：指向 /opt/node-* 的是本脚本建的，升级时直接改指向；
+  # 其他来源（用户自装、发行版包）一律不覆盖——那会改坏他的环境，且卸载时无从判断该不该删。
+  local target="/opt/node-${NODE_VERSION}-linux-${arch}/bin"
   for bin in node npm npx; do
-    if [ ! -e "/usr/local/bin/$bin" ]; then
-      ln -sfn "/opt/node-${NODE_VERSION}-linux-${arch}/bin/$bin" "/usr/local/bin/$bin"
-      record_change "node-symlink" "/usr/local/bin/$bin"
+    link="/usr/local/bin/$bin"
+    if [ -L "$link" ]; then
+      case "$(readlink -f "$link" 2>/dev/null)" in
+        /opt/node-v*/bin/*)
+          ln -sfn "$target/$bin" "$link"
+          ;;
+        *)
+          warn "/usr/local/bin/$bin 指向别处（$(readlink -f "$link" 2>/dev/null)），未覆盖"
+          warn "如需使用新版 Node：把 $target 放到 PATH 前面，或删掉该链接后重跑"
+          ;;
+      esac
+    elif [ ! -e "$link" ]; then
+      ln -sfn "$target/$bin" "$link"
+      record_change "node-symlink" "$link"
+    else
+      warn "/usr/local/bin/$bin 已存在且不是符号链接，未覆盖"
+      warn "如需使用新版 Node：把 $target 放到 PATH 前面"
     fi
   done
+  hash -r 2>/dev/null || true
   rm -rf "$tmp_dir"
   log "Node.js ${NODE_VERSION} 安装完成: $(node -v)"
 }
 
-# 确保 Node.js 主版本 >= 22：优先发行版官方源，不足则走官方二进制包（含 sha256 校验）
+# 目标版本：默认取 22 线最新，解析不到才用兜底常量。
+# 判据是「不低于目标版本」而不是「主版本够大」——后者会放过 22.0.0 这类带已披露漏洞的版本。
+NODE_VERSION="${NODE_VERSION:-$(resolve_latest_node)}"
+if [ -z "$NODE_VERSION" ]; then
+  NODE_VERSION="$NODE_FALLBACK_VERSION"
+  warn "无法解析 Node.js ${NODE_REQUIRED_MAJOR} 线最新版，改用兜底版本 $NODE_FALLBACK_VERSION"
+fi
+
+# 确保 Node.js 达到目标版本：系统版本落后就装官方二进制包（含 sha256 校验）。
+# 不走发行版源：发行版的 nodejs 包常年落后于安全发布，装不上「含修复的补丁版」。
 ensure_node() {
-  local cur=0
+  local cur="" cur_major=0 target_major=0
+  target_major="${NODE_VERSION#v}"; target_major="${target_major%%.*}"
   if command -v node &>/dev/null; then
-    cur=$(node -v | sed 's/v//' | cut -d. -f1)
-    if [ "$cur" -ge "$NODE_REQUIRED_MAJOR" ]; then
-      log "Node.js $cur 已安装，跳过"
+    cur=$(node -v)
+    cur_major="${cur#v}"; cur_major="${cur_major%%.*}"
+    if [ "$cur_major" -gt "$target_major" ]; then
+      log "Node.js $cur 高于目标线 $NODE_VERSION，保持原样"
       return 0
     fi
-    log "Node.js 版本过低 ($cur)，升级到 $NODE_REQUIRED_MAJOR+..."
+    if [ "$cur_major" -eq "$target_major" ] && ! version_lt "$cur" "$NODE_VERSION"; then
+      log "Node.js $cur 不低于 $NODE_VERSION，跳过"
+      return 0
+    fi
+    log "Node.js $cur 低于 $NODE_VERSION，升级（旧补丁线含已披露漏洞）..."
   fi
-  case "$PKG_MANAGER" in
-    apt)
-      # 先尝试发行版官方源（apt 安装 nodejs/npm，不引入第三方源）
-      install_pkg_recorded nodejs npm >/dev/null 2>&1 || true
-      local apt_ver=0
-      if command -v node &>/dev/null; then
-        apt_ver=$(node -v | sed 's/v//' | cut -d. -f1)
-      fi
-      if [ "$apt_ver" -ge "$NODE_REQUIRED_MAJOR" ]; then
-        log "Node.js $apt_ver 已通过发行版官方源安装"
-        return 0
-      fi
-      warn "发行版官方源 Node.js 版本不足 ($apt_ver)，改用官方二进制包（带 sha256 校验）"
-      install_node_official
-      ;;
-    *)
-      # yum/dnf/apk 直接使用发行版官方源安装
-      install_pkg_recorded nodejs npm
-      ;;
-  esac
-  # 最终确认版本达标，未达标直接失败（避免后续在错误版本上运行）
-  local final_ver=0
-  if command -v node &>/dev/null; then
-    final_ver=$(node -v | sed 's/v//' | cut -d. -f1)
-  fi
-  if [ "$final_ver" -lt "$NODE_REQUIRED_MAJOR" ]; then
-    err "Node.js 安装失败或版本仍不足 $NODE_REQUIRED_MAJOR（当前: ${final_ver:-未安装}）"
+  install_node_official
+  # 重新定位命令：新装版本通常改了软链指向，旧路径不能继续用
+  hash -r 2>/dev/null || true
+  local final=""
+  command -v node &>/dev/null && final=$(node -v)
+  if [ -z "$final" ] || version_lt "$final" "$NODE_VERSION"; then
+    err "Node.js 升级未生效（当前: ${final:-未安装}，目标: $NODE_VERSION）"
+    err "若 /usr/local/bin/node 指向别处，请把它改为 /opt/node-${NODE_VERSION}-linux-*/bin/node 后重跑"
     exit 1
   fi
   log "Node.js 版本检查通过: $(node -v)"
@@ -1758,6 +1789,11 @@ EOF
   install -o root -g root -m 0755 \
     "$MC_COMMANDER_DIR/src/services/panel-migrate-data.sh" "$MIGRATE_SCRIPT"
   record_change "migrate-lib" "$MIGRATE_SCRIPT"
+
+  # 运行环境升级脚本同样 root 独占：它要换 /usr/local/bin 下的软链。
+  install -o root -g root -m 0755 \
+    "$MC_COMMANDER_DIR/src/services/panel-node-upgrade.sh" "$NODE_UPGRADE_SCRIPT"
+  record_change "node-upgrade-lib" "$NODE_UPGRADE_SCRIPT"
   cat > /etc/systemd/system/mc-commander-removal.service <<EOF
 [Unit]
 Description=MC Commander panel removal
@@ -1833,13 +1869,30 @@ TimeoutStartSec=600
 EOF
   record_change "systemd-unit" "/etc/systemd/system/mc-commander-migrate.service"
 
+  # 运行环境升级单元：固定名，参数同样只经环境变量传。
+  # 它只在面板自检发现 Node 补丁线落后时由用户点击触发，成功后面板在新版本上重启。
+  cat > /etc/systemd/system/mc-commander-node.service <<EOF
+[Unit]
+Description=MC Commander runtime (Node.js) upgrade
+After=network.target
+
+[Service]
+Type=oneshot
+User=root
+Environment=MC_COMMANDER_DIR=$MC_COMMANDER_DIR
+ExecStart=/bin/bash $NODE_UPGRADE_SCRIPT
+# 下载 30MB 级二进制 + 重启验证：给足 10 分钟
+TimeoutStartSec=900
+EOF
+  record_change "systemd-unit" "/etc/systemd/system/mc-commander-node.service"
+
   # sudoers 白名单：只放行启动两个删除单元 + 停止面板自身，面板拿不到任何其它 root 能力。
   # 必须带 --no-block：sudoers 按完整参数序列匹配，面板用别的形态调用一律不匹配。
   # stop 必须显式授权：面板以 mc-commander 身份运行，systemctl stop 默认要交互式认证，
   # 面板内点「停用面板」会以退出码 1 失败（Interactive authentication required），
   # 而 API 早已回了成功——用户以为停了，实际还在跑。
   cat > /etc/sudoers.d/mc-commander <<EOF
-mc-commander ALL=(root) NOPASSWD: /usr/bin/systemctl start --no-block mc-commander-removal.service, /usr/bin/systemctl start --no-block mc-commander-removal-keep.service, /usr/bin/systemctl stop mc-commander.service, /usr/bin/systemctl start --no-block mc-commander-update.service, /usr/bin/systemctl start --no-block mc-commander-migrate.service
+mc-commander ALL=(root) NOPASSWD: /usr/bin/systemctl start --no-block mc-commander-removal.service, /usr/bin/systemctl start --no-block mc-commander-removal-keep.service, /usr/bin/systemctl stop mc-commander.service, /usr/bin/systemctl start --no-block mc-commander-update.service, /usr/bin/systemctl start --no-block mc-commander-migrate.service, /usr/bin/systemctl start --no-block mc-commander-node.service
 EOF
   chmod 440 /etc/sudoers.d/mc-commander
   record_change "sudoers" "/etc/sudoers.d/mc-commander"

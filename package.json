@@ -4,7 +4,7 @@
   "type": "module",
   "description": "MC_Commander 工作区根：三个包（apps/web · apps/server · apps/schemas）经 npm workspaces 统一安装，根锁文件是依赖的唯一事实源。",
   "engines": {
-    "node": ">=22"
+    "node": ">=24"
   },
   "workspaces": [
     "apps/*"
@@ -32,7 +32,7 @@
   "devDependencies": {
     "@biomejs/biome": "2.6.2",
     "@playwright/test": "^1.64.1",
-    "@types/node": "^26.6.4",
+    "@types/node": "^24.0.0",
     "culori": "^4.0.2",
     "oxlint": "^1.89.0",
     "typescript": "~7.0.2",

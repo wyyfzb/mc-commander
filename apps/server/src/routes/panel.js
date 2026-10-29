@@ -390,5 +390,101 @@ export function createPanelRoutes() {
     }),
   );
 
+  // GET /api/v1/panel/runtime - 运行环境（Node.js）状态
+  //
+  // 版本号只从官方清单取：面板自己的 Release 列表滞后不影响这里要回答的问题，
+  // 而「当前这台面板所在主机」的 Node 补丁线是否落后，只能由 nodejs.org 的清单判定。
+  // 查不到就返回 latest:null，不能当成「已是最新」——那会让用户以为无需处理。
+  router.get(
+    '/panel/runtime',
+    asyncHandler(async (_req, res) => {
+      const current = process.version;
+      const major = current.replace(/^v/, '').split('.')[0];
+
+      // 只有软链指向本安装脚本管理的 /opt/node-v* 时才允许自动升级：
+      // 指向别处的（发行版包、用户自装）改了等于改坏他的系统环境
+      let realPath = null;
+      try {
+        realPath = fs.realpathSync('/usr/local/bin/node');
+      } catch {
+        /* 没有该链接即未由安装脚本管理 */
+      }
+      const managed = Boolean(realPath && /^\/opt\/node-v[^/]+\/bin\//.test(realPath));
+
+      let latest = null;
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 5000);
+      try {
+        const r = await fetch('https://nodejs.org/dist/index.json', { signal: ctrl.signal });
+        const list = await r.json();
+        latest = list.find((v) => v.version.startsWith(`v${major}.`))?.version ?? null;
+      } catch {
+        /* 网络不可达：latest 留 null，由前端显示「查不到」而不是「已最新」 */
+      } finally {
+        clearTimeout(timer);
+      }
+
+      res.json(
+        success({
+          current,
+          latest,
+          hasUpdate: Boolean(latest && latest !== current),
+          managed,
+          // 不可自动升级时必须给出原因，否则用户只看到一个禁用按钮
+          reason: managed
+            ? null
+            : `系统上的 node 不是本面板安装的（${realPath ?? '未找到 /usr/local/bin/node'}），请用原来的安装方式更新`,
+        }),
+      );
+    }),
+  );
+
+  // POST /api/v1/panel/runtime-upgrade - 升级运行环境
+  // 与其它特权动作同构：先探白名单再触发单元，两步都要如实回报失败原因。
+  router.post(
+    '/panel/runtime-upgrade',
+    asyncHandler(async (_req, res) => {
+      const unit = 'mc-commander-node.service';
+      const probe = spawnSync(
+        'sudo',
+        ['-n', '-l', '/usr/bin/systemctl', 'start', '--no-block', unit],
+        { encoding: 'utf8', timeout: 10_000 },
+      );
+      if (probe.status !== 0) {
+        const raw = `${probe.stderr || probe.stdout || ''}`.trim() || `退出码 ${probe.status}`;
+        logger.error(`[Panel] 无升级运行环境的权限：${raw}`);
+        return res
+          .status(500)
+          .json(
+            error(
+              ErrorCodes.SERVER_ERROR,
+              '面板没有升级运行环境的权限（sudo 白名单缺失）。请重新运行一次部署脚本以补齐权限。',
+            ),
+          );
+      }
+
+      recordAudit({
+        action: AuditActions.PANEL_RUNTIME_UPGRADE,
+        targetType: 'panel',
+        targetId: 'panel',
+        detail: { action: 'node-upgrade' },
+      });
+
+      const trigger = spawnSync('sudo', ['-n', '/usr/bin/systemctl', 'start', '--no-block', unit], {
+        encoding: 'utf8',
+        timeout: 15_000,
+      });
+      if (trigger.status !== 0) {
+        const raw = (trigger.stderr || trigger.error?.message || '').trim().split('\n')[0];
+        logger.error('panel runtime upgrade trigger failed:', raw || `exit ${trigger.status}`);
+        return res
+          .status(500)
+          .json(error(ErrorCodes.SERVER_ERROR, `无法启动运行环境升级：${raw || '未知原因'}`));
+      }
+
+      res.json(success(null, '已开始升级运行环境，面板会重启一次；失败会自动退回原版本'));
+    }),
+  );
+
   return router;
 }
