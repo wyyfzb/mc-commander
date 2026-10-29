@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.1](https://github.com/wyyfzb/mc-commander/compare/v0.11.0...v0.11.1) (2026-10-29)
+
+
+### Bug Fixes
+
+* **server:** 版本号只取自权威源，镜像仅作下载 ([#691](https://github.com/wyyfzb/mc-commander/issues/691)) ([edae20d](https://github.com/wyyfzb/mc-commander/commit/edae20ddf58e9e142d7714847f6fe99fee6f8a16))
+
 ## [0.11.0](https://github.com/wyyfzb/mc-commander/compare/v0.10.3...v0.11.0) (2026-10-28)
 
 
