@@ -51,6 +51,16 @@ jobs:
       - run: npm run lint:tools
       - run: npm run typecheck
       - run: npm run test:tools
+      # workflow 文件自身的语法与表达式检查：写错只有触发时才暴露，而发布链路的错
+      # 会在「正要发版」那一刻现形。版本钉死，避免上游更新让门禁行为漂移。
+      - name: workflow 语法检查（actionlint）
+        env:
+          ACTIONLINT_VERSION: 1.7.7
+        run: |
+          curl -fsSL -o /tmp/actionlint.tar.gz \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          tar -xzf /tmp/actionlint.tar.gz -C /tmp actionlint
+          /tmp/actionlint -color
       - uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

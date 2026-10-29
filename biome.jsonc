@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.5.14/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.6.2/schema.json",
   // 全仓唯一的代码格式化配置（Biome formatter only）。
   // 只做 formatter：linter 与 assist 一律关闭——lint 仍由 oxlint（前端）/ eslint（服务端）承担；
   // assist 的导入排序与类名排序会重排 cn(twMerge(...)) 的类串（同串后写者胜），从而改变生效样式，必须关。

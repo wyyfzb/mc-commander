@@ -192,21 +192,33 @@ jobs:
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
         run: |
+          # job 的 if 已限定本仓库，故这里取空只可能是 secret 被删或改名——不是 fork 场景。
+          # 静默跳过会让同步永久停摆且无人察觉，必须报错。
           if [ -z "$GITEE_TOKEN" ]; then
-            echo "::notice::未配置 GITEE_TOKEN，跳过 Gitee 同步（GitHub 发布不受影响）"
-            echo "skip=1" >> "$GITHUB_OUTPUT"
+            echo "::error::未配置 GITEE_TOKEN，Gitee 产物同步无法进行"
+            echo "### 缺少 GITEE_TOKEN" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
           fi
 
       # Gitee 的仓库镜像有滞后（最小同步间隔数分钟），tag 未到就建 release 会失败。
       # 轮询而非固定 sleep：多数情况下几秒内就绪，避免白等。
+      #
+      # 先探 API 再轮询：把「域名不可达/凭据失效」与「tag 还没同步」分开报，
+      # 否则真实原因会被「等了 30 分钟」掩盖，而这两类问题的处置完全不同。
       - name: 等待 Gitee 侧 tag 同步
-        if: steps.cfg.outputs.skip != '1'
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
         run: |
+          set -uo pipefail
+          API="https://gitee.com/api/v5/repos/$GITEE_OWNER/$GITEE_REPO"
+          if ! curl -fsS --max-time 20 -H "Authorization: token $GITEE_TOKEN" "$API" >/dev/null 2>&1; then
+            echo "::error::Gitee API 不可达或凭据无效（不是 tag 未同步）"
+            echo "### Gitee API 不可达或凭据无效" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
           for i in $(seq 1 30); do
             if curl -sS --max-time 20 -H "Authorization: token $GITEE_TOKEN" \
-                 "https://gitee.com/api/v5/repos/$GITEE_OWNER/$GITEE_REPO/tags?per_page=100" \
+                 "$API/tags?per_page=100" \
                | grep -qF "\"name\":\"$TAG_REF\""; then
               echo "Gitee 侧 tag $TAG_REF 已就绪"
               exit 0
@@ -214,11 +226,17 @@ jobs:
             echo "等待 tag 同步… ($i/30)"
             sleep 60
           done
-          echo "::warning::等待 30 分钟仍未在 Gitee 看到 tag $TAG_REF，本次不同步"
+          echo "::error::等待 30 分钟仍未在 Gitee 看到 tag $TAG_REF"
+          {
+            echo "### Gitee 镜像未同步 \`$TAG_REF\`"
+            echo ""
+            echo "镜像的 Pull 同步可能已停（凭据过期时整段静默失效）。处理："
+            echo "1. Gitee 仓库 → 镜像管理 → 更新 GitHub 凭据并手动触发一次同步"
+            echo "2. 同步完成后补产物：\`gh workflow run release.yml --ref main -f tag=$TAG_REF -f sync_only=true\`"
+          } >> "$GITHUB_STEP_SUMMARY"
           exit 1
 
       - name: 同步产物与摘要到 Gitee Release
-        if: steps.cfg.outputs.skip != '1'
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
           GH_TOKEN: ${{ github.token }}
@@ -328,7 +346,6 @@ jobs:
       # 同步完成即回读校验下载可达性：用真实下载路径而非 API，
       # 因为 API 有附件 ≠ 用户能下载（Gitee 的下载会 302 到带签名的 CDN）
       - name: 校验 Gitee 下载路径可达
-        if: steps.cfg.outputs.skip != '1'
         run: |
           # 同样加重试：这条软校验只 warn 不红，但没有重试时一次抖动会被读成「路径不可达」
           curl -fsSL --max-time 60 --retry 2 --retry-delay 5 --retry-all-errors -o /dev/null \

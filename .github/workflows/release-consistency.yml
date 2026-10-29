@@ -1,0 +1,172 @@
+name: 发布面一致性检查
+
+# 发布链路有两处外部依赖会静默失效：镜像的 Pull 同步（凭据过期即整段停摆），
+# 以及同步产物那一步（失败只留在 job 日志里）。两者都不会自己报错，
+# 只能靠「拿两端的事实做比对」发现——所以用定时检查而不是等发布时触发。
+#
+# 可自愈的差异（镜像已有该 tag、缺 Release 与产物）直接补跑同步；
+# 不可自愈的差异（镜像连 tag 都没有）只开 issue，等人处理镜像侧的凭据。
+
+on:
+  schedule:
+    # 每天 UTC 01:41（北京时间 09:41）：发布多在夜间，白天上班即可看到结论
+    - cron: '41 1 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+  actions: write
+
+concurrency:
+  group: release-consistency
+  cancel-in-progress: false
+
+jobs:
+  compare:
+    name: 比对两端的版本与产物
+    runs-on: ubuntu-latest
+    env:
+      REPO: ${{ github.repository }}
+      GITEE_OWNER: wyyfzb
+      GITEE_REPO: mc-commander
+      ASSET: mc-commander-server.tar.gz
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: 取两端最新版本
+        id: ver
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+        run: |
+          set -uo pipefail
+          # 跟随后取终址并重试：跨境链路上 redirect_url 会偶发为空，
+          # 单次失败就把整次检查判成异常，等于每天有一次假警报。
+          gh_tag=""
+          for _ in 1 2 3; do
+            loc=$(curl -fsSL -r 0-0 --max-time 30 -o /dev/null -w '%{url_effective}' \
+                    "https://github.com/$REPO/releases/latest" 2>/dev/null)
+            case "$loc" in */tag/v[0-9]*) gh_tag="${loc##*/}"; break ;; esac
+            sleep 3
+          done
+          if [ -z "$gh_tag" ]; then
+            echo "::error::取不到 GitHub 的最新 release（网络或仓库状态异常）"
+            exit 1
+          fi
+          echo "github_tag=$gh_tag" >> "$GITHUB_OUTPUT"
+
+          # 匿名可调；带 token 时用 token（私有化或限流场景更稳）
+          auth=()
+          [ -n "${GITEE_TOKEN:-}" ] && auth=(-H "Authorization: token $GITEE_TOKEN")
+          gitee_tag=$(curl -fsSL --max-time 30 "${auth[@]}" \
+                        "https://gitee.com/api/v5/repos/$GITEE_OWNER/$GITEE_REPO/releases/latest" \
+                        2>/dev/null | jq -r '.tag_name // empty')
+          echo "gitee_tag=$gitee_tag" >> "$GITHUB_OUTPUT"
+          echo "GitHub 最新：$gh_tag ｜ Gitee 最新：${gitee_tag:-（无）}"
+
+      - name: 检查该版本在两端的产物可达性
+        id: assets
+        env:
+          GH_TAG: ${{ steps.ver.outputs.github_tag }}
+          GITEE_TAG: ${{ steps.ver.outputs.gitee_tag }}
+        run: |
+          set -uo pipefail
+          # 各取首字节：验证「用户真能下到」，而不是「API 里登记了」
+          probe() { curl -fsSL -r 0-0 --max-time 30 -o /dev/null "$1" 2>/dev/null; }
+
+          gh_ok=0
+          probe "https://github.com/$REPO/releases/download/$GH_TAG/$ASSET" && gh_ok=1
+          echo "github_asset=$gh_ok" >> "$GITHUB_OUTPUT"
+
+          gitee_ok=0
+          if [ -n "${GITEE_TAG:-}" ]; then
+            probe "https://gitee.com/$GITEE_OWNER/$GITEE_REPO/releases/download/$GITEE_TAG/$ASSET" && gitee_ok=1
+          fi
+          echo "gitee_asset=$gitee_ok" >> "$GITHUB_OUTPUT"
+
+          # 镜像侧是否已有该 tag（决定「能自愈」还是「只能等人」）
+          gitee_tag_present=0
+          if curl -fsSL --max-time 30 \
+               "https://gitee.com/api/v5/repos/$GITEE_OWNER/$GITEE_REPO/tags?per_page=100" 2>/dev/null |
+             grep -qF "\"name\":\"$GH_TAG\""; then
+            gitee_tag_present=1
+          fi
+          echo "gitee_tag_present=$gitee_tag_present" >> "$GITHUB_OUTPUT"
+          echo "GitHub 产物=$gh_ok ｜ Gitee 产物=$gitee_ok ｜ Gitee 有 tag=$gitee_tag_present"
+
+      - name: 汇总差异
+        id: diff
+        env:
+          GH_TAG: ${{ steps.ver.outputs.github_tag }}
+          GITEE_TAG: ${{ steps.ver.outputs.gitee_tag }}
+          GH_ASSET: ${{ steps.assets.outputs.github_asset }}
+          GITEE_ASSET: ${{ steps.assets.outputs.gitee_asset }}
+          TAG_PRESENT: ${{ steps.assets.outputs.gitee_tag_present }}
+        run: |
+          set -uo pipefail
+          problems=()
+          # GitHub 侧没有产物 = 发布本身失败，重跑构建会撞 Immutable Releases，只能人处理
+          [ "$GH_ASSET" = "1" ] || problems+=("GitHub 上 \`$GH_TAG\` 的产物不可下载（发布未完成，需人工处理）")
+          if [ "$GITEE_TAG" != "$GH_TAG" ]; then
+            if [ "$TAG_PRESENT" = "1" ]; then
+              problems+=("Gitee 侧缺少 \`$GH_TAG\` 的 Release 与产物（tag 已同步，可自动补）")
+              echo "action=sync" >> "$GITHUB_OUTPUT"
+            else
+              problems+=("Gitee 侧连 \`$GH_TAG\` 的 tag 都没有：镜像同步已停（需更新镜像凭据）")
+              echo "action=wait" >> "$GITHUB_OUTPUT"
+            fi
+          elif [ "$GITEE_ASSET" != "1" ]; then
+            problems+=("Gitee 侧 \`$GH_TAG\` 的 Release 缺产物（可自动补）")
+            echo "action=sync" >> "$GITHUB_OUTPUT"
+          fi
+          if [ "${#problems[@]}" -eq 0 ]; then
+            echo "两端一致：$GH_TAG 的产物在两处都可下载"
+            echo "ok=1" >> "$GITHUB_OUTPUT"
+          else
+            {
+              echo "ok=0"
+              echo "body<<EOF"
+              echo "自动检查于 $(date -u '+%Y-%m-%d %H:%M UTC') 发现发布面不一致："
+              echo
+              for p in "${problems[@]}"; do echo "- $p"; done
+              echo
+              echo "GitHub 最新：\`$GH_TAG\` ｜ Gitee 最新：\`${GITEE_TAG:-无}\`"
+              echo
+              echo "处理：可自愈项由本工作流触发 \`release.yml\` 的 \`sync_only\` 补齐；"
+              echo "镜像未同步时先到 Gitee 仓库的镜像管理更新凭据并手动触发一次同步。"
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 可自愈的差异直接补同步
+        if: steps.diff.outputs.action == 'sync'
+        env:
+          GH_TAG: ${{ steps.ver.outputs.github_tag }}
+        run: |
+          set -uo pipefail
+          # 同一 tag 已有在跑的同步就不要再叠一个
+          running=$(gh run list --workflow release.yml --limit 20 --json status,conclusion \
+                      --jq '[.[] | select(.status != "completed")] | length')
+          if [ "${running:-0}" -gt 0 ]; then
+            echo "已有进行中的发布工作流，本次不重复触发"
+            exit 0
+          fi
+          gh workflow run release.yml --ref main -f tag="$GH_TAG" -f sync_only=true
+          echo "已触发 $GH_TAG 的产物补同步"
+
+      - name: 开或更新 issue
+        if: steps.diff.outputs.ok == '0'
+        env:
+          BODY: ${{ steps.diff.outputs.body }}
+        run: |
+          set -uo pipefail
+          TITLE="发布面不一致：Gitee 镜像待处理"
+          # 按标题精确匹配而不是 search 语法：标题含中文与全角冒号，检索表达式容易失配
+          existing=$(gh issue list --state open --limit 100 --json number,title \
+                       --jq ".[] | select(.title == \"$TITLE\") | .number" | head -1)
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body "$BODY"
+            echo "已追加到 issue #$existing"
+          else
+            gh issue create --title "$TITLE" --body "$BODY"
+            echo "已新建 issue"
+          fi

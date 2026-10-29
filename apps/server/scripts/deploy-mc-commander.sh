@@ -182,19 +182,6 @@ install_pkg_recorded() {
 VERSION="${VERSION:-${BRANCH:-latest}}"
 # 资产名固定不含 tag：releases/latest/download/<asset> 无法预知 tag，名字不固定就用不了 latest
 ASSET_NAME="mc-commander-server.tar.gz"
-# latest 与显式 tag 的下载前缀不同，故分开拼
-if [ "$VERSION" = "latest" ]; then
-  RELEASE_BASE="https://github.com/wyyfzb/mc-commander/releases/latest/download"
-else
-  RELEASE_BASE="https://github.com/wyyfzb/mc-commander/releases/download/$VERSION"
-fi
-# GitHub Release 资产为权威来源（CI 构建）
-# 先记录「用户是否显式设过」：下面的默认值赋值会让变量恒非空，
-# 之后就无法区分「用户指定了 URL」与「脚本填的默认值」，报错分支会指错方向。
-CUSTOM_PACKAGE_URL=0
-[ -n "${PACKAGE_URL:-}" ] && CUSTOM_PACKAGE_URL=1
-PACKAGE_URL="${PACKAGE_URL:-$RELEASE_BASE/$ASSET_NAME}"
-SHA256SUMS_URL="${SHA256SUMS_URL:-$RELEASE_BASE/SHA256SUMS.txt}"
 
 # Gitee 镜像源（国内网络）：同一份发布产物在校验通过后同步到 Gitee Release。
 # 为什么需要它：本机实测 GitHub 资产约 5KB/s 且会静默挂死（连 --connect-timeout
@@ -240,11 +227,53 @@ repo_file_allowed() {
 }
 err()  { ERR_SHOWN=1; echo "[ERROR] $*" >&2; }
 
-# 把 $VERSION/$ASSET_NAME 解析为某源的下载前缀。
+# 权威版本号：latest 时先从 GitHub 解析真实 tag，再让两个源都指向同一版本。
+# 只从镜像侧解析会让「镜像 Release 滞后」静默变成「用户装到旧版本」——旧版产物同样存在、
+# 同样能装能跑，链路上没有任何一步会报告它比最新版旧。
+#
+# 跟随后取 url_effective，并重试 3 次：跨境链路会偶发拿不到 302 的 Location
+# （实测同一秒内多次请求会出现空值），单次尝试等于让一次抖动决定用户装哪个版本。
+resolve_authority_tag() {
+  local loc attempt
+  for attempt in 1 2 3; do
+    loc=$(curl -fsSL -r 0-0 --max-time "$PROBE_TIMEOUT" -o /dev/null -w '%{url_effective}' \
+            "https://github.com/$GITEE_OWNER/$GITEE_REPO/releases/latest" 2>/dev/null)
+    case "$loc" in
+      */tag/v[0-9]*) printf '%s\n' "${loc##*/}"; return 0 ;;
+    esac
+    sleep 2
+  done
+  return 1
+}
+
+# 先记录「用户是否显式设过」：下面的默认值赋值会让变量恒非空，
+# 之后就无法区分「用户指定了 URL」与「脚本填的默认值」，报错分支会指错方向。
+CUSTOM_PACKAGE_URL=0
+[ -n "${PACKAGE_URL:-}" ] && CUSTOM_PACKAGE_URL=1
+
+RESOLVED_TAG=""
+if [ "$VERSION" = "latest" ]; then
+  RESOLVED_TAG=$(resolve_authority_tag) || RESOLVED_TAG=""
+  if [ -n "$RESOLVED_TAG" ]; then
+    log "最新版本：$RESOLVED_TAG"
+    RELEASE_BASE="https://github.com/$GITEE_OWNER/$GITEE_REPO/releases/download/$RESOLVED_TAG"
+  else
+    # 解析不到（GitHub 不可达）时不中断：退回 latest 前缀，让下载阶段自己判成败
+    warn "未能解析最新版本号（GitHub 不可达），按 latest 继续"
+    RELEASE_BASE="https://github.com/$GITEE_OWNER/$GITEE_REPO/releases/latest/download"
+  fi
+else
+  RELEASE_BASE="https://github.com/$GITEE_OWNER/$GITEE_REPO/releases/download/$VERSION"
+fi
+
+PACKAGE_URL="${PACKAGE_URL:-$RELEASE_BASE/$ASSET_NAME}"
+SHA256SUMS_URL="${SHA256SUMS_URL:-$RELEASE_BASE/SHA256SUMS.txt}"
+
+# 把某个 tag 解析为 Gitee 的下载前缀。未传 tag 时按 $VERSION 处理。
 # Gitee 没有 releases/latest/download（实测 302 到 repository/archive 后 404，
 # 即便该版本确实有 release），故 latest 必须先用匿名 API 解析出真实 tag。
 gitee_release_base() {
-  local tag="$VERSION"
+  local tag="${1:-$VERSION}"
   if [ "$tag" = "latest" ]; then
     # /releases/latest 可匿名调用；不能用 /releases 列表——实测其排序不可靠
     # （某仓库列表首项 v1.62.3，而真实最新为 v3.142.01）
@@ -285,7 +314,9 @@ source_reachable() {
 # ⇒ 会把一个本来装得上的场景做成失败。故探测实际资产可达性，不可达即拒绝切换。
 use_gitee() {
   local base
-  base=$(gitee_release_base) || {
+  # 用权威版本号去镜像侧要同一个版本：镜像可能只同步到旧版，若让它自己解析「最新」，
+  # 拿到的会是旧版且同样有产物，切换就在无声中降级了版本。
+  base=$(gitee_release_base "${RESOLVED_TAG:-$VERSION}") || {
     warn "无法从 Gitee 解析版本信息（API 不可达或该版本尚未同步）"
     return 1
   }
@@ -1284,7 +1315,7 @@ if [ "$CUSTOM_PACKAGE_URL" -eq 0 ]; then
     elif [ "$ALLOW_SOURCE_FALLBACK" = "1" ] && source_reachable "$PACKAGE_URL"; then
       log "Gitee 源不可用，已回退 GitHub 权威源：$PACKAGE_URL"
     else
-      warn "Gitee 源不可用且未启用换源，仍按 Gitee 重试"
+      warn "Gitee 源不可用，且未启用换源或 GitHub 也未探测通过；仍按 GitHub 地址重试"
     fi
   elif source_reachable "$PACKAGE_URL"; then
     log "GitHub 源可达，使用：$PACKAGE_URL"

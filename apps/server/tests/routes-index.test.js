@@ -65,17 +65,46 @@ describe('routes/index.js 聚合层', () => {
 
   describe('GET /api/v1/check-update', () => {
     /** 造一个 releases/latest 的 302 响应（Location 的最后一段是 tag） */
-    function redirect(tag) {
+    function redirect(tag, host = 'https://gitee.com') {
       return {
         status: 302,
         headers: {
           get: (k) =>
             k.toLowerCase() === 'location'
-              ? `https://gitee.com/${config.repoPath}/releases/tag/${tag}`
+              ? `${host}/${config.repoPath}/releases/tag/${tag}`
               : null,
         },
       };
     }
+
+    /** 按源返回不同版本：镜像侧的 Release 会滞后于代码同步，两源本就可能不一致 */
+    const byHost = (giteeTag, githubTag) =>
+      fetchMock.mockImplementation((url) =>
+        Promise.resolve(
+          url.startsWith('https://gitee.com')
+            ? redirect(giteeTag, 'https://gitee.com')
+            : redirect(githubTag, 'https://github.com'),
+        ),
+      );
+
+    it('两源版本不同时取较高者：镜像落后不掩盖新版本', async () => {
+      byHost('v0.8.0', 'v9.9.9');
+
+      const res = await apiGet('/api/v1/check-update');
+
+      expect(res.body.data.latest).toBe('9.9.9');
+      expect(res.body.data.hasUpdate).toBe(true);
+      expect(res.body.data.url).toBe(`https://github.com/${config.repoPath}/releases/tag/v9.9.9`);
+    });
+
+    it('同版本时下载链接指向就近源', async () => {
+      byHost('v9.9.9', 'v9.9.9');
+
+      const res = await apiGet('/api/v1/check-update');
+
+      expect(res.body.data.latest).toBe('9.9.9');
+      expect(res.body.data.url).toBe(`https://gitee.com/${config.repoPath}/releases/tag/v9.9.9`);
+    });
 
     it('有新版本：tag 高于当前版本 → hasUpdate true + releases 链接', async () => {
       fetchMock.mockResolvedValue(redirect('v9.9.9'));
@@ -89,7 +118,7 @@ describe('routes/index.js 聚合层', () => {
         hasUpdate: true,
         url: `https://gitee.com/${config.repoPath}/releases/tag/v9.9.9`,
       });
-      // 首选 Gitee（与部署脚本同口径），且靠 Location 头取值、不解析响应体
+      // 靠 Location 头取值、不解析响应体；两源并发查，同版本时链接指向就近源
       expect(fetchMock).toHaveBeenCalledWith(
         `https://gitee.com/${config.repoPath}/releases/latest`,
         expect.objectContaining({ redirect: 'manual', signal: expect.anything() }),
