@@ -450,17 +450,32 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
   });
 
   describe('Node.js 安装不执行未校验引导脚本', () => {
-    it('优先使用发行版官方源安装 Node.js', () => {
-      expect(script).toContain('install_pkg_recorded nodejs npm');
-      expect(script).toMatch(/先尝试发行版官方源/);
+    it('不用发行版源装 Node.js：其补丁线落后于安全发布', () => {
+      // 发行版的 nodejs 包常停在整线早期版本，装上去仍是带已披露漏洞的那一版
+      expect(script).not.toContain('install_pkg_recorded nodejs npm');
     });
 
-    it('兜底使用官方二进制包并校验 SHASUMS256.txt', () => {
+    it('官方二进制包并校验 SHASUMS256.txt', () => {
       expect(script).toContain('SHASUMS256.txt');
       expect(script).toContain('sha256sum "$tmp_dir/$file"');
       expect(script).toContain('Node.js 二进制包 sha256 校验失败');
-      // 固定版本号默认可被 NODE_VERSION 环境变量覆盖
-      expect(script).toContain('NODE_VERSION="${NODE_VERSION:-v22.');
+      // 版本默认可被 NODE_VERSION 覆盖，未指定时动态取该线最新
+      expect(script).toContain('NODE_VERSION="${NODE_VERSION:-$(resolve_latest_node)}"');
+      // 兜底版本必须与目标大版本同线：跨线兜底会装回一个不该用的版本
+      const requiredMajor = /NODE_REQUIRED_MAJOR=(\d+)/.exec(script)[1];
+      expect(script).toContain(`NODE_FALLBACK_VERSION="v${requiredMajor}.`);
+    });
+
+    it('版本判据看补丁线，不只看主版本', () => {
+      // 只比主版本会放过整线早期的版本（那些含有已披露漏洞）
+      expect(script).toMatch(/version_lt\(\)/);
+      expect(script).toContain('NODE_VERSION="${NODE_VERSION:-$(resolve_latest_node)}"');
+      expect(script).toMatch(/version_lt "\$final" "\$NODE_VERSION"/);
+    });
+
+    it('升级只改自己建的软链，别人装的 node 不覆盖', () => {
+      expect(script).toMatch(/\/opt\/node-v\*\/bin\/\*/);
+      expect(script).toContain('未覆盖');
     });
   });
 

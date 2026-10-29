@@ -27,6 +27,7 @@ import { NotificationsPanel } from './components/notifications-panel'
 import { BackupPanel } from './components/backup-panel'
 import { AboutPanel } from './components/about-panel'
 import { UpdateCheckSection } from './components/update-check-section'
+import { RuntimeStatusSection } from './components/runtime-status-section'
 
 // 账号与安全、数据与卸载各自带着低频重面板（会话轮询 / 导出 / 删除命令预览），
 // 静态引入会把它们塞进入口 chunk，首访任意页面都要多下几十 KB
@@ -158,6 +159,9 @@ export function AboutSettingsPage() {
       <AboutPanel />
       <div className="mt-3">
         <UpdateCheckSection />
+      </div>
+      <div className="mt-3">
+        <RuntimeStatusSection />
       </div>
     </>
   )

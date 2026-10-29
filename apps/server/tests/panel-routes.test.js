@@ -249,6 +249,77 @@ describe('面板去留端点', () => {
     }
   });
 
+  it('POST /panel/runtime-upgrade 触发固定的运行环境单元', async () => {
+    const fake = withFakeSudo({ status: 0 });
+    try {
+      const res = await request(buildApp()).post('/api/panel/runtime-upgrade').send({});
+      expect(res.status).toBe(200);
+      expect(res.body.message).toContain('已开始升级运行环境');
+      // 单元名固定：sudoers 的 command 参数禁止通配符
+      expect(fake.argv()).toEqual([
+        '-n',
+        '/usr/bin/systemctl',
+        'start',
+        '--no-block',
+        'mc-commander-node.service',
+      ]);
+    } finally {
+      fake.restore();
+    }
+  });
+
+  it('没有升级运行环境的权限 → 500 且不谎报已开始', async () => {
+    const fake = withFakeSudo({ status: 1, stderr: 'sudo: a password is required' });
+    try {
+      const res = await request(buildApp()).post('/api/panel/runtime-upgrade').send({});
+      expect([404, 500]).toContain(res.status);
+      if (res.status === 500) expect(res.body.message).not.toContain('已开始升级');
+    } finally {
+      fake.restore();
+    }
+  });
+
+  it('GET /panel/runtime 返回当前版本与可升级判据', async () => {
+    // 官方清单由桩提供：真实网络在 CI 上不可依赖，且这里要判的是解析逻辑
+    const realFetch = globalThis.fetch;
+    const major = process.version.split('.')[0];
+    const newer = `${major}.999.0`;
+    // 首条是别的线：真实清单按版本降序，最新大版本排在最前，
+    // 不按线过滤就会把 26.x 当成 24.x 的「最新补丁」
+    globalThis.fetch = async () => ({
+      ok: true,
+      json: async () => [{ version: 'v99.0.0' }, { version: newer }, { version: 'v1.0.0' }],
+    });
+    try {
+      const res = await request(buildApp()).get('/api/panel/runtime');
+      expect(res.status).toBe(200);
+      expect(res.body.data.current).toBe(process.version);
+      // 只取同一大版本线的条目：跨线版本（v1.0.0）不能被当成「这条线的最新」
+      expect(res.body.data.latest).toBe(newer);
+      expect(res.body.data.hasUpdate).toBe(true);
+      // managed 决定能不能给升级按钮：非面板安装时必须带原因，否则用户看到禁用按钮却不知为何
+      expect(typeof res.body.data.managed).toBe('boolean');
+      if (!res.body.data.managed) expect(res.body.data.reason).toBeTruthy();
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+
+  it('查不到官方清单时 latest 为 null，而不是假装已最新', async () => {
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = async () => {
+      throw new TypeError('fetch failed');
+    };
+    try {
+      const res = await request(buildApp()).get('/api/panel/runtime');
+      expect(res.status).toBe(200);
+      expect(res.body.data.latest).toBeNull();
+      expect(res.body.data.hasUpdate).toBe(false);
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+
   it('没有停自身的权限 → 500 并说清怎么办，不谎报已停止', async () => {
     // 实机复现：sudo -u mc-commander systemctl stop 退出码 1 + Interactive authentication required
     const fake = withFakeSudo({ status: 1, stderr: 'Interactive authentication required' });

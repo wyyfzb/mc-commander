@@ -65,6 +65,28 @@ export function applyPanelUpdate(config: ConnectionConfig, tag: string) {
   return apiPost<null>('/api/v1/panel/update', config, { tag }, { timeoutMs: 30_000 })
 }
 
+export interface RuntimeStatus {
+  /** 当前运行进程的 Node 版本，形如 v24.22.2 */
+  current: string
+  /** 同一条线的官方最新版；null 表示查询失败（不是「已最新」） */
+  latest: string | null
+  hasUpdate: boolean
+  /** 软链是否指向本面板安装的 Node；false 时不给升级按钮 */
+  managed: boolean
+  /** 不可自动升级的原因，managed 为 true 时为 null */
+  reason: string | null
+}
+
+/** 运行环境（Node.js）状态：面板只能改自己装的 Node，别的一律只提示 */
+export function apiRuntimeStatus(config: ConnectionConfig, signal?: AbortSignal) {
+  return apiGet<RuntimeStatus>('/api/v1/panel/runtime', config, signal)
+}
+
+/** 升级运行环境：触发 root 单元，面板会重启一次 */
+export function apiUpgradeRuntime(config: ConnectionConfig) {
+  return apiPost<null>('/api/v1/panel/runtime-upgrade', config, {}, { timeoutMs: 30_000 })
+}
+
 /** 面板内彻底删除：服务端触发清理单元并回包，清理在本面板进程之外进行 */
 export function apiRequestRemoval(config: ConnectionConfig, payload: RemovalRequest) {
   return apiPost<null>('/api/v1/panel/removal', config, payload, { timeoutMs: 30_000 })
