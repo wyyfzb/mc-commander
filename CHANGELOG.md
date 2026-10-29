@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.0](https://github.com/wyyfzb/mc-commander/compare/v0.11.1...v0.12.0) (2026-10-29)
+
+
+### Features
+
+* **server:** 运行环境补丁线落后时可一键升级 ([#693](https://github.com/wyyfzb/mc-commander/issues/693)) ([5b46d5e](https://github.com/wyyfzb/mc-commander/commit/5b46d5e8bf32ad2dc235aed5377b4eb83ed310ef))
+
 ## [0.11.1](https://github.com/wyyfzb/mc-commander/compare/v0.11.0...v0.11.1) (2026-10-29)
 
 
