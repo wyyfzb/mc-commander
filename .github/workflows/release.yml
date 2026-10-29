@@ -184,8 +184,6 @@ jobs:
       TAG_REF: ${{ inputs.tag || github.ref_name }}
       GITEE_OWNER: wyyfzb
       GITEE_REPO: mc-commander
-      # 资产名与 release.yml 打包步骤保持一致
-      ASSETS: mc-commander-server.tar.gz SHA256SUMS.txt
     steps:
       - name: 检查 GITEE_TOKEN 是否配置
         id: cfg
@@ -279,7 +277,8 @@ jobs:
           echo "Gitee release id=$RID"
 
           failed=0
-          read -ra assets <<< "$ASSETS"
+          # 资产名与打包步骤保持一致
+          assets=(mc-commander-server.tar.gz SHA256SUMS.txt)
           for f in "${assets[@]}"; do
             # 从 GitHub Release 取资产（同 run 刚发布，同源、无跨境风险）
             curl -fsSL --retry 3 --max-time 300 -o "/tmp/$f" \
