@@ -1,7 +1,7 @@
 {
   "name": "mc-commander-server",
   "private": true,
-  "version": "0.11.1",
+  "version": "0.12.0",
   "description": "MC_Commander - Self-hosted Minecraft Server Manager",
   "type": "module",
   "main": "src/index.js",
