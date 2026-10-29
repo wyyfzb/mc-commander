@@ -108,7 +108,7 @@ jobs:
             fi
             echo "::endgroup::"
           done
-          exit $failed
+          exit "$failed"
 
   schemas:
     name: 契约包（lint + schemas 测试 + 构建产物）

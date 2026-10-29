@@ -279,7 +279,8 @@ jobs:
           echo "Gitee release id=$RID"
 
           failed=0
-          for f in $ASSETS; do
+          read -ra assets <<< "$ASSETS"
+          for f in "${assets[@]}"; do
             # 从 GitHub Release 取资产（同 run 刚发布，同源、无跨境风险）
             curl -fsSL --retry 3 --max-time 300 -o "/tmp/$f" \
               "https://github.com/${{ github.repository }}/releases/download/$TAG_REF/$f" \
@@ -294,12 +295,13 @@ jobs:
             if [ -z "$OLDS" ]; then
               echo "::notice::未查到同名旧附件（或查询失败），直接上传 $f"
             else
-              for old in $OLDS; do
+              mapfile -t olds <<< "$OLDS"
+              for old in "${olds[@]}"; do
                 curl -sS "${RETRY[@]}" --max-time 30 -X DELETE -H "$AUTH" \
                   "$API/releases/$RID/attach_files/$old" >/dev/null \
                   || echo "::warning::删除同名旧附件 $f（id=$old）失败"
               done
-              echo "已清理同名旧附件 $f：$(echo $OLDS | wc -w) 条"
+              echo "已清理同名旧附件 $f：${#olds[@]} 条"
             fi
 
             # 上传必须自带重试：跨境上传会在超时或 reset 上半途失败，留下残缺镜像。
@@ -338,10 +340,10 @@ jobs:
           fi
           echo "Gitee 附件: $got"
 
-          for f in $ASSETS; do
+          for f in "${assets[@]}"; do
             echo "$got" | grep -qF "$f" || { echo "::warning::Gitee 侧缺少 $f"; failed=1; }
           done
-          exit $failed
+          exit "$failed"
 
       # 同步完成即回读校验下载可达性：用真实下载路径而非 API，
       # 因为 API 有附件 ≠ 用户能下载（Gitee 的下载会 302 到带签名的 CDN）
