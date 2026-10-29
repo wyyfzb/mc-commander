@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.12.1](https://github.com/wyyfzb/mc-commander/compare/v0.12.0...v0.12.1) (2026-10-29)
+
+
+### Bug Fixes
+
+* **deps:** bump the minor-and-patch group across 1 directory with 3 updates ([#695](https://github.com/wyyfzb/mc-commander/issues/695)) ([06ed086](https://github.com/wyyfzb/mc-commander/commit/06ed08604cfadc69c0ee516f065c944245f7a3e1))
+* **deps:** croner 升到 11，类型声明大版本改由人工决定 ([#699](https://github.com/wyyfzb/mc-commander/issues/699)) ([c55ab09](https://github.com/wyyfzb/mc-commander/commit/c55ab0915c5d692b1b332aa3ac6c0c93dddb58be))
+
 ## [0.12.0](https://github.com/wyyfzb/mc-commander/compare/v0.11.1...v0.12.0) (2026-10-29)
 
 
