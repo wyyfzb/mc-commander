@@ -51,6 +51,11 @@ jobs:
       - run: npm run lint:tools
       - run: npm run typecheck
       - run: npm run test:tools
+      # 密钥扫描排在 workflow 检查之前：它判的是泄露，比语法问题更该先拿到结论，
+      # 不该被前一步的失败跳过。
+      - uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       # workflow 文件自身的语法与表达式检查：写错只有触发时才暴露，而发布链路的错
       # 会在「正要发版」那一刻现形。版本钉死，避免上游更新让门禁行为漂移。
       - name: workflow 语法检查（actionlint）
@@ -60,10 +65,14 @@ jobs:
           curl -fsSL -o /tmp/actionlint.tar.gz \
             "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
           tar -xzf /tmp/actionlint.tar.gz -C /tmp actionlint
-          /tmp/actionlint -color
-      - uses: gitleaks/gitleaks-action@v3
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          if ! out=$(/tmp/actionlint 2>&1); then
+            # 首个错误压成 annotation：日志与检查状态走不同域名取值，
+            # annotation 能随检查状态一起读到，排障不必先去取日志
+            echo "::error::$(printf '%s' "$out" | head -4 | tr '\n' ' ')"
+            printf '%s\n' "$out"
+            exit 1
+          fi
+          printf '%s\n' "${out:-actionlint: 全部 workflow 通过}"
 
   # 生产依赖漏洞门禁：只读 lock 文件，不需要 node_modules 也不需要 npm ci
   # （实测 npm audit 仅凭 package.json + package-lock.json 即可判定），故独立成 job
