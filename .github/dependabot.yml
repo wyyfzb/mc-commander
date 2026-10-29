@@ -34,9 +34,11 @@ updates:
     ignore:
       - dependency-name: "vitest"
       - dependency-name: "@vitest/coverage-v8"
-      # dompurify 是 monaco-editor 的传递依赖，而 monaco-editor 仍精确锁 3.4.15
-      # ⇒ 无修复版可升，安全更新作业只会反复失败。两条告警都要求 IN_PLACE 模式，monaco
-      # 从不启用（仅 `IN_PLACE = cfg.IN_PLACE || false`，整包 0 处 IN_PLACE: true）⇒ 不可达。
+      # dompurify 由根 package.json 的 overrides 统一顶到 3.4.17 以上——monaco-editor 自己
+      # 仍精确锁 3.4.15，交给 dependabot 只会产出装不上的 PR。override 已覆盖安全更新，
+      # 故这里只需登记为不交给它管。
+      # 残留告警指向 IN_PLACE 模式，而 monaco 从不启用（仅 `IN_PLACE = cfg.IN_PLACE || false`，
+      # 整包 0 处 IN_PLACE: true）⇒ 不可达。
       - dependency-name: "dompurify"
     groups:
       minor-and-patch:

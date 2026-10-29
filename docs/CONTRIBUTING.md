@@ -12,7 +12,7 @@
 
 | 依赖 | 版本 |
 |------|------|
-| Node.js | 22+ |
+| Node.js | 24+ |
 | Java | 17 / 21 / 25（运行 Minecraft 实例用，按 MC 版本自动选择） |
 | 操作系统 | Windows / Linux / macOS 均可开发 |
 

@@ -60,7 +60,7 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
           # workspace 根只有一份 lock（包级 lock 不再存在）：路径必须指向它，
           # 指错会让 setup-node 直接失败（"paths were not resolved"）而整个发版构建中止

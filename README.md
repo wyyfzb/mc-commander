@@ -29,7 +29,7 @@
 
 ## 快速开始
 
-面向 Linux 服务器，Ubuntu / Debian 优先。Node.js 22+ 与 Java 17/21/25 由脚本自动安装，不用先准备。
+面向 Linux 服务器，Ubuntu / Debian 优先。Node.js 24+ 与 Java 17/21/25 由脚本自动安装，不用先准备。
 
 1. **复制下面这一整行**（单行，不要拆开——拆开只会执行前半段，什么都不会发生），粘贴到服务器终端回车：
 
@@ -226,7 +226,7 @@ npm start
 
 ## 给贡献者
 
-贡献流程与提交规范见 [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md)，工程纪律与 CI 检查项见 [AGENTS.md](AGENTS.md)。开发只需 Node.js 22+（三个包都声明并强制 `engines`），Java 只在真正跑 MC 实例时需要。
+贡献流程与提交规范见 [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md)，工程纪律与 CI 检查项见 [AGENTS.md](AGENTS.md)。开发只需 Node.js 24+（三个包都声明并强制 `engines`），Java 只在真正跑 MC 实例时需要。
 
 ### 提交与分支
 
@@ -240,7 +240,7 @@ npm start
 |---|---|
 | 前端 | React 19 + TypeScript strict + Vite + Tailwind v4 + shadcn/ui |
 | 状态 | TanStack Query + zustand |
-| 服务端 | Node.js 22+ · Express · ws |
+| 服务端 | Node.js 24+ · Express · ws |
 | 数据 | SQLite（better-sqlite3）+ zod 契约包 |
 | 测试 | Vitest + Testing Library · Playwright e2e |
 | 工程 | npm workspaces · Biome（格式化）· oxlint（lint） |
