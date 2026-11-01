@@ -68,9 +68,10 @@ function renderDialogWithToaster() {
   )
 }
 
-/** 打开版本下拉并选中指定版本 */
+/** 打开版本下拉并选中指定版本（fabric/forge 下同屏还有 loader 下拉，按标签定位） */
 async function selectVersion(user: ReturnType<typeof userEvent.setup>, version: string) {
-  await user.click(screen.getByRole('combobox'))
+  const group = screen.getByText('目标版本').parentElement as HTMLElement
+  await user.click(within(group).getByRole('combobox'))
   await user.click(await screen.findByRole('option', { name: new RegExp(`^${version}`) }))
 }
 
@@ -81,6 +82,7 @@ beforeEach(() => {
   useUpgradeStore.setState({ progress: {} })
   upgradeMock.shouldFail = false
   upgradeMock.conflict = false
+  upgradeMock.lastBody = null
   // sonner toast store 是模块级：清残留防跨用例泄漏
   toast.dismiss()
   upgradeCancelMock.notInProgress = false
@@ -440,10 +442,106 @@ describe('UpgradeDialog', () => {
     expect(prog!.detail).toBe('正在校验新版本…')
   })
 
+  // ── Fabric / Forge：类型可选中 + loader 选择 ──
+
+  it('类型卡含 Fabric 与 Forge 且可选中（能建不能升已收口）', async () => {
+    const user = userEvent.setup()
+    renderDialog()
+    expect(screen.getByRole('radio', { name: 'Fabric' })).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: 'Forge' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('radio', { name: 'Fabric' }))
+    expect(screen.getByRole('radio', { name: 'Fabric' })).toHaveAttribute('aria-checked', 'true')
+  })
+
+  it('Fabric：出现 loader 下拉，默认留空＝上游最新稳定版', () => {
+    const fabricInstance: InstanceStatus = { ...alpha, id: 'f1', modLoader: 'fabric' }
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <UpgradeDialog instance={fabricInstance} open onOpenChange={vi.fn()} />
+      </QueryClientProvider>,
+    )
+    // 默认选中实例当前类型，且不误报「会更换服务端」
+    expect(screen.getByRole('radio', { name: 'Fabric' })).toHaveAttribute('aria-checked', 'true')
+    expect(screen.queryByText(/这会更换服务端/)).not.toBeInTheDocument()
+    expect(screen.getByText('Loader 版本')).toBeInTheDocument()
+    // 占位即「留空」语义：不选也允许升级
+    expect(screen.getByText('最新稳定版')).toBeInTheDocument()
+  })
+
+  it('Vanilla 不显示 loader 选择（无 loader 的类型不该多一个空控件）', () => {
+    renderDialog()
+    expect(screen.queryByText('Loader 版本')).not.toBeInTheDocument()
+  })
+
+  it('🔴 Forge 不显示 loader 选择（服务端没有按 forge 版本取构建的能力）', () => {
+    const forgeInstance: InstanceStatus = { ...alpha, id: 'fg1', modLoader: 'forge' }
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <UpgradeDialog instance={forgeInstance} open onOpenChange={vi.fn()} />
+      </QueryClientProvider>,
+    )
+    expect(screen.getByRole('radio', { name: 'Forge' })).toHaveAttribute('aria-checked', 'true')
+    // 给 forge 渲染一个按了没反应的下拉，比不渲染更糟：用户会以为选中的版本生效了。
+    // 服务端的 resolveForgeInstallerDownload(mcVersion) 不接受 loader 参数，
+    // 上游 promotions 只给 recommended/latest 两个构建。
+    expect(screen.queryByText('Loader 版本')).not.toBeInTheDocument()
+  })
+
+  it('Forge 升级：请求体不带 loaderVersion', async () => {
+    const forgeInstance: InstanceStatus = { ...alpha, id: 'fg2', modLoader: 'forge' }
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <UpgradeDialog instance={forgeInstance} open onOpenChange={vi.fn()} />
+      </QueryClientProvider>,
+    )
+    const user = userEvent.setup()
+    await selectVersion(user, '1.21.4')
+    await user.click(screen.getByRole('button', { name: '开始升级' }))
+    await waitFor(() => expect(upgradeMock.lastBody).not.toBeNull())
+    expect(upgradeMock.lastBody).toEqual({ mcVersion: '1.21.4', type: 'forge' })
+    expect(upgradeMock.lastBody).not.toHaveProperty('loaderVersion')
+  })
+
+  it('Fabric 升级：选了 loader 才随请求下发该字段', async () => {
+    const fabricInstance: InstanceStatus = { ...alpha, id: 'f2', modLoader: 'fabric' }
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <UpgradeDialog instance={fabricInstance} open onOpenChange={vi.fn()} />
+      </QueryClientProvider>,
+    )
+    const user = userEvent.setup()
+    await selectVersion(user, '1.21.4')
+    await user.click(screen.getByRole('button', { name: '开始升级' }))
+    await waitFor(() => expect(upgradeMock.lastBody).not.toBeNull())
+    // 未选 loader ⇒ 不下发字段（由服务端取上游最新稳定版），
+    // 下发空串会被服务端当成显式指定
+    expect(upgradeMock.lastBody).toEqual({ mcVersion: '1.21.4', type: 'fabric' })
+  })
+
+  it('开发阶段进度：forge_install 有独立中文标签（不混进「下载中」）', () => {
+    renderDialog()
+    act(() => {
+      applyUpgradeProgress({
+        instanceId: 'alpha',
+        stage: 'forge_install',
+        percent: 0,
+        detail: '正在安装 Forge...',
+        timestamp: Date.now(),
+      })
+    })
+    expect(screen.getByText('安装 Forge')).toBeInTheDocument()
+    expect(screen.getByText('正在安装 Forge...')).toBeInTheDocument()
+  })
+
   it('服务端类型单选组：方向键移动即选中，aria-checked 与焦点同步', () => {
     renderDialog()
     const group = screen.getByRole('radiogroup', { name: '服务端类型' })
-    const [vanilla, paper, purpur] = within(group).getAllByRole('radio')
+    const radios = within(group).getAllByRole('radio')
+    // 类型枚举与契约包同源（5 型）：选项数量本身就是要锁的事实——
+    // 只写 3 型会让 Fabric/Forge 实例在升级弹窗里根本选不到自己的类型
+    expect(radios).toHaveLength(5)
+    const [vanilla, paper, , , purpur] = radios
     expect(vanilla).toHaveAttribute('aria-checked', 'true')
 
     fireEvent.keyDown(group, { key: 'ArrowRight' })

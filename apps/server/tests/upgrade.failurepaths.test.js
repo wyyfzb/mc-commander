@@ -49,6 +49,8 @@ vi.mock('../src/utils/http-client.js', () => ({
 }));
 
 vi.mock('../src/services/backup.service.js', () => ({
+  // 判据导出：upgrade.service 用它决定要不要跑前置备份。既有用例都走「有世界」路径
+  hasWorldData: vi.fn(() => true),
   BackupService: class {
     constructor(serverManager) {
       this.serverManager = serverManager;
@@ -383,8 +385,9 @@ describe('resolveDownload 分支矩阵', () => {
 
   it('未支持类型 → 抛 Unsupported server type', async () => {
     const service = new UpgradeService(createMockServerManager());
-    await expect(service.resolveDownload('1.21.4', 'fabric')).rejects.toThrow(
-      'Unsupported server type: fabric',
+    // fabric 已是受支持类型 ⇒ 用真正的域外类型验证兜底分支仍在
+    await expect(service.resolveDownload('1.21.4', 'spigot')).rejects.toThrow(
+      'Unsupported server type: spigot',
     );
   });
 });

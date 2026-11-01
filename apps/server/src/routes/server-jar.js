@@ -461,7 +461,11 @@ export function createServerJarRoutes(serverManager) {
               ),
             ),
           ]
-            .filter((v) => v.startsWith('1.'))
+            // 只保留版本号形态，不按主版本前缀过滤：MC 26.x 起主版本号不再是 1，
+            // 而 promotions 的键里除了版本号还有 `1.20.1-recommended` 这类已剥掉后缀的
+            // 纯版本号与少量非版本键。写死 `startsWith('1.')` 会把 26.1/26.2/26.3
+            // 整批丢掉，用户在 Forge 下拉里根本选不到这些版本（能力存在但不可达）。
+            .filter((v) => /^\d+(\.\d+)*$/.test(v))
             .reverse()
             .slice(0, 30);
           return res.json(success({ type: 'forge', versions }));
@@ -686,10 +690,13 @@ export function createServerJarRoutes(serverManager) {
               if (err) reject(err);
               else resolve();
             }
+            // 15 分钟：安装器要下载 100MB+ 的 libraries，实测 1.21.4-54.1.22 约 5 分钟、
+            // 1.20.1-47.4.28 约 2 分钟（同版本重装因 libraries 已在本地只要 6 秒）。
+            // 耗时几乎全在下行带宽上，慢线路会成倍放大，按实测最慢值留 3 倍余量
             const timer = setTimeout(() => {
               killProcessTree(extractProc);
-              settle(new Error('Forge installer timed out (120s)'));
-            }, 120000);
+              settle(new Error('Forge installer timed out (900s)'));
+            }, 900000);
             // Forge 安装器是单进程 java 程序（未 detached），故不做进程组终止
             const onCancel = () => {
               killProcessTree(extractProc);
@@ -712,7 +719,14 @@ export function createServerJarRoutes(serverManager) {
           if (forgeJar) {
             jarFile = forgeJar;
           } else {
-            throw new Error('Forge server jar not found after install');
+            // 部分游戏版本的安装器只产出 libraries/ 与 argfile、根目录没有 jar，
+            // 面板按 `-jar <入口 jar>` 启动，承载不了这种形态。不点名具体版本：
+            // 已知 1.20.1 如此，更高版本是否一律恢复没有实测支撑
+            throw new AppError(
+              ErrorCodes.VALIDATION_ERROR,
+              `${mcVersion} 的 Forge 安装器没有产出可启动的入口 jar；` +
+                '该版本的安装器产物形态面板暂不支持，请改用较新的游戏版本重试',
+            );
           }
           fs.unlinkSync(jarPath);
         }

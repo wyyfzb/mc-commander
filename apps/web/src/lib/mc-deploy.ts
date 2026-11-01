@@ -1,14 +1,14 @@
 /**
  * 部署/实例静态数据
- * - SERVER_TYPES：5 种服务端类型 + 中文标签
+ * - SERVER_TYPES：5 种服务端类型（从契约包再导出，不在这里另立一份）
  * - recommendedJavaVersion：版本 → Java 版本推荐
  * - 任务类型标签与状态色
  */
 import { formatStartTime } from './format'
+import type { ServerType } from '@mc-commander/schemas'
 
-/** 服务端类型（deploy 端点 validTypes） */
-export const SERVER_TYPES = ['vanilla', 'paper', 'fabric', 'forge', 'purpur'] as const
-export type ServerType = (typeof SERVER_TYPES)[number]
+/** 服务端类型（唯一声明源是契约包：部署与升级共用同一枚举） */
+export { SERVER_TYPES, type ServerType } from '@mc-commander/schemas'
 
 /** 服务端类型中文标签 */
 export const SERVER_TYPE_LABELS: Record<ServerType, string> = {

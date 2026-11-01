@@ -6,8 +6,10 @@
  */
 import fs from 'fs';
 import path from 'path';
+import { spawn } from 'child_process';
+import { SERVER_TYPES } from '@mc-commander/schemas';
 import { httpJson, httpStream } from '../utils/http-client.js';
-import { BackupService } from './backup.service.js';
+import { BackupService, hasWorldData } from './backup.service.js';
 import { resolveSafePath, PathTraversalError } from '../utils/fs-utils.js';
 import { AppError, ErrorCodes } from '../utils/response.js';
 import { assertAllowedDownloadHost, allowedDownloadHosts } from '../utils/jar-download-guard.js';
@@ -19,7 +21,11 @@ import {
 import { logger } from '../utils/logger.js';
 import { resolveVanillaDownload } from './vanilla-manifest.js';
 import { syncInstanceJson } from './mc_server.js';
-import { resolvePurpurDownload } from './loader-upstreams.js';
+import {
+  resolveFabricDownload,
+  resolveForgeInstallerDownload,
+  resolvePurpurDownload,
+} from './loader-upstreams.js';
 import {
   findJavaPathStrict,
   getRecommendedJavaVersion,
@@ -29,8 +35,11 @@ import { ensureJavaRuntime } from './java-runtime.service.js';
 import { readJarVersionInfo } from './mc-server/jar-version.js';
 import { getServerVersion } from '../utils/version.js';
 import { beginCancellableTask, TASK_KINDS, TaskCancelledError } from '../utils/cancellable-task.js';
+import { killProcessTree } from '../utils/process-tree.js';
 
-const VALID_TYPES = new Set(['vanilla', 'paper', 'purpur']);
+/// 升级支持的类型＝契约包的类型枚举。升级与部署必须同口径：两边各写一份时，
+/// 新增类型会变成「能建不能升」——实例建得出来、永远升不了，报错却只有 Invalid type。
+const VALID_TYPES = new Set(SERVER_TYPES);
 
 /** DB `mod_loader` 列的取值形态（首字母大写，与部署写入一致） */
 function typeLabel(type) {
@@ -49,13 +58,13 @@ export const MC_VERSION_REGEX = /^\d{1,3}(\.\d{1,3}){0,3}$/;
 /// 当作穿越向量（「jarFile 入库值同样校验」）。
 const SERVER_JAR_NAME_REGEX = /^server-\d{1,3}(\.\d{1,3}){0,3}\.jar$/;
 
-/// 上游下载域白名单：按本服务支持的类型取子集（与 resolveDownloadUrl 三个分支
-/// 实际产出的域一致）。上游 API 响应中的 URL 字段（piston manifest 的
-/// versionEntry.url / downloads.server.url、paper v3 downloads）理论可携带任意
-/// host，下载前统一断言，防污染响应把下载流导向任意主机。
-/// 逐类型取子集而非共用并集：升级不支持 fabric/forge，给并集等于把白名单放宽到
-/// 那些域，污染响应就能被放行。
-const ALLOWED_DOWNLOAD_HOSTS = allowedDownloadHosts([...VALID_TYPES]);
+/// 上游下载域白名单：**按本次升级的类型**取子集，不是全部类型的并集。
+/// 上游响应里的 URL 字段（piston manifest 的 versionEntry.url /
+/// downloads.server.url、paper v3 downloads）理论可携带任意 host，下载前统一断言。
+/// 用并集等于让一次 vanilla 升级就能被污染响应导向 forge 的文件域 —— 白名单被悄悄放宽。
+function allowedHostsFor(type) {
+  return allowedDownloadHosts([String(type || 'vanilla').toLowerCase()]);
+}
 
 /**
  * 实例内落地路径收口：resolveSafePath 四步防线（归一化/前缀边界/
@@ -79,6 +88,9 @@ const UPGRADE_STAGES = {
   DOWNLOAD: 'download',
   // 补齐目标版本要求的 Java（面板自供 JRE）：与 download 分档，进度含义是「准备 Java」
   PREPARE_JAVA: 'prepare_java',
+  // Forge 安装器在跑：它要下载 100MB+ 的 libraries 并打补丁，实测单次 2~5 分钟，
+  // 混进 download 会让进度条长时间停在同一档、读起来像卡死
+  FORGE_INSTALL: 'forge_install',
   REPLACE: 'replace',
   VERIFY: 'verify',
   COMPLETED: 'completed',
@@ -88,10 +100,62 @@ const UPGRADE_STAGES = {
   CANCELLED: 'cancelled',
 };
 
+/// Forge 安装器超时。判据是实测耗时而不是拍一个整数：一次全新安装要下载 100MB+
+/// 的 libraries，实测 1.21.4-54.1.22 约 5 分钟、1.20.1-47.4.28 约 2 分钟；
+/// 同一版本重装（libraries 已在本地）只要 6 秒。耗时几乎全部是下行带宽，
+/// 慢线路会成倍放大，故按实测最慢值留 3 倍余量取 15 分钟。
+/// 部署侧的 120s 在真机上必然超时并杀掉安装器，此处不能再沿用那个值。
+export const FORGE_INSTALL_TIMEOUT_MS = 900_000;
+
+/// Forge 安装器在实例内的落地名。固定名而不是沿用 server-<ver>.jar：安装器产物
+/// 识别靠「非本文件 + forge-*.jar」，且它必须能与任意版本的入口 jar 区分开。
+const FORGE_INSTALLER_NAME = 'forge-installer.jar';
+
+/// Forge 安装器内存上限：安装器只做下载与字节码补丁，实测 -Xmx512M 足够；
+/// 它和实例本身的 -Xmx 是两个进程，不能按实例内存给。
+const FORGE_INSTALL_XMX = '-Xmx512M';
+
+/// Fabric/Forge 的首启校验窗口。这两类的启动 jar 自己就是个引导器：fabric 的
+/// launcher 要先下原版服务端再 remap，forge 的 shim 要先解出嵌套依赖。
+/// 实测 fabric 1.21.4 冷启动从进程启动到 Done 共 116s（Done 自身 24s），
+/// 边缘只剩 4s ⇒ 照 120s 判会把正常启动判成超时并触发一次无谓回滚。
+/// 取 300s：覆盖首启自带的世界生成（实测 26.3 首启 3.5s，1.21.4 约 24s）
+/// 与引导器的一次性下载，仍远小于用户可感知的「卡死」阈值。
+const MODDED_VERIFY_WINDOW_MS = 300_000;
+
 // 版本号单一来源：package.json（见 utils/version.js）
 const PAPER_USER_AGENT = `MC_Commander/${getServerVersion()} (https://github.com/wyyfzb/mc-commander)`;
 
 export { UPGRADE_STAGES, VALID_TYPES };
+
+/**
+ * Forge 安装器产出的实例入口 jar 文件名。
+ *
+ * 判据不是「哪个 jar 看起来像服务端」，而是**本次安装到底留下了什么**：
+ * - 实测 1.21.4-54.1.22 与 26.3-66.1.0 在实例根目录留下
+ *   `forge-<mc>-<forge>-shim.jar`，`libraries/.../unix_args.txt` 的 `-jar` 指向它；
+ * - 实测 1.20.1-47.4.28 的安装器根目录不产出任何 jar，`unix_args.txt` 写的是主类
+ *   `cpw.mods.bootstraplauncher.BootstrapLauncher` 而非 `-jar`。
+ *
+ * ⚠️ 必须按**本次 mcVersion 前缀**过滤：安装器不清理别的版本产物，同一实例目录里
+ * 可能同时躺着上一个版本的 jar（实测先装 1.21.4、再装 1.20.1 后，根目录只剩旧的
+ * `forge-1.21.4-54.1.22-shim.jar`）。不带前缀过滤会把它当成本次产物，于是
+ * 「升级到 1.20.1」实际启动的是 1.21.4 的 jar——升级假成功，比失败更糟。
+ *
+ * @param {string[]} entries 实例根目录的文件名
+ * @param {string} installerName 本次下载的安装器文件名（它自己不是启动 jar）
+ * @param {string} mcVersion 本次安装的目标 MC 版本
+ * @returns {string|null}
+ */
+export function pickForgeLaunchJar(entries, installerName, mcVersion) {
+  const prefix = `forge-${mcVersion}-`;
+  const candidates = entries.filter(
+    (f) => f.startsWith(prefix) && f.endsWith('.jar') && f !== installerName,
+  );
+  const shim = candidates.find((f) => f.endsWith('-shim.jar'));
+  if (shim) return shim;
+  return candidates[0] ?? null;
+}
 
 export class UpgradeService {
   /**
@@ -115,10 +179,11 @@ export class UpgradeService {
    * sha1）；paper v3 downloadInfo.checksums.sha256；purpur /latest 的顶层 md5。
    * 无摘要时 expectedHash 为 null，_downloadJar 跳过完整性校验但仍执行体积上限。
    * @param {string} mcVersion
-   * @param {string} type - vanilla | paper | purpur
+   * @param {string} type - SERVER_TYPES 之一
+   * @param {string} [loaderVersion] fabric/forge 的 loader 版本；留空取上游最新稳定版
    * @returns {Promise<{ url: string, expectedHash: { algorithm: string, digest: string } | null }>}
    */
-  async resolveDownload(mcVersion, type) {
+  async resolveDownload(mcVersion, type, loaderVersion) {
     if (type === 'vanilla') {
       // 与部署共用同一实现（services/vanilla-manifest.js）：同一个事实只留一种取法
       return resolveVanillaDownload(mcVersion);
@@ -157,7 +222,106 @@ export class UpgradeService {
       return resolvePurpurDownload(mcVersion);
     }
 
+    if (type === 'fabric') {
+      // 与部署共用同一实现：上游按 loader 版本拼固定路径、**不提供摘要**
+      // ⇒ expectedHash 恒为 null（如实表达「上游没给」，不拿别的字段凑）
+      return resolveFabricDownload(mcVersion, loaderVersion);
+    }
+
+    if (type === 'forge') {
+      // 上游给的是**安装器**而非服务端 jar：下载完必须再跑 --installServer 生成入口 jar
+      return resolveForgeInstallerDownload(mcVersion);
+    }
+
     throw new Error(`Unsupported server type: ${type}`);
+  }
+
+  /**
+   * 跑 Forge 安装器（`java -jar <installer> --installServer`）。
+   *
+   * 必须做这一步的原因：forge 上游只提供安装器，服务端入口 jar 与整个 libraries/
+   * 依赖树都由它生成。只下载安装器改名当 jar 用，实例永远起不来。
+   *
+   * 超时与取消都用 killProcessTree 收尾：安装器在这一步同时持有下载连接与
+   * 半写的 libraries/ 文件，只杀主进程会留下仍在写盘的子 JVM，下一次安装撞上
+   * 半截文件会让失败延后到首启校验，用户看到的是「升完起不来」。
+   *
+   * @param {string} javaPath 与实例同档的 Java（安装器要加载目标版本的类做补丁）
+   * @param {string} instancePath 实例目录（安装器以 cwd 为落点写 libraries/）
+   * @param {string} installerName 安装器文件名（相对 instancePath）
+   * @param {string} instanceId 仅用于日志
+   * @param {string} mcVersion 本次安装的目标 MC 版本（用于认领本次产出的入口 jar）
+   * @param {AbortSignal|null} signal 取消信号
+   * @returns {Promise<string>} 生成的入口 jar 文件名
+   */
+  _runForgeInstaller(javaPath, instancePath, installerName, instanceId, mcVersion, signal = null) {
+    if (signal?.aborted) return Promise.reject(new TaskCancelledError());
+    return new Promise((resolve, reject) => {
+      const proc = spawn(javaPath, [FORGE_INSTALL_XMX, '-jar', installerName, '--installServer'], {
+        cwd: instancePath,
+      });
+
+      // 安装器输出只在失败时有用：成功路径下它会把整个补丁清单刷进日志
+      let tail = '';
+      const collect = (chunk) => {
+        tail = (tail + chunk.toString()).slice(-4000);
+      };
+      proc.stdout?.on('data', collect);
+      proc.stderr?.on('data', collect);
+
+      let settled = false;
+      /** 单次落定：超时、取消、退出可能同时到达，先到者胜 */
+      const settle = (err) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        signal?.removeEventListener('abort', onCancel);
+        if (err) reject(err);
+        else {
+          // 退出码 0 不等于产物可用：入口 jar 名找不到就如实失败，
+          // 猜一个会让实例在首启校验时才崩，用户拿到的是「升完起不来」。
+          // 部分游戏版本的安装器只产出 libraries/ 与 argfile、根目录没有 jar，
+          // 面板按 `-jar <入口 jar>` 启动承载不了这种形态。不点名具体版本：
+          // 已知 1.20.1 如此，更高版本是否一律恢复没有实测支撑
+          const jar = pickForgeLaunchJar(fs.readdirSync(instancePath), installerName, mcVersion);
+          if (jar) resolve(jar);
+          else
+            reject(
+              new Error(
+                `${mcVersion} 的 Forge 安装器没有产出可启动的入口 jar；` +
+                  '该版本的安装器产物形态面板暂不支持，请改用较新的游戏版本重试',
+              ),
+            );
+        }
+      };
+
+      const timer = setTimeout(() => {
+        killProcessTree(proc);
+        settle(new Error(`Forge 安装器超时（${FORGE_INSTALL_TIMEOUT_MS / 60_000} 分钟）`));
+      }, FORGE_INSTALL_TIMEOUT_MS);
+
+      // 安装器是单进程 java 程序（未 detached），不做进程组终止
+      const onCancel = () => {
+        killProcessTree(proc);
+        settle(new TaskCancelledError());
+      };
+      signal?.addEventListener('abort', onCancel, { once: true });
+
+      proc.on('exit', (code) => {
+        if (settled) return;
+        if (code !== 0) {
+          logger.warn(`[upgrade ${instanceId}] Forge 安装器退出码 ${code}: ${tail.slice(-800)}`);
+          settle(new Error(`Forge 安装器失败（退出码 ${code}）`));
+          return;
+        }
+        settle();
+      });
+
+      proc.on('error', (err) => {
+        logger.warn(`[upgrade ${instanceId}] Forge 安装器启动失败:`, err.message);
+        settle(err);
+      });
+    });
   }
 
   /**
@@ -183,9 +347,10 @@ export class UpgradeService {
     return recommended || null;
   }
 
-  _downloadJar(url, destPath, instanceId, expectedHash = null, signal = null) {
-    // 域白名单断言在下载流创建前（唯一下载入口，覆盖三个 resolveDownload 分支）
-    assertAllowedDownloadHost(url, ALLOWED_DOWNLOAD_HOSTS);
+  _downloadJar(url, destPath, instanceId, expectedHash = null, signal = null, type = 'vanilla') {
+    // 域白名单断言在下载流创建前（唯一下载入口，覆盖全部 resolveDownload 分支）。
+    // 按类型取子集：见 allowedHostsFor
+    assertAllowedDownloadHost(url, allowedHostsFor(type));
     // AbortSignal 不重放：信号在挂监听前就已中止时，监听永远不会触发 —— 必须在这里
     // 立刻失败，否则调用方会照常走完（取消被吞）
     if (signal?.aborted) return Promise.reject(new TaskCancelledError());
@@ -342,22 +507,22 @@ export class UpgradeService {
   }
 
   /**
-   * 首启校验：120s 窗口监听 instance:status 的 ready/crash 事件
+   * 首启校验：监听 instance:status 的 ready/crash 事件
    * （MCServerManager 事件模型：instance 'status' 转发为 instance:status，
    *   payload = { instanceId, event: 'ready'|'crash'|'stopped'|... }）
    * @param {string} instanceId
-   * @param {{ signal?: AbortSignal|null }} [opts] signal：取消时停掉这台为校验而启动的
-   *   实例（用户取消升级不该在后台留下一个他没启动过的服务器）
+   * @param {{ signal?: AbortSignal|null, timeoutMs?: number }} [opts] signal：取消时停掉
+   *   这台为校验而启动的实例（用户取消升级不该在后台留下一个他没启动过的服务器）；
+   *   timeoutMs：校验窗口，默认 120s
    */
-  _startAndVerify(instanceId, { signal = null } = {}) {
+  _startAndVerify(instanceId, { signal = null, timeoutMs = 120_000 } = {}) {
     // AbortSignal 不重放（同 _downloadJar）：已中止时直接失败，别把取消吞掉
     if (signal?.aborted) return Promise.reject(new TaskCancelledError());
     return new Promise((resolve, reject) => {
-      const VERIFY_WINDOW_MS = 120_000;
       const timer = setTimeout(() => {
         cleanup();
-        reject(new Error('Startup verification timed out (120s)'));
-      }, VERIFY_WINDOW_MS);
+        reject(new Error(`Startup verification timed out (${timeoutMs / 1000}s)`));
+      }, timeoutMs);
 
       const onStatus = (data) => {
         if (data.instanceId !== instanceId) return;
@@ -512,7 +677,7 @@ export class UpgradeService {
    * 执行升级（异步，调用方不需要 await 完整流程）
    * @returns {Promise<void>}
    */
-  async upgrade(instanceId, mcVersion, type) {
+  async upgrade(instanceId, mcVersion, type, loaderVersion) {
     const instance = this.serverManager.getInstance(instanceId);
     if (!instance) throw new Error('Instance not found');
 
@@ -538,10 +703,21 @@ export class UpgradeService {
     // 备份恢复失败的原因：非空时终态不能说「已回滚」
     let restoreFailure = null;
 
-    // 保存原始版本与类型用于回滚：升级允许换服务端类型（vanilla/paper/purpur），
-    // 回滚必须把类型一并还原：只还原版本会让实例记录与实际 jar 脱节
+    // 保存原始版本与类型用于回滚：升级允许换服务端类型，回滚必须把类型一并还原：
+    // 只还原版本会让实例记录与实际 jar 脱节
     instance._originalMcVersion = oldMcVersion;
     instance._originalModLoader = instance.modLoader;
+
+    /// 升级终态要写进 DB/实例的 jar 文件名。非 Forge 恒为 server-<mcVersion>.jar；
+    /// Forge 由安装器决定（不同版本安装器的产物名不同），在安装阶段回填
+    let finalJarName = newJarName;
+    // Forge 上游给的是安装器：它先落在固定名上，装完再由安装器产出入口 jar。
+    // 这两个名字在 catch 里也要用（取消清理 / 回滚清理），故在 try 之前声明
+    const isForge = type === 'forge';
+    const downloadPath = assertSafeInstancePath(
+      instance.serverPath,
+      isForge ? FORGE_INSTALLER_NAME : newJarName,
+    );
 
     // 可取消登记：取消端点据注册表定位本次升级（与部署共用同一注册表实现）。
     // 取消语义 = 以 TaskCancelledError 打断被 await 的步骤，收尾交给下面的 catch
@@ -549,18 +725,42 @@ export class UpgradeService {
 
     try {
       // 阶段 1：自动备份
+      // 从未启动过的实例没有世界数据，这份备份保护的是空集：升级只改 jar 与
+      // DB 三列（各有独立回滚源），配置/名单/插件目录一概不碰，唯一的不可逆
+      // 写入是新版本首启对世界数据的升级——而那个世界不存在。
+      // 跳过必须明说：静默跳过会让用户以为还有一份安全网
       this._emitProgress(instanceId, UPGRADE_STAGES.BACKUP, 0, '正在创建备份...');
-      backupId = await this._createBackupAndWait(instanceId, task.signal);
-      this._emitProgress(instanceId, UPGRADE_STAGES.BACKUP, 100, '备份完成');
+      if (hasWorldData(instanceId)) {
+        backupId = await this._createBackupAndWait(instanceId, task.signal);
+        this._emitProgress(instanceId, UPGRADE_STAGES.BACKUP, 100, '备份完成');
+      } else {
+        this._emitProgress(
+          instanceId,
+          UPGRADE_STAGES.BACKUP,
+          100,
+          '该实例尚无世界数据，已跳过备份',
+        );
+      }
       task.throwIfCancelled();
 
       // 阶段 2：下载新 JAR
       this._emitProgress(instanceId, UPGRADE_STAGES.DOWNLOAD, 0, '正在解析下载地址...');
-      const { url: downloadUrl, expectedHash } = await this.resolveDownload(mcVersion, type);
+      const { url: downloadUrl, expectedHash } = await this.resolveDownload(
+        mcVersion,
+        type,
+        loaderVersion,
+      );
       // 上游解析可能耗时数秒：此窗口内取消只能靠 await 边界拦住
       task.throwIfCancelled();
       this._emitProgress(instanceId, UPGRADE_STAGES.DOWNLOAD, 0, '正在下载...');
-      await this._downloadJar(downloadUrl, newJarPath, instanceId, expectedHash, task.signal);
+      await this._downloadJar(
+        downloadUrl,
+        downloadPath,
+        instanceId,
+        expectedHash,
+        task.signal,
+        type,
+      );
       this._emitProgress(instanceId, UPGRADE_STAGES.DOWNLOAD, 100, '下载完成');
       task.throwIfCancelled();
 
@@ -569,7 +769,8 @@ export class UpgradeService {
       // → 26.3 的 Java 25）若不先校验就会一路改完后才在首启时崩，用户拿到的是「升完起不来」。
       // 权威来源是刚下载的新 jar 内 version.json 的 java_version（服务端自带），
       // 不手写版本矩阵；读不到就退回与部署同一套推荐表，再读不到则不阻塞（无法证明）。
-      const requiredJava = this._resolveRequiredJava(newJarPath, mcVersion);
+      // Forge 读的是安装器（其中没有 version.json）⇒ 走推荐表，与部署同口径。
+      const requiredJava = this._resolveRequiredJava(downloadPath, mcVersion);
       if (requiredJava) {
         const currentJava = instance.javaPath;
         if (!isJavaSatisfied(currentJava, requiredJava)) {
@@ -610,6 +811,32 @@ export class UpgradeService {
       }
       task.throwIfCancelled();
 
+      // 阶段 2.7：Forge 安装器。必须落在替换之前——它决定最终入口 jar 的文件名，
+      // 而替换阶段要把这个文件名写进 DB 与内存实例。
+      // 只换 jar 不跑安装器会得到一个起不来的实例：forge 上游给的是安装器，
+      // 真入口 jar 与 libraries/ 依赖树都由这一步生成。
+      if (isForge) {
+        this._emitProgress(instanceId, UPGRADE_STAGES.FORGE_INSTALL, 0, '正在安装 Forge...');
+        const launchJar = await this._runForgeInstaller(
+          instance.javaPath,
+          instance.serverPath,
+          FORGE_INSTALLER_NAME,
+          instanceId,
+          mcVersion,
+          task.signal,
+        );
+        finalJarName = launchJar;
+        // 安装器自己不是启动产物，并且它叫 forge-* 会干扰下次升级的入口 jar 识别
+        await fs.promises.unlink(downloadPath).catch(() => {});
+        this._emitProgress(
+          instanceId,
+          UPGRADE_STAGES.FORGE_INSTALL,
+          100,
+          `Forge 安装完成（${launchJar}）`,
+        );
+        task.throwIfCancelled();
+      }
+
       // 阶段 3：替换 JAR
       this._emitProgress(instanceId, UPGRADE_STAGES.REPLACE, 0, '正在替换 JAR...');
       // 备份旧 JAR（异步复制对齐同链路 IO 风格）。
@@ -634,11 +861,11 @@ export class UpgradeService {
       // 而界面没有任何异常。DB 的列沿用首字母大写的取值形态（部署写入即此形态）。
       const { InstanceModel } = await import('../db/index.js');
       InstanceModel.update(instanceId, {
-        jarFile: newJarName,
+        jarFile: finalJarName,
         mcVersion,
         modLoader: typeLabel(type),
       });
-      instance.jarFile = newJarName;
+      instance.jarFile = finalJarName;
       instance.mcVersion = mcVersion;
       instance.modLoader = String(type || 'vanilla').toLowerCase();
       // 兜底文件同口径：DB 丢失后按 instance.json 恢复时，类型与版本必须与磁盘一致
@@ -649,16 +876,27 @@ export class UpgradeService {
       task.throwIfCancelled();
 
       // 阶段 4：首启校验
+      // Fabric/Forge 首次启动不是「读到 jar 就完」：fabric 的 launcher jar 要先下载
+      // 原版服务端并做 remap，forge 的 shim 要先经 ModLauncher 解出嵌套依赖。
+      // 实测 fabric 冷启动从进程启动到 Done 共 116s（其中 Done 自身 24s），
+      // 只用 120s 窗口会在正常路径上判超时并触发一次不必要的回滚。
       this._emitProgress(instanceId, UPGRADE_STAGES.VERIFY, 0, '正在启动验证...');
-      await this._startAndVerify(instanceId, { signal: task.signal });
+      await this._startAndVerify(instanceId, {
+        signal: task.signal,
+        timeoutMs: isForge || type === 'fabric' ? MODDED_VERIFY_WINDOW_MS : 120_000,
+      });
       this._emitProgress(instanceId, UPGRADE_STAGES.COMPLETED, 100, '升级完成');
 
       // 清理：回滚源副本 + 被替换的旧版本 jar（升级成功后实例目录
       // 仅保留当前版本 jar，避免多次升级累积磁盘垃圾；失败/回滚路径不删，
       // 回滚源仍需可用。同路径守卫：路由层已拒同版本升级，直调服务层时
       // oldJarPath 可能与 newJarPath 相同，此时旧 jar 本体即新 jar，不可删）
+      // Forge 的入口 jar 落在安装器产出的文件名上，newJarPath 那个位置没有文件
       fs.unlink(backupJarPath, () => {});
-      if (oldJarPath !== newJarPath) {
+      if (
+        oldJarPath !== newJarPath &&
+        oldJarPath !== path.join(instance.serverPath, finalJarName)
+      ) {
         fs.unlink(oldJarPath, () => {});
       }
       this._activeUpgrades.delete(instanceId);
@@ -707,14 +945,16 @@ export class UpgradeService {
           }
         } else {
           // 替换前的取消：jarFile/DB/磁盘旧 jar 都没动过，回滚无事可做——只清理本次
-          // 升级的磁盘产物：旧 jar 副本（含复制中途留下的 .part）与已下载的新 jar。
-          // 新 jar 必须删：取消后实例目录里留着新版本 jar 既是垃圾，也与「实例保持旧版本」
+          // 升级的磁盘产物：旧 jar 副本（含复制中途留下的 .part）与刚下载的产物。
+          // 下载产物必须删：取消后实例目录里留着新版本 jar 既是垃圾，也与「实例保持旧版本」
           // 的终态文案不符（同路径守卫：旧 jar 本体即新 jar 时不可删）
           await fs.promises.unlink(backupJarPath).catch(() => {});
           await fs.promises.unlink(`${backupJarPath}.part`).catch(() => {});
           if (newJarPath !== oldJarPath) {
             await fs.promises.unlink(newJarPath).catch(() => {});
           }
+          // 已生成的 libraries/ 刻意不动：安装器写的是与其他版本共享的依赖树，
+          // 删它会把「实例保持旧版本」变成「旧版本也起不来」
         }
       } catch (rollbackErr) {
         logger.error(`[UpgradeService] Rollback failed for ${instanceId}:`, rollbackErr);
@@ -752,6 +992,12 @@ export class UpgradeService {
     } finally {
       // 成功/失败/取消都要注销：残留条目会让取消端点对着已结束的任务回「已取消」
       task.finish();
+      // Forge 安装器不是启动产物，任何终态都不该留在实例目录里：它叫 forge-*，
+      // 留着会成为下次升级认领入口 jar 时的噪声候选。成功路径已在安装阶段删过，
+      // 这里是失败/取消路径的收口（删除失败不影响终态）
+      if (isForge) {
+        await fs.promises.unlink(downloadPath).catch(() => {});
+      }
     }
   }
 }

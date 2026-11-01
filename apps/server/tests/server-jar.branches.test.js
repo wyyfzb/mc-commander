@@ -5,7 +5,7 @@
  * - Paper 构建发现链形态：裸数组响应 / 无 builds 键 / STABLE 空回退全量 / build 字段排序 / server:default 无摘要
  * - deploy 深分支：core build url/downloadUrl 形态、downloadServer 本地形态（rename/logs 预置跳过首启）、
  *   进度节流（percent=0 折算 / <1% 节流）、stream error 文件已落盘、file error、
- *   forge 成功链（installer 产出清理）/ exit1 / spawn error / 120s 超时、
+ *   forge 成功链（installer 产出清理）/ exit1 / spawn error / 900s 超时、
  *   win32 平台（无 detached + taskkill 进程树终止）、清理失败兜底、首启输出累积
  * - 数据全部为虚构占位（1.2.3.4/Steve）
  */
@@ -555,7 +555,7 @@ describe('forge 安装段分支', () => {
     );
   });
 
-  it('安装器 exit 1 → 仅告警，无产物 → 502 Forge server jar not found', async () => {
+  it('安装器 exit 1 → 仅告警，无产物 → 502 且文案给出可换版本', async () => {
     defineForgeChain();
     testState.spawnBehavior = 'exit1';
     const { app } = buildApp();
@@ -563,7 +563,9 @@ describe('forge 安装段分支', () => {
       .post('/api/instances/deploy')
       .send({ type: 'forge', mcVersion: '1.21.4', instanceName: 'Branch Fixture' });
     expect(res.status).toBe(502);
-    expect(res.body.message).toContain('Forge server jar not found');
+    // 断言「说清为什么 + 给出路」而不是某句字面：文案会变，这两件事不会
+    expect(res.body.message).toMatch(/没有产出可启动的入口 jar/);
+    expect(res.body.message).toMatch(/较新的游戏版本/);
   });
 
   it('安装器 spawn error → 502（error 事件 + 目录清理）', async () => {
@@ -581,7 +583,7 @@ describe('forge 安装段分支', () => {
     );
   });
 
-  it('安装器 120s 超时 → 进程树终止 + 502 timed out', async () => {
+  it('安装器 900s 超时 → 进程树终止 + 502 timed out', async () => {
     defineForgeChain();
     testState.spawnBehavior = 'hang';
     const { app } = buildApp();
@@ -594,16 +596,16 @@ describe('forge 安装段分支', () => {
     let timerCall = null;
     for (let i = 0; i < 200 && !timerCall; i++) {
       await new Promise((r) => setTimeout(r, 5));
-      timerCall = setTimeoutSpy.mock.calls.find(([, ms]) => ms === 120000) || null;
+      timerCall = setTimeoutSpy.mock.calls.find(([, ms]) => ms === 900000) || null;
     }
-    expect(timerCall, 'forge 安装器应注册 120s 定时器').not.toBeNull();
-    const callIdx = setTimeoutSpy.mock.calls.findIndex(([, ms]) => ms === 120000);
+    expect(timerCall, 'forge 安装器应注册 900s 定时器').not.toBeNull();
+    const callIdx = setTimeoutSpy.mock.calls.findIndex(([, ms]) => ms === 900000);
     clearTimeout(setTimeoutSpy.mock.results[callIdx].value);
     timerCall[0](); // 手动触发超时回调：终止进程树 + reject
 
     const res = await inflight;
     expect(res.status).toBe(502);
-    expect(res.body.message).toContain('timed out (120s)');
+    expect(res.body.message).toContain('timed out (900s)');
     const { spawn, spawnSync } = await import('child_process');
     // 单进程 SIGKILL 兜底
     expect(spawn.mock.results[0].value.kill).toHaveBeenCalled();

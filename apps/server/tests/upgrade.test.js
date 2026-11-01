@@ -58,6 +58,8 @@ vi.mock('../src/utils/http-client.js', () => ({
 
 // BackupService：备份即完成（触发 backupComplete 事件），restore 恒成功
 vi.mock('../src/services/backup.service.js', () => ({
+  // 判据导出：upgrade.service 用它决定要不要跑前置备份。既有用例都走「有世界」路径
+  hasWorldData: vi.fn(() => true),
   BackupService: class {
     constructor(serverManager) {
       this.serverManager = serverManager;
@@ -88,6 +90,7 @@ vi.mock('../src/utils/audit.js', () => ({
 
 import { createUpgradeRoutes } from '../src/routes/upgrade.js';
 import { UpgradeService, UPGRADE_STAGES, VALID_TYPES } from '../src/services/upgrade.service.js';
+import { SERVER_TYPES } from '@mc-commander/schemas';
 
 // 每个用例独立临时目录（beforeEach 在两处 describe 中均可用）
 beforeEach(() => {
@@ -262,6 +265,56 @@ describe('UpgradeService 进度序列（离线 mock）', () => {
     expect(service.getUpgradeProgress('inst-1')).toBeNull();
   });
 
+  /* 从未启动过的实例没有世界数据，这份备份保护的是空集（升级只改 jar 与 DB 三列，
+     各有独立回滚源；唯一的不可逆写入是新版本首启对世界数据的升级）。跳过必须明说：
+     静默跳过会让用户在「升级搞坏了」时以为还有一份安全网。 */
+  it('无世界数据 ⇒ 跳过前置备份，且进度里明说跳过了（不静默）', async () => {
+    const serverManager = createMockServerManager();
+    const { hasWorldData } = await import('../src/services/backup.service.js');
+    hasWorldData.mockReturnValue(false);
+    try {
+      const service = new UpgradeService(serverManager);
+      // 下载阶段照旧失败：这条用例只关心备份阶段怎么走
+      await expect(service.upgrade('inst-1', '1.21.4', 'purpur')).rejects.toThrow(
+        /download failed/,
+      );
+
+      const backupEvents = serverManager._emitted
+        .filter((e) => e.event === 'instance:upgradeProgress')
+        .map((e) => e.data)
+        .filter((d) => d.stage === 'backup');
+      // 不成对出现「正在创建备份…」而没有结论
+      expect(backupEvents.length).toBe(2);
+      expect(backupEvents[0].detail).toBe('正在创建备份...');
+      expect(backupEvents[1].detail).toContain('跳过备份');
+      // 没有备份就没有 backupId：终态绝不能提「用备份 N 手动恢复」
+      expect(service.getUpgradeProgress('inst-1')).toBeNull();
+      const finalEvent = serverManager._emitted
+        .filter((e) => e.event === 'instance:upgradeProgress')
+        .map((e) => e.data)
+        .at(-1);
+      expect(finalEvent.stage).toBe('failed');
+      expect(finalEvent.detail).not.toMatch(/备份 \d+ 手动恢复/);
+    } finally {
+      hasWorldData.mockReturnValue(true);
+    }
+  });
+
+  it('有世界数据 ⇒ 照常做前置备份（跳过分支不得在正常实例上触发）', async () => {
+    const serverManager = createMockServerManager();
+    const service = new UpgradeService(serverManager);
+    await expect(service.upgrade('inst-1', '1.21.4', 'purpur')).rejects.toThrow(/download failed/);
+    // 「备份完成」只会在 _createBackupAndWait 收到 backupComplete 回执后发出 ⇒
+    // 它出现即证明备份服务真被调用了（不是靠跳过分支一路绿灯）
+    const backupDetails = serverManager._emitted
+      .filter((e) => e.event === 'instance:upgradeProgress')
+      .map((e) => e.data)
+      .filter((d) => d.stage === 'backup')
+      .map((d) => d.detail);
+    expect(backupDetails).toContain('备份完成');
+    expect(backupDetails.some((d) => String(d).includes('跳过备份'))).toBe(false);
+  });
+
   it('实例不存在直接抛错', async () => {
     const serverManager = createMockServerManager();
     const service = new UpgradeService(serverManager);
@@ -287,6 +340,39 @@ describe('UpgradeService 进度序列（离线 mock）', () => {
   });
 });
 
+describe('升级请求的 loaderVersion 透传', () => {
+  // fabric/forge 的入口 jar 由 loader 版本决定：路由层丢掉这个字段，用户选了
+  // 也不会生效，而失败要等到首启校验才暴露（模组按 loader 版本声明硬依赖）。
+  // 断言点是**真实路由**把字段交给服务层，故 spy 服务层原型而非自建一条假路由
+  it('fabric + loaderVersion → 服务层 upgrade() 收到该 loader', async () => {
+    const serverManager = createMockServerManager();
+    const spy = vi.spyOn(UpgradeService.prototype, 'upgrade').mockResolvedValue(undefined);
+    try {
+      const res = await supertest(createApp(serverManager))
+        .post('/api/v1/instances/inst-1/upgrade')
+        .send({ mcVersion: '1.21.4', type: 'fabric', loaderVersion: '0.16.14' });
+      expect(res.status).toBe(202);
+      expect(spy).toHaveBeenCalledWith('inst-1', '1.21.4', 'fabric', '0.16.14');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('不传 loaderVersion → 服务层收到 undefined（由上游取最新稳定版）', async () => {
+    const serverManager = createMockServerManager();
+    const spy = vi.spyOn(UpgradeService.prototype, 'upgrade').mockResolvedValue(undefined);
+    try {
+      const res = await supertest(createApp(serverManager))
+        .post('/api/v1/instances/inst-1/upgrade')
+        .send({ mcVersion: '1.21.4', type: 'forge' });
+      expect(res.status).toBe(202);
+      expect(spy).toHaveBeenCalledWith('inst-1', '1.21.4', 'forge', undefined);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+});
+
 describe('UPGRADE_STAGES 常量完整性', () => {
   it('包含所有预期阶段', () => {
     expect(UPGRADE_STAGES.BACKUP).toBe('backup');
@@ -298,11 +384,9 @@ describe('UPGRADE_STAGES 常量完整性', () => {
     expect(UPGRADE_STAGES.ROLLED_BACK).toBe('rolled_back');
   });
 
-  it('VALID_TYPES 包含三种服务端类型', () => {
-    expect(VALID_TYPES.has('vanilla')).toBe(true);
-    expect(VALID_TYPES.has('paper')).toBe(true);
-    expect(VALID_TYPES.has('purpur')).toBe(true);
-    expect(VALID_TYPES.has('fabric')).toBe(false);
-    expect(VALID_TYPES.has('forge')).toBe(false);
+  it('VALID_TYPES 与契约包 SERVER_TYPES 同源（五种类型，不再各写一份）', () => {
+    expect([...VALID_TYPES].sort()).toEqual([...SERVER_TYPES].sort());
+    expect(VALID_TYPES.has('fabric')).toBe(true);
+    expect(VALID_TYPES.has('forge')).toBe(true);
   });
 });
