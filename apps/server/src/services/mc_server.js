@@ -24,6 +24,12 @@ import { isPathContained } from '../utils/fs-utils.js';
 // 地址「能不能发给玩家」与「能不能作为出站目标」用的是同一套可达性语义，
 // 各写一份正则会漂移（如漏掉 100.64.0.0/10 这类 CGNAT 段）
 import { addressReachability } from '../utils/url-guard.js';
+import {
+  getAllJavaVersions,
+  getRecommendedJavaVersion,
+  selectJavaPath,
+} from '../utils/java-detector.js';
+import { AppError, ErrorCodes } from '../utils/response.js';
 import { checkInstanceReachability } from './port-reachability.js';
 import * as levelDat from './mc-server/level-dat.js';
 import * as outputParser from './mc-server/output-parser.js';
@@ -761,6 +767,74 @@ export class MCServerInstance extends EventEmitter {
     return /^java(?:w)?(?:\.exe)?$/i.test(name);
   }
 
+  /**
+   * 启动前自愈已失效的 javaPath，返回是否替换过。
+   *
+   * 实例存的是**绝对路径**时会随 JDK 一起消失：面板自供的运行时按主版本装在
+   * `<jreDir>/<主版本>/bin/java`，换档/重装/清理 JRE 目录后旧路径就断了；系统包
+   * 升级删掉旧 openjdk 目录同理。此时启动抛的是「非法 javaPath…（仅允许 java
+   * 可执行文件，拒绝 bash/python/sh 等）」——用户从没填过 bash，那句话把他引向
+   * 一个不存在的问题，而真正该做的是重新选一个能用的 Java。
+   *
+   * 只在路径形态失效时介入：裸命令名（`java`）走 PATH、存在性无法预检，交给
+   * spawn 的 ENOENT 报错；文件在但不可执行的权限问题也交给 spawn（替换 Java
+   * 解决不了权限）。
+   *
+   * @returns {boolean} 是否把 javaPath 换成了别的可用路径
+   */
+  _repairStaleJavaPath() {
+    const current = String(this.javaPath || '').trim();
+    if (!current) return false;
+    const isPathLike = current.includes('/') || current.includes('\\') || path.isAbsolute(current);
+    // 裸命令名没有「路径失效」这回事；能通过校验就不动它
+    if (!isPathLike) return false;
+    if (this._isValidJavaExecutable(current)) return false;
+
+    // 要求的主版本以**实例自己的 jar** 为准（version.json 是服务端自带的事实），
+    // 拿不到才退回版本推荐表。不能拿「宿主装的最高版本」顶：那会把一台该跑
+    // Java 17 的旧服推到 25 上，症状从「起不来」变成「起来后类版本不兼容」
+    const required = this._requiredJavaMajor();
+    const replacement = selectJavaPath(getAllJavaVersions(), required, (p) =>
+      this._isValidJavaExecutable(p),
+    );
+    if (!replacement) {
+      // 宿主没有任何满足要求的 Java。这里**不能**退回「随便挑一个能跑的」：
+      // 用低版本 JVM 加载高版本 class 会抛 UnsupportedClassVersionError，
+      // 用户看到的是看不懂的堆栈，且会误判成服务端坏了而不是缺 Java。
+      // 启动前就把「缺哪个、怎么补」说清，是这条自愈唯一有意义的出口
+      throw new AppError(
+        ErrorCodes.INSTANCE_JAVA_UNAVAILABLE,
+        `该实例需要 Java ${required}，但本机没有找到可用的版本` +
+          `（当前配置的 ${current} 已失效）。请先安装 Java ${required}，或把实例切换到可在本机运行的版本`,
+      );
+    }
+    if (replacement === current) return false;
+
+    logger.warn(
+      `[${this.id}] javaPath 已失效（${current}），改用 ${replacement}` +
+        (required ? `（需要 Java ${required}）` : ''),
+    );
+    this.javaPath = replacement;
+    // 落库：不写回则面板重启后又是坏路径，用户每次启动都要重新触发一次自愈
+    try {
+      InstanceModel.update(this.id, { javaPath: replacement });
+    } catch (e) {
+      logger.warn(`[${this.id}] javaPath 自愈后写库失败（本次启动仍用新路径）:`, e.message);
+    }
+    return true;
+  }
+
+  /// 该实例需要的主 Java 版本：jar 内 version.json 优先，退回版本推荐表
+  _requiredJavaMajor() {
+    try {
+      const info = this._getJarVersionInfo();
+      if (info?.javaVersion) return String(info.javaVersion);
+    } catch {
+      // 读不到 jar（还没下载/损坏）：交给推荐表
+    }
+    return getRecommendedJavaVersion(this.mcVersion) || null;
+  }
+
   /// 启动参数白名单校验（结构化参数）：
   /// 仅允许 -X/-D 前缀参数、'nogui' 与 '-jar'；'-jar' 的路径参数 resolve 后
   /// 必须位于 serverPath 内（越界拒绝）。非法参数抛错拒绝启动，
@@ -855,6 +929,10 @@ export class MCServerInstance extends EventEmitter {
     this._ensureStructuredLogConfig();
     // 实时推送配置也在启动前补齐：服务器本次启动即读到，用户零交互
     this._ensureMsmpConfiguredSafe();
+
+    // 必须在解析启动命令之前：javaPath 已失效时，_resolveStartCommand 会先抛出
+    // 「非法 javaPath」把用户引向一个不存在的问题
+    this._repairStaleJavaPath();
 
     const { command, args } = this._resolveStartCommand(startCommand);
     this._spawnServerProcess(command, args);

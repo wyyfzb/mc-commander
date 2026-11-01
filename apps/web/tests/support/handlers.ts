@@ -661,7 +661,12 @@ export const uninstallMock = {
 }
 
 /** 升级失败开关（测试注入：结构占位，非真实错误） */
-export const upgradeMock = { shouldFail: false, conflict: false }
+/** 升级受理 mock：shouldFail/conflict 控制失败形态，lastBody 供请求体断言 */
+export const upgradeMock: {
+  shouldFail: boolean
+  conflict: boolean
+  lastBody: { mcVersion?: string; type?: string; loaderVersion?: string } | null
+} = { shouldFail: false, conflict: false, lastBody: null }
 
 /** 取消升级（POST /instances/:id/upgrade/cancel）mock 控制：notInProgress 模拟服务端 40908 */
 export const upgradeCancelMock: { notInProgress: boolean; calls: number } = {
@@ -1200,7 +1205,12 @@ export const handlers = [
         { status: 500 },
       )
     }
-    const body = (await request.json()) as { mcVersion?: string; type?: string }
+    const body = (await request.json()) as {
+      mcVersion?: string
+      type?: string
+      loaderVersion?: string
+    }
+    upgradeMock.lastBody = body
     return HttpResponse.json(
       {
         status: 'ok',

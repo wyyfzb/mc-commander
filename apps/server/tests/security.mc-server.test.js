@@ -7,10 +7,16 @@ import zlib from 'zlib';
 import { offlineUuid, getTotalPlayTime } from '../src/utils/player-utils.js';
 
 // ── Mock 隔离：子进程 / RCON / SQLite 模型 / 配置目录 ──
+// spawnSync 要给**真实形状**的返回：java 探测用它跑 `java -version` 读 stdout/stderr，
+// 返回 undefined 会让「枚举宿主 Java」抛 TypeError，掩盖被测逻辑本身的行为
 vi.mock('child_process', () => {
   const spawn = vi.fn();
-  const spawnSync = vi.fn();
-  const exec = vi.fn();
+  const spawnSync = vi.fn((cmd) =>
+    String(cmd).endsWith('java')
+      ? { status: 0, stdout: '', stderr: 'openjdk version "21.0.1" 2023-10-17\n' }
+      : { status: 0, stdout: '', stderr: '' },
+  );
+  const exec = vi.fn(() => '');
   return { spawn, spawnSync, exec, default: { spawn, spawnSync, exec } };
 });
 
@@ -137,10 +143,16 @@ describe('安全修复：start 结构化改造', () => {
     expect(spawn).not.toHaveBeenCalled();
   });
 
-  it('拒绝不存在的绝对路径 javaPath', () => {
-    const instance = createInstance({ javaPath: path.join(tmpDir, 'not-exist', 'bin', 'java') });
-    expect(() => instance.start()).toThrow(/仅允许 java 可执行文件/);
-    expect(spawn).not.toHaveBeenCalled();
+  /* 路径消失与「填了别的可执行文件」要分开处理：前者该自愈（JDK 会随包升级/面板换档
+     而挪位置，这不是用户填错），后者才是配置错误、必须照旧拒绝。
+     安全面不受影响——自愈只在候选里选，且候选同样过文件名白名单校验。 */
+  it('绝对路径的 javaPath 指向已不存在的目录 ⇒ 自愈到可用 Java，不再拒绝启动', () => {
+    const stale = path.join(tmpDir, 'not-exist', 'bin', 'java');
+    const instance = createInstance({ javaPath: stale });
+    instance.start();
+    expect(instance.javaPath).not.toBe(stale);
+    expect(path.basename(instance.javaPath)).toBe('java');
+    expect(spawn).toHaveBeenCalled();
   });
 
   it('接受绝对路径 javaPath（文件名 java 特征，existsSync 通过）', () => {

@@ -48,6 +48,53 @@ export function resolveContained(baseDir, target) {
   }
 }
 
+/**
+ * 世界目录名：显式传入优先，否则取实例 server.properties 的 `level-name`，再否则 `world`。
+ * 不合白名单（含路径分隔符/`..`）时返回 null——调用方据此报领域错误，
+ * 而不是让未校验的值流进路径拼接。
+ * @returns {string|null}
+ */
+export function resolveWorldName(instance, explicitName) {
+  const name = explicitName || instance?.properties?.['level-name'] || 'world';
+  if (typeof name !== 'string' || !WORLD_NAME_REGEX.test(name)) return null;
+  return name;
+}
+
+/**
+ * 目录直接层的任一子目录里有 level.dat（＝该目录装着世界数据）。
+ * 不看 level-name：快照与实例目录都可能用非默认世界名，靠名字认会漏。
+ */
+export function hasLevelData(dir) {
+  let entries = [];
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return false;
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    if (fs.existsSync(path.join(dir, entry.name, 'level.dat'))) return true;
+  }
+  return false;
+}
+
+/**
+ * 实例是否已有世界数据：实例目录下任一子目录直接层有 `level.dat`。
+ *
+ * 刻意**不按 level-name 定位**。世界目录名可以被用户改（`level-name` 与实际目录
+ * 不一致）、也可以从别处拷进来，按名字认会把有世界的实例判成没有，进而静默跳过
+ * 一次本该做的备份。而「实例目录下有没有装着世界的子目录」不依赖任何配置，
+ * 少一层可漂移的判断：世界必在实例目录内（服务端就在那里启动），多扫一层目录
+ * 的代价远小于一次灾备缺口。
+ *
+ * 「有没有世界」的**唯一判据**：备份前置校验与升级前置备份的跳过分支共用。
+ * 各写一份会在「什么算有世界」上分叉——一处认目录存在、另一处认 level.dat，
+ * 于是「目录在但世界没生成完」的实例一半流程放行一半拒绝。
+ */
+export function hasWorldData(instanceId) {
+  return hasLevelData(path.join(config.serversDir, instanceId));
+}
+
 // ── 快照工具命令构造 ──────────────────────────────────────────────
 // 快照方案：备份 = 完整目录快照 + 增量传输（Linux rsync --link-dest 硬链接
 // / Windows robocopy 全量镜像，rsync 不可用时自动降级）。恢复 = 目录复制
@@ -278,26 +325,18 @@ export class BackupService {
       throw new AppError(ErrorCodes.BACKUP_RCON_UNAVAILABLE);
     }
 
-    // 世界目录名：优先显式传入，否则从实例 server.properties 读取 level-name，
-    // 兼容自定义世界目录名的实例（手动与定时备份均不显式传 worldName）。
-    // 仅用于存在性校验与记录（实例级备份压缩整个实例目录）
-    let worldName = options.worldName;
-    if (!worldName) {
-      worldName = instance?.properties?.['level-name'] || 'world';
-    }
+    const worldName = resolveWorldName(instance, options.worldName);
 
     // worldName 白名单校验——level-name 未经校验时 ../ 可指向
     // 任意目录被压缩（任意文件泄露）。显式传入的 worldName 同样校验。
-    if (typeof worldName !== 'string' || !WORLD_NAME_REGEX.test(worldName)) {
-      const err = new AppError(ErrorCodes.VALIDATION_ERROR, `Invalid world name: ${worldName}`);
+    if (worldName === null) {
+      const err = new AppError(
+        ErrorCodes.VALIDATION_ERROR,
+        `世界目录名不合法：${options.worldName ?? instance?.properties?.['level-name']}（只允许字母、数字、下划线与连字符）`,
+      );
       this._failSetup(instanceId, err);
       throw err;
     }
-
-    const instanceDir = path.join(config.serversDir, instanceId);
-    // resolveContained 兜底保证世界目录必须位于实例目录内
-    // （严格前缀 + 分隔符边界，相等排除；已存在路径 realpath 复检防 symlink）
-    const worldDir = resolveContained(instanceDir, path.join(instanceDir, worldName));
 
     // 检查世界目录是否存在。
     // 同步抛错路径（此时无 backupId，未创建记录）也要发 backupFailed 事件：
@@ -305,11 +344,23 @@ export class BackupService {
     // （保留了存在性判定：它是「在任何花费与副作用之前给出明确领域错误」的
     // 前置校验门，判定为假时直接中止且不改动任何文件；竞态下目录被删则会由
     // 后续 rsync/robocopy 失败路径接手，两处都有明确失败出口）
-    if (!fs.existsSync(worldDir)) {
-      const err = new Error(`World directory not found: ${worldDir}`);
+    //
+    // 「没有世界」在这里是**领域错误而不是故障**：给出路（先启动一次生成世界），
+    // 且必须是 AppError——裸 Error 会被全局处理器降级成 500「服务器内部错误」，
+    // 用户连原因都看不到。
+    // 文案只断言代码能验证的事实（`level.dat` 不在），不猜原因：目录建了但
+    // level.dat 没写成（首启中断）与从未启动过，在用户眼里要做的是同一件事，
+    // 而「从未启动过」这个更强的原因判定代码给不出，说错会挡掉真正要抢救的人
+    if (!hasWorldData(instanceId)) {
+      const err = new AppError(
+        ErrorCodes.BACKUP_WORLD_NOT_FOUND,
+        '该实例还没有可备份的世界数据（世界目录里没有 level.dat）。请先启动一次服务器生成世界，或直接升级——升级不需要这份备份',
+      );
       this._failSetup(instanceId, err);
       throw err;
     }
+
+    const instanceDir = path.join(config.serversDir, instanceId);
 
     // 磁盘空间预检：预估实例目录大小（排除清单外）→ 校验备份盘剩余空间。
     // 大世界快照耗时长，磁盘满时中途失败远比提前拒绝难处理
@@ -1255,19 +1306,7 @@ export class BackupService {
   // 恢复结果校验：实例目录直接层（level-name 目录）内存在 level.dat。
   // 兼容自定义 level-name 与 26.1 新布局（level.dat 均在 world 直接层）
   _hasLevelData(instanceDir) {
-    let entries = [];
-    try {
-      entries = fs.readdirSync(instanceDir, { withFileTypes: true });
-    } catch {
-      return false;
-    }
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-      if (fs.existsSync(path.join(instanceDir, entry.name, 'level.dat'))) {
-        return true;
-      }
-    }
-    return false;
+    return hasLevelData(instanceDir);
   }
 
   // 删除备份（异步：rm 大目录不阻塞事件循环）。快照为目录树：递归删除

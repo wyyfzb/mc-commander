@@ -110,14 +110,14 @@ describe('createBackup 对 worldName 强制校验', () => {
   it('显式传入 ../ 恶意 worldName 拒绝创建（白名单）', async () => {
     const service = new BackupService(null);
     await expect(service.createBackup('s1', { worldName: '../../etc' })).rejects.toThrow(
-      'Invalid world name',
+      '世界目录名不合法',
     );
   });
 
   it('显式传入反斜杠穿越 worldName 拒绝创建（白名单）', async () => {
     const service = new BackupService(null);
     await expect(service.createBackup('s1', { worldName: '..\\..\\evil' })).rejects.toThrow(
-      'Invalid world name',
+      '世界目录名不合法',
     );
   });
 
@@ -125,7 +125,7 @@ describe('createBackup 对 worldName 强制校验', () => {
     const manager = new EventEmitter();
     manager.getInstance = vi.fn(() => ({ properties: { 'level-name': '../evil' } }));
     const service = new BackupService(manager);
-    await expect(service.createBackup('s1', {})).rejects.toThrow('Invalid world name');
+    await expect(service.createBackup('s1', {})).rejects.toThrow('世界目录名不合法');
   });
 
   it('恶意 worldName 同步抛错路径也发 backupFailed 事件', async () => {
@@ -139,11 +139,11 @@ describe('createBackup 对 worldName 强制校验', () => {
     expect(failedEvents[0].phase).toBe('setup');
   });
 
-  it('合法 worldName 不误拒（目录不存在时走原有 World directory not found 路径）', async () => {
+  it('合法 worldName 不误拒（实例目录不存在 ⇒ 报「没有可备份的世界数据」而不是路径穿越）', async () => {
     const service = new BackupService(null);
     await expect(
       service.createBackup('nonexistent-instance', { name: 'x', worldName: 'world' }),
-    ).rejects.toThrow('World directory not found');
+    ).rejects.toThrow('没有可备份的世界数据');
   });
 });
 
