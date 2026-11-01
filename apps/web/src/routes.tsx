@@ -42,6 +42,12 @@ const TasksPage = lazy(() =>
 const InstancesPage = lazy(() =>
   import('@/features/instances/instances-page').then((m) => ({ default: m.InstancesPage })),
 )
+const FleetPage = lazy(() =>
+  import('@/features/instances/fleet-page').then((m) => ({ default: m.FleetPage })),
+)
+const DiagnosticsPageLazy = lazy(() =>
+  import('@/features/diagnostics/perf-page').then((m) => ({ default: m.PerfPage })),
+)
 const WebhookPage = lazy(() =>
   import('@/features/webhooks/webhook-page').then((m) => ({ default: m.default })),
 )
@@ -88,6 +94,8 @@ export const router = createBrowserRouter([
       { path: 'tasks', Component: TasksPage },
       { path: 'plugins', Component: PluginsPage },
       { path: 'instances', Component: InstancesPage },
+      { path: 'fleet', Component: FleetPage },
+      { path: 'diagnostics', Component: DiagnosticsPageLazy },
       { path: 'webhooks', Component: WebhookPage },
       { path: 'audit', Component: AuditPageLazy },
       { path: 'help', Component: HelpPageLazy },

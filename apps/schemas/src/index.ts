@@ -207,6 +207,33 @@ export {
   type WsBackupProgressPayload,
 } from './ws'
 
+// 性能诊断（/perf 快照与 /jfr 摘要；两者共用同一份「人话结论 + 明细」形状）
+export {
+  PERF_SNAPSHOT_KINDS,
+  perfSnapshotRequestSchema,
+  perfSnapshotResponseSchema,
+  perfVerdictLevelSchema,
+  perfFindingSchema,
+  perfVerdictSchema,
+  perfTickSchema,
+  perfHeapSchema,
+  perfHotspotSchema,
+  perfDimensionSchema,
+  perfDetailSchema,
+  jfrDetailSchema,
+  type PerfSnapshotKind,
+  type PerfFinding,
+  type PerfVerdict,
+  type PerfTick,
+  type PerfHeap,
+  type PerfHotspot,
+  type PerfDimension,
+  type PerfDetail,
+  type JfrDetail,
+  type PerfSnapshotRequest,
+  type PerfSnapshotResponse,
+} from './perf'
+
 // 世界
 export {
   worldInfoSchema,
@@ -283,6 +310,8 @@ export {
 
 // 部署/升级
 export {
+  SERVER_TYPES,
+  type ServerType,
   versionsResponseSchema,
   deployRequestSchema,
   deployResultSchema,

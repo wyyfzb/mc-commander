@@ -64,6 +64,20 @@ export const ErrorCode = {
   /** 取消请求无命中：该实例当前没有进行中的备份/恢复操作 */
   BACKUP_NOT_ACTIVE: 40904,
   BACKUP_FAILED: 50002,
+  /** 实例从未启动过、没有世界数据可备份；服务端 message 已给出「先启动或直接升级」的动作 */
+  BACKUP_WORLD_NOT_FOUND: 40917,
+  /**
+   * 实例需要的 Java 主版本在宿主上没有可用的；补救动作与版本号只在服务端 message 里。
+   * **刻意不进 `LOCALIZED_MESSAGES`**：一旦进表，通用文案会盖掉「需要 Java 25」这个
+   * 用户唯一能据以行动的信息。
+   */
+  INSTANCE_JAVA_UNAVAILABLE: 40918,
+  /**
+   * 该服务端版本不支持性能快照（/perf、/jfr）：能力缺失，重试无意义。
+   * **刻意不进 `LOCALIZED_MESSAGES`**：进表会盖掉服务端那句「请升级到带 /perf 的版本」。
+   * 也不进 `SERVER_LOCALIZED_CODES`——不登记即透传，登记反而让透传看起来需要逐码申请。
+   */
+  PERF_UNSUPPORTED: 40018,
   /** 磁盘余量不足：部署与备份共用，服务端在动手前拒绝以免写坏世界存档 */
   DISK_INSUFFICIENT: 50007,
   /** 恢复缺少/不匹配实例名确认（服务端强制，见 POST /backups/:id/restore） */
