@@ -7,7 +7,9 @@ import {
   CloudUpload,
   FolderOpen,
   Globe,
+  History,
   LayoutDashboard,
+  LayoutGrid,
   Moon,
   Puzzle,
   RefreshCw,
@@ -41,7 +43,7 @@ import { useServerStore } from '@/stores/server'
 import { useConnectionStore } from '@/stores/connection'
 import { usePlayers } from '@/features/players/queries'
 import { usePlayersUiStore } from '@/features/players/store'
-import { useCreateBackup } from '@/features/settings/queries'
+import { useCreateBackup } from '@/features/backup/queries'
 import { useStopInstance } from '@/hooks/use-instance-stop'
 import { usePanelPreferencesStore } from '@/stores/panel-preferences'
 import { apiPost } from '@/api/client'
@@ -192,8 +194,17 @@ export function CommandPalette() {
       label: '任务',
       icon: CalendarClock,
       hint: '/tasks',
-      keywords: 'tasks 定时 cron 备份',
+      keywords: 'tasks 定时 cron 自动化',
       run: () => go('/tasks'),
+    },
+    {
+      /* 「备份」这个词只归备份页：任务页那条若也带它，用户搜「备份」会落到 cron 列表，
+         而他要的是能恢复的时间点列表 */
+      label: '备份',
+      icon: History,
+      hint: '/backups',
+      keywords: 'backups 备份 存档 快照 恢复 回滚',
+      run: () => go('/backups'),
     },
     {
       label: '插件',
@@ -208,6 +219,15 @@ export function CommandPalette() {
       hint: '/instances',
       keywords: 'instances 部署 服务器',
       run: () => go('/instances'),
+    },
+    {
+      /* 与侧栏同名的「全局总览」：命令面板少这一条，用户按名字搜不到一个明明在侧栏里
+         存在的页面，只能以为它没有 */
+      label: '全局总览',
+      icon: LayoutGrid,
+      hint: '/fleet',
+      keywords: 'fleet 全局 总览 所有实例 对比 一览',
+      run: () => go('/fleet'),
     },
     {
       label: 'Webhook',

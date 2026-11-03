@@ -75,7 +75,7 @@ describe('InstancesPage · 卸载确认', () => {
     renderPage()
     await openUninstallDialog(user)
 
-    await user.click(screen.getByRole('button', { name: '确认卸载' }))
+    await user.click(screen.getByRole('button', { name: '卸载「演示实例」' }))
 
     expect(await screen.findByText('实例 "演示实例" 已卸载，已保留 3 份备份')).toBeInTheDocument()
     expect(uninstallMock.calls).toBe(1)
@@ -87,7 +87,7 @@ describe('InstancesPage · 卸载确认', () => {
     renderPage()
     await openUninstallDialog(user)
 
-    await user.click(screen.getByRole('button', { name: '确认卸载' }))
+    await user.click(screen.getByRole('button', { name: '卸载「演示实例」' }))
 
     // 服务端前置清单校验拒绝：弹窗不关闭，就地给出不可恢复警告与更强的确认动作
     expect(
@@ -95,7 +95,7 @@ describe('InstancesPage · 卸载确认', () => {
     ).toBeInTheDocument()
     expect(screen.queryByLabelText(/输入实例名/)).not.toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: '确认不可恢复删除' }))
+    await user.click(screen.getByRole('button', { name: '永久卸载「演示实例」' }))
 
     expect(await screen.findByText('实例 "演示实例" 已卸载，该实例没有备份')).toBeInTheDocument()
     expect(uninstallMock.calls).toBe(2)
@@ -127,14 +127,36 @@ describe('InstancesPage · 卸载确认', () => {
     await user.click(await screen.findByRole('button', { name: 'demo 操作菜单' }))
     await user.click(await screen.findByRole('menuitem', { name: '卸载实例' }))
     // 空名实例：输入框留空即匹配（空串天然匹配），故不输入直接确认
-    await user.click(screen.getByRole('button', { name: '确认卸载' }))
+    await user.click(screen.getByRole('button', { name: '卸载「demo」' }))
 
     expect(await screen.findByText(/该实例没有名称，实例名确认不构成有效确认/)).toBeInTheDocument()
     // 反向断言：不得套用「没有任何备份」的文案（本实例有 3 份备份）
     expect(screen.queryByText(/该实例没有任何备份/)).not.toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: '确认不可恢复删除' }))
+    await user.click(screen.getByRole('button', { name: '永久卸载「demo」' }))
     expect(uninstallMock.bodies[1]).toEqual({ confirmName: '', acknowledgeIrreversible: true })
+  })
+
+  // 浏览器自动翻译会改写 label 与 placeholder：译后的字面与服务端按原值 trim 全等
+  // 比对的确认串永远不匹配，破坏性操作会被永久挡在门外
+  it('确认串所在子树整体不可翻译（translate="no" + notranslate 覆盖 label 与输入框）', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(await screen.findByRole('button', { name: '演示实例 操作菜单' }))
+    await user.click(await screen.findByRole('menuitem', { name: '卸载实例' }))
+
+    const input = screen.getByLabelText(/输入实例名/)
+    const label = screen.getByText(/输入实例名「演示实例」以确认/)
+    for (const node of [input, label]) {
+      const guard = node.closest('[translate="no"]')
+      expect(guard).not.toBeNull()
+      expect(guard).toHaveClass('notranslate')
+    }
+    // 两处在同一个禁译容器内（撇开 label 说不可翻译、输入框仍被改写的半覆盖形态）
+    expect(input.closest('[translate="no"]')).toBe(label.closest('[translate="no"]'))
+    // 禁译容器不得用 lang="zxx" 冒充：那会把中文标成「无语言内容」，屏幕阅读器丢掉
+    // 中文发音规则、也拿不到语言回退字体
+    expect(input.closest('[lang]')).toBeNull()
   })
 
   it('实例名与输入不符：确认按钮禁用（服务端同名校验的 UI 前置态）', async () => {
@@ -143,9 +165,9 @@ describe('InstancesPage · 卸载确认', () => {
     await user.click(await screen.findByRole('button', { name: '演示实例 操作菜单' }))
     await user.click(await screen.findByRole('menuitem', { name: '卸载实例' }))
 
-    expect(screen.getByRole('button', { name: '确认卸载' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '卸载「演示实例」' })).toBeDisabled()
     await user.type(screen.getByLabelText(/输入实例名/), '别的名字')
-    expect(screen.getByRole('button', { name: '确认卸载' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '卸载「演示实例」' })).toBeDisabled()
     expect(uninstallMock.calls).toBe(0)
   })
 
@@ -173,7 +195,7 @@ describe('InstancesPage · 卸载确认', () => {
       renderPage()
       await openUninstallDialog(user)
 
-      const confirmButton = screen.getByRole('button', { name: '确认卸载' })
+      const confirmButton = screen.getByRole('button', { name: '卸载「演示实例」' })
       expect(confirmButton).toBeEnabled()
       await user.click(confirmButton)
 
@@ -190,7 +212,7 @@ describe('InstancesPage · 卸载确认', () => {
       await user.click(await screen.findByRole('menuitem', { name: '卸载实例' }))
       await user.type(screen.getByLabelText(/输入实例名/), SPACED_NAME)
 
-      await user.click(screen.getByRole('button', { name: '确认卸载' }))
+      await user.click(screen.getByRole('button', { name: '卸载「演示实例」' }))
 
       expect(await screen.findByText('实例 "演示实例" 已卸载，已保留 2 份备份')).toBeInTheDocument()
       expect(uninstallMock.bodies[0]).toEqual({ confirmName: SPACED_NAME })
@@ -224,7 +246,7 @@ describe('InstancesPage · 卸载确认', () => {
       // 确认块刻意用原值（服务端比的是 trim 后的 name），故这里标签仍是空名
       expect(screen.getByLabelText(/输入实例名/)).toHaveAttribute('placeholder', '')
 
-      const confirmButton = screen.getByRole('button', { name: '确认卸载' })
+      const confirmButton = screen.getByRole('button', { name: '卸载「demo」' })
       expect(confirmButton).toBeEnabled()
       await user.click(confirmButton)
 
@@ -234,7 +256,7 @@ describe('InstancesPage · 卸载确认', () => {
       ).toBeInTheDocument()
       expect(uninstallMock.bodies[0]).toEqual({ confirmName: '' })
 
-      await user.click(screen.getByRole('button', { name: '确认不可恢复删除' }))
+      await user.click(screen.getByRole('button', { name: '永久卸载「demo」' }))
 
       // 提示回退到 id：印 `实例 "" 已卸载` 时用户无法确认卸掉的是哪一个
       expect(await screen.findByText('实例 "demo" 已卸载，已保留 2 份备份')).toBeInTheDocument()
@@ -249,7 +271,7 @@ describe('InstancesPage · 卸载确认', () => {
 
       await user.type(screen.getByLabelText(/输入实例名/), '随便什么')
 
-      expect(screen.getByRole('button', { name: '确认卸载' })).toBeDisabled()
+      expect(screen.getByRole('button', { name: '卸载「demo」' })).toBeDisabled()
       expect(uninstallMock.calls).toBe(0)
     })
   })

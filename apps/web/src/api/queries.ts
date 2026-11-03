@@ -85,9 +85,9 @@ export const queryKeys = {
   webhooks: () => [...queryKeys.all, 'webhooks'] as const,
   webhookDeliveries: (id: number) => [...queryKeys.all, 'webhooks', id, 'deliveries'] as const,
   checkUpdate: () => [...queryKeys.all, 'check-update'] as const,
-  /** 管理员活跃会话列表（账号与安全面板，30s 轮询） */
+  /** 管理员活跃会话列表（登录与密码面板，30s 轮询） */
   authSessions: () => [...queryKeys.all, 'auth-sessions'] as const,
-  /** 两步验证状态（账号与安全面板；挂靠/关闭成功后失效重取） */
+  /** 两步验证状态（登录与密码面板；挂靠/关闭成功后失效重取） */
   totpStatus: () => [...queryKeys.all, 'totp-status'] as const,
   /**
    * 部署能力探测（当前仅 apiKeyEnabled）。按**面板身份**细分：能力属于面板而非本机，

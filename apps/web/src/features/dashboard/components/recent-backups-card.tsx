@@ -3,7 +3,7 @@
  * - 最近 3 条备份：状态图标（tone 浅底）+ 名称 + 时间·大小 + 状态徽章
  * - 数据复用备份域 hooks：useBackups（30s 轮询）＋ useBackupEventRefresh（备份/恢复 WS 通知即时失效）
  * - 「立即备份」在有在途备份（creating/restoring）时禁用，与备份页互斥状态机同口径
- * - 入口统一指向设置页备份子路由（真实路由为 /settings/backup）
+ * - 入口统一指向备份页（/backups，侧栏一级项）
  */
 import { useNavigate } from 'react-router'
 import { ArrowRight, CircleAlert, CloudUpload, HardDrive, Loader2 } from 'lucide-react'
@@ -25,7 +25,7 @@ import {
   formatBackupDate,
   formatBackupSize,
 } from '@/lib/mc-backup'
-import { useBackups, useCreateBackup, useBackupEventRefresh } from '@/features/settings/queries'
+import { useBackups, useCreateBackup, useBackupEventRefresh } from '@/features/backup/queries'
 
 /**
  * 卡片展示条数上限（服务端列表已按时间倒序）。
@@ -33,8 +33,8 @@ import { useBackups, useCreateBackup, useBackupEventRefresh } from '@/features/s
  * 完整列表在备份页（最近 10 条 + 展开），卡上「全部」一步可达
  */
 const MAX_ITEMS = 3
-/** 备份管理页（设置子路由） */
-const BACKUP_PAGE = '/settings/backup'
+/** 备份页（侧栏一级项） */
+const BACKUP_PAGE = '/backups'
 
 export function RecentBackupsCard() {
   const instanceId = useServerStore((s) => s.instanceId)

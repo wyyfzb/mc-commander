@@ -13,7 +13,7 @@ import {
   SnapshotView,
   isPerfUnsupported,
   SnapshotErrorBanner,
-} from '@/features/diagnostics/perf-page'
+} from '@/features/diagnostics/perf-view'
 import { ApiError } from '@/api/client'
 import { ErrorCode, getFriendlyErrorText } from '@/api/errors'
 import { useServerStore } from '@/stores/server'
@@ -377,7 +377,7 @@ describe('JfrDetailSection', () => {
 
 describe('SnapshotView：取样口径声明', () => {
   it('写明窗口长度并且声明「不会自动更新」', () => {
-    render(<SnapshotView snapshot={makeSnapshot()} />)
+    render(<SnapshotView snapshot={makeSnapshot()} instanceId="demo" />)
     const line = screen.getByTestId('perf-window')
     expect(line).toHaveTextContent('取样窗口')
     expect(line).toHaveTextContent('10.0 秒')
@@ -385,12 +385,12 @@ describe('SnapshotView：取样口径声明', () => {
   })
 
   it('不出现「实时」这类会让人以为在持续监控的措辞', () => {
-    const { container } = render(<SnapshotView snapshot={makeSnapshot()} />)
+    const { container } = render(<SnapshotView snapshot={makeSnapshot()} instanceId="demo" />)
     expect(container.textContent ?? '').not.toMatch(/实时/)
   })
 
   it('结论卡排在佐证卡之前（用户先看答案）', () => {
-    render(<SnapshotView snapshot={makeSnapshot()} />)
+    render(<SnapshotView snapshot={makeSnapshot()} instanceId="demo" />)
     const verdict = screen.getByTestId('perf-verdict')
     const hotspots = screen.getByTestId('perf-hotspots')
     // compareDocumentPosition 的 FOLLOWING 位表示 verdict 在 hotspots 之前
@@ -402,6 +402,7 @@ describe('SnapshotView：取样口径声明', () => {
   it('解析降级逐条列出', () => {
     render(
       <SnapshotView
+        instanceId="demo"
         snapshot={makeSnapshot({
           parseWarnings: ['产物内缺少 server/stats.txt，单刻耗时无从得知'],
         })}
@@ -412,12 +413,12 @@ describe('SnapshotView：取样口径声明', () => {
   })
 
   it('产物路径可见（用户能照着找文件）', () => {
-    render(<SnapshotView snapshot={makeSnapshot()} />)
+    render(<SnapshotView snapshot={makeSnapshot()} instanceId="demo" />)
     expect(screen.getByText(/debug\/profiling\//)).toBeInTheDocument()
   })
 
   it('没有产物时不给下载按钮', () => {
-    render(<SnapshotView snapshot={makeSnapshot({ archivePath: null })} />)
+    render(<SnapshotView snapshot={makeSnapshot({ archivePath: null })} instanceId="demo" />)
     expect(screen.queryByRole('button', { name: /下载产物/ })).not.toBeInTheDocument()
     expect(screen.getByText(/没有取到可下载的产物/)).toBeInTheDocument()
   })
@@ -425,6 +426,7 @@ describe('SnapshotView：取样口径声明', () => {
   it('jfr 快照渲染 GC 卡而不是 perf 的耗时分布', () => {
     render(
       <SnapshotView
+        instanceId="demo"
         snapshot={makeSnapshot({
           kind: 'jfr',
           perf: null,
@@ -463,7 +465,7 @@ describe('下载产物', () => {
     Object.defineProperty(URL, 'createObjectURL', { value: createSpy, configurable: true })
     Object.defineProperty(URL, 'revokeObjectURL', { value: revokeSpy, configurable: true })
 
-    render(<SnapshotView snapshot={makeSnapshot()} />)
+    render(<SnapshotView snapshot={makeSnapshot()} instanceId="demo" />)
     await userEvent.click(screen.getByRole('button', { name: /下载产物/ }))
 
     await waitFor(() => expect(fetchSpy).toHaveBeenCalled())

@@ -27,6 +27,7 @@ import { Card, CardBody, CardHeader, CardTitle } from '@/components/mcs/card'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
 import { CommandPreview } from '@/components/mcs/command-preview'
 import { InfoHint } from '@/components/mcs/info-hint'
+import { NoTranslate } from '@/components/mcs/no-translate'
 import { formatWorldSize } from '@/lib/format'
 import { GAME_PORT_END, GAME_PORT_START, PANEL_PORT, RCON_PORT_START } from '@mc-commander/schemas'
 
@@ -329,13 +330,15 @@ export function DangerZonePanel({
               </>
             )}
 
-            <Label htmlFor="removal-confirm">输入「彻底删除」以确认</Label>
-            <Input
-              id="removal-confirm"
-              value={confirmText}
-              onChange={(e) => setConfirmText(e.target.value)}
-              placeholder="彻底删除"
-            />
+            <NoTranslate className="flex flex-col gap-2">
+              <Label htmlFor="removal-confirm">输入「彻底删除」以确认</Label>
+              <Input
+                id="removal-confirm"
+                value={confirmText}
+                onChange={(e) => setConfirmText(e.target.value)}
+                placeholder="彻底删除"
+              />
+            </NoTranslate>
 
             <label className="flex cursor-pointer items-center gap-2 text-mcs-xs text-mcs-text-default">
               <Checkbox checked={keepData} onCheckedChange={(v) => setKeepData(v === true)} />

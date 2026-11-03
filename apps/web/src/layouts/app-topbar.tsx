@@ -335,7 +335,7 @@ export function AppTopBar() {
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => navigate('/settings/account')} className="gap-2">
             <Settings className="size-4 text-mcs-text-muted" aria-hidden />
-            账号与安全
+            登录与密码
           </DropdownMenuItem>
           {sessionToken ? (
             <DropdownMenuItem

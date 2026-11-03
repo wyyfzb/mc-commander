@@ -1,5 +1,5 @@
 /**
- * AccountPanel 测试（账号与安全面板）：
+ * AccountPanel 测试（登录与密码面板）：
  * - 修改密码脏状态守卫：空表单放行 / 半填拦截 / 提交成功解除
  * - 退出登录：会话与残留 API Key 一并清除并落到 /login（只清会话会被 requireUnconfigured 弹回）
  * mock 数据为结构占位（虚构凭据），严禁真实服务器信息
@@ -36,12 +36,12 @@ function renderPanel() {
         path: '/settings/account',
         element: (
           <>
-            <Link to="/settings/general">前往其他页</Link>
+            <Link to="/settings/device">前往其他页</Link>
             <AccountPanel />
           </>
         ),
       },
-      { path: '/settings/general', element: <div>其他页面</div> },
+      { path: '/settings/device', element: <div>其他页面</div> },
       { path: '/dashboard', element: <div>仪表盘占位</div> },
       {
         path: '/login',

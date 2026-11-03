@@ -210,6 +210,7 @@ export {
 // 性能诊断（/perf 快照与 /jfr 摘要；两者共用同一份「人话结论 + 明细」形状）
 export {
   PERF_SNAPSHOT_KINDS,
+  PERF_SNAPSHOT_WINDOW_MS,
   perfSnapshotRequestSchema,
   perfSnapshotResponseSchema,
   perfVerdictLevelSchema,

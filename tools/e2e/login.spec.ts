@@ -139,7 +139,7 @@ test.describe('登录页', () => {
     await expect(page).toHaveURL(/\/dashboard/)
 
     await page.goto('/settings/account')
-    await expect(page.getByRole('heading', { name: '账号与安全', level: 2 })).toBeVisible()
+    await expect(page.getByRole('heading', { name: '登录与密码', level: 2 })).toBeVisible()
     // 会话徽章 + 会话列表（mock UA 无浏览器指纹 → describeUserAgent 显示「未知浏览器」+ 本机徽章）
     await expect(page.getByText('管理员会话').first()).toBeVisible()
     await expect(page.getByText('未知浏览器')).toBeVisible()

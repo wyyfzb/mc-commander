@@ -3,17 +3,22 @@ import { z } from 'zod'
 /**
  * 性能诊断契约（POST /instances/:id/perf/snapshot）。
  *
- * 两条官方命令各出一份快照，`kind` 区分：`perf` 是主口径（10 秒窗口的 tick 耗时、
- * 堆占用、热点子树、各维度区块与实体数），`jfr` 是备口径（同窗口的 GC 次数与开销、
- * 分配速率）。两者都是**一次性取样**，不是持续监控——服务端的采集动作有秒级窗口，
- * 契约里用 `windowMs` 如实交代这个窗口有多长。
+ * `kind` 区分两路：`perf` 主口径（窗口内 tick 耗时、堆占用、热点子树、各维度区块与实体数），
+ * `jfr` 备口径（同窗口的 GC 次数与开销、分配速率）。两者都是**一次性取样**，
+ * 采集窗口长度由 `windowMs` 如实交代。
  *
- * 结论（`verdict`）由服务端给出而不是前端算：判定要用到窗口内的原始样本与阈值，
- * 前端只拿聚合值；两端各算一次必然漂移。
+ * `verdict` 由服务端给出：判定要用窗口内的原始样本与阈值，两端各算一次必然漂移。
  */
 
 export const PERF_SNAPSHOT_KINDS = ['perf', 'jfr'] as const
 export type PerfSnapshotKind = (typeof PERF_SNAPSHOT_KINDS)[number]
+
+/**
+ * 两路采集的固定窗口（毫秒），界面上的「正在取样 N 秒」由它派生。
+ * 数值的唯一来处是服务端：`/perf start` 自己采 10 秒、JFR 录制 15 秒，
+ * 面板无从缩短或延长。两端各写一份时，调窗口只会改到服务端，等待提示会开始骗人。
+ */
+export const PERF_SNAPSHOT_WINDOW_MS = { perf: 10_000, jfr: 15_000 } as const
 
 export const perfSnapshotRequestSchema = z.object({
   /** 采集哪一路；缺省走主口径 perf */

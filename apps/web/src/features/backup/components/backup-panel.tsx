@@ -1,7 +1,7 @@
 /**
- * BackupPanel —— 备份管理子页
- * - 卡片结构：标题「备份管理」→ 上次备份信息行（最近一条 completed）+「立即备份」
- *   → 快照机制说明（subtle 小字）→ 备份列表（最近 10 条）
+ * BackupPanel —— 备份页里的「备份列表」区块
+ * - 区块结构：标题「备份列表」→ 摘要行（最近一条 completed 备份）+「立即备份」
+ *   → 快照机制说明（收进信息入口）→ 备份列表（最近 10 条）
  * - 行：状态图标（tone 浅底；进行中转圈）→ 名称 → 时间·大小 → 状态徽章
  *   （backupStatusTone+backupStatusLabel）→ 下载/恢复/删除
  * - 下载仅 completed（服务端 GET /backups/:id/download 同约束），blob → a[download]
@@ -23,7 +23,6 @@ import {
   CircleAlert,
   CloudUpload,
   Download,
-  FolderInput,
   HardDrive,
   Loader2,
   ServerOff,
@@ -31,6 +30,7 @@ import {
   X,
 } from 'lucide-react'
 import { LoadingButton } from '@/components/mcs/loading-button'
+import { NoticeBanner } from '@/components/mcs/notice-banner'
 import { StaleQueryNotice } from '@/components/mcs/data-states'
 import { toast } from 'sonner'
 import { ErrorCode, getFriendlyErrorText } from '@/api/errors'
@@ -49,6 +49,7 @@ import { StatusPill } from '@/components/mcs/status-pill'
 import { ProgressBar } from '@/components/mcs/progress-bar'
 import { Card } from '@/components/mcs/card'
 import { InfoHint } from '@/components/mcs/info-hint'
+import { NoTranslate } from '@/components/mcs/no-translate'
 import { useBackupProgressStore } from '@/stores/backup-progress'
 import { toneClasses } from '@/components/mcs/tone'
 import {
@@ -57,10 +58,9 @@ import {
   formatBackupDate,
   formatBackupSize,
 } from '@/lib/mc-backup'
+import { confirmTargetLabel } from '@/lib/format'
 import { restoreConfirmTarget } from '@mc-commander/schemas'
 import {
-  useArchivedSnapshots,
-  useAttachArchive,
   useBackupEventRefresh,
   useBackups,
   useCancelBackupOperation,
@@ -69,9 +69,14 @@ import {
   useRestoreBackup,
 } from '../queries'
 import { useInstances } from '@/api/queries'
-import type { BackupPanelProps } from './contracts'
+import { useInstanceStatus } from '@/api/queries'
+import { useStopInstance } from '@/hooks/use-instance-stop'
+
+/** 备份面板只挂在一台实例上：无实例的空态由页面（backups-page）统一承担 */
+interface BackupPanelProps {
+  instanceId: string
+}
 import { EmptyState } from '@/components/mcs/empty-state'
-import { InstanceRequiredState } from '@/features/instances/components/instance-required-state'
 
 /**
  * 下载文件名：快照名 + 创建时间戳（紧凑 yyyyMMdd-HHmm，随本地时区）+ .tar.gz。
@@ -97,20 +102,18 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
   const [restoreInput, setRestoreInput] = useState('')
   /** 是否展开全部备份（默认只显示最近 10 条，超出时提供展开入口） */
   const [showAll, setShowAll] = useState(false)
-  /** 待挂载的归档标识（null = 未打开确认弹窗） */
-  const [attachTarget, setAttachTarget] = useState<string | null>(null)
 
   // 实例名（恢复危险确认输入匹配；无实例时按钮路径已拦截）
   const instancesQuery = useInstances()
   const instanceName = instancesQuery.data?.find((i) => i.id === instanceId)?.name ?? ''
+  // 运行状态走查询而非 useServerStore.status：后者只由仪表盘页写入，其他页读到 null
+  const statusQuery = useInstanceStatus(instanceId)
+  const stopMutation = useStopInstance()
+  const isRunning = statusQuery.data?.isRunning ?? false
 
   const backupsQuery = useBackups(instanceId)
   /** 列表相位：有旧值可留时不把一次轮询抖动呈现成整屏故障 */
   const backupsPhase = queryPhase(backupsQuery)
-  // 归档快照：卸载实例后按设计保留、但已无索引的快照目录。
-  // 挂载入口只在存在可挂载项时出现（空态不出一个「永远没有内容」的区块）
-  const archivedQuery = useArchivedSnapshots(Boolean(instanceId))
-  const attachMutation = useAttachArchive(instanceId)
   const createMutation = useCreateBackup(instanceId)
   // 确认串随恢复请求下发（服务端强制比对）：输入框是同一确认的界面，不再是唯一闸门
   const restoreMutation = useRestoreBackup(instanceId)
@@ -119,7 +122,7 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
   useBackupEventRefresh(instanceId)
   // WS 进度推送（1s 节流）：rsync 路径有百分比；robocopy/ditto 降级路径无推送，
   // 进度条退化为转圈不确定态
-  const progress = useBackupProgressStore((s) => s.progress[instanceId ?? ''])
+  const progress = useBackupProgressStore((s) => s.progress[instanceId])
   // 确认目标由契约层单一派生（实例名 → 无名称时退到备份名 → 再退到备份 id）：
   // 空名实例下实例名确认会空转（空串天然匹配），服务端同用这一条派生链
   const restoreConfirm = restoreTarget
@@ -137,13 +140,7 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
   // 注意不能用 instanceName.trim() === '' 当判据：真的无名称实例本就以空串确认（服务端接受）
   const instanceNameLoaded = instancesQuery.data !== undefined
 
-  // 无实例门：加载中/加载失败/真空态/待选中四态各自诚实（见 InstanceRequiredState）
-  if (!instanceId) {
-    return <InstanceRequiredState />
-  }
-
   const backups = backupsQuery.data ?? []
-  const archived = archivedQuery.data ?? []
   /** 默认展示最近 10 条，用户可展开全部（避免列表无限增长） */
   const isTruncated = backups.length > 10
   const items = showAll ? backups : backups.slice(0, 10)
@@ -210,24 +207,6 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
     }
   }
 
-  /** 挂载归档快照：只登记索引（磁盘内容不复制、不移动），挂上后走常规恢复/下载/删除路径 */
-  const handleAttachConfirm = async () => {
-    if (attachTarget == null) return
-    try {
-      const res = await attachMutation.mutateAsync(attachTarget)
-      setAttachTarget(null)
-      if (res.attached > 0) {
-        toast.success(
-          `已挂载 ${res.attached} 份归档快照${res.skipped > 0 ? `（跳过 ${res.skipped} 份）` : ''}`,
-        )
-      } else {
-        toast.info('没有可挂载的快照：它们已挂载过，或目录里没有可识别的世界数据')
-      }
-    } catch (e) {
-      toast.error(`挂载失败：${getFriendlyErrorText(e)}`)
-    }
-  }
-
   const handleDeleteConfirm = async () => {
     if (!deleteTarget) return
     const target = deleteTarget
@@ -242,7 +221,7 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
 
   return (
     <Card as="div" size="flush" className="overflow-hidden">
-      {/* 标题：图标 + 备份管理 */}
+      {/* 区块标题：页面级标题由 PageHeader 承担，这里只标这一块是「备份列表」 */}
       <div className="flex items-center gap-2 px-4 pb-3 pt-4">
         <span
           className="flex size-7 shrink-0 items-center justify-center rounded-mcs-sm bg-mcs-success-bg-subtle text-mcs-success-fg"
@@ -250,8 +229,8 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
         >
           <HardDrive className="size-3.5" />
         </span>
-        <h3 className="flex items-center gap-1 text-mcs-sm font-semibold text-mcs-text-default">
-          备份管理
+        <h3 className="flex items-center gap-1 text-mcs-lg font-semibold text-mcs-text-default">
+          备份列表
           {/* 保留策略服务端可配且 API 未暴露，不硬编码数值——避免与服务端实际配置漂移 */}
           <InfoHint label="快照备份说明">
             快照备份：未修改文件零拷贝增量传输，超出保留策略自动清理（默认保留策略见服务端配置）
@@ -401,7 +380,9 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
         )}
       </div>
 
-      {/* 恢复确认：红色警示 + 影响说明 + 信息块（快照名/时间/覆盖范围）+ 输入实例名确认（不匹配禁用） */}
+      {/* 恢复确认：红色警示 + 影响说明 + 信息块（快照名/时间/覆盖范围）+ 输入实例名确认（不匹配禁用）。
+          按钮点名备份（`恢复到「<备份名>」`）：同实例有多条快照，通用动词读不出回滚到哪一条；
+          备份名可能为空（服务端允许），此时退到备份 id ── */}
       <ConfirmDialog
         open={restoreTarget !== null}
         onOpenChange={(open) => {
@@ -412,7 +393,9 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
         }}
         title="恢复备份（危险操作）"
         description={`将用备份 “${restoreTarget?.name ?? ''}” 覆盖当前世界数据，且不可撤销。当前世界自该备份后的所有变化将永久丢失，在线玩家会被断开。`}
-        confirmText="确认恢复"
+        confirmText={`恢复到「${
+          restoreTarget ? confirmTargetLabel(restoreTarget.name) || `#${restoreTarget.id}` : ''
+        }」`}
         cancelText="取消"
         danger
         warning="流程：停止 → 校验 level.dat → 原子替换 → 重启"
@@ -420,6 +403,24 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
         confirmDisabled={!restoreInputMatches || !instanceNameLoaded}
         onConfirm={() => void handleRestoreConfirm()}
       >
+        {/* 运行中：服务端强制要求停机，不在这里补一个停止按钮，用户就只能到恢复这一步
+            才收到 40003 报错——那正是「错误预防」失败。就地给停止入口，不必跨页往返 */}
+        {isRunning && (
+          <NoticeBanner variant="warning" icon={ServerOff} role="alert" className="mb-2">
+            <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              服务器正在运行，恢复前需要先停止。
+              <LoadingButton
+                size="xs"
+                variant="outline"
+                loading={stopMutation.isPending}
+                onClick={() => stopMutation.mutate(instanceId)}
+              >
+                停止服务器
+              </LoadingButton>
+            </span>
+          </NoticeBanner>
+        )}
+
         {/* 目标快照信息块：名称/时间/覆盖范围（恢复为目录快照复制，非命令下发，故无命令预览） */}
         <div className="flex flex-col gap-1 rounded-mcs-sm border border-mcs-border-muted bg-mcs-bg-default px-2.5 py-2 text-mcs-xs text-mcs-text-muted">
           <div className="flex items-center gap-1.5">
@@ -448,20 +449,22 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
           </div>
         </div>
         <div className="flex flex-col gap-1.5">
-          <label
-            htmlFor="restore-confirm-input"
-            className="text-mcs-xs font-semibold text-mcs-text-muted"
-          >
-            输入{instanceName.trim() === '' ? '备份名' : '实例名'}「{restoreConfirm}」以确认
-          </label>
-          {/* 归 ui/input 基座，只保留危险语义焦点环（确认框的「红色 = 不可逆」提示） */}
-          <Input
-            id="restore-confirm-input"
-            value={restoreInput}
-            onChange={(e) => setRestoreInput(e.target.value)}
-            placeholder={restoreConfirm}
-            className="font-mono focus-visible:border-mcs-error-fg focus-visible:ring-mcs-error-fg"
-          />
+          <NoTranslate className="flex flex-col gap-1.5">
+            <label
+              htmlFor="restore-confirm-input"
+              className="text-mcs-xs font-semibold text-mcs-text-muted"
+            >
+              输入{instanceName.trim() === '' ? '备份名' : '实例名'}「{restoreConfirm}」以确认
+            </label>
+            {/* 归 ui/input 基座，只保留危险语义焦点环（确认框的「红色 = 不可逆」提示） */}
+            <Input
+              id="restore-confirm-input"
+              value={restoreInput}
+              onChange={(e) => setRestoreInput(e.target.value)}
+              placeholder={restoreConfirm}
+              className="font-mono focus-visible:border-mcs-error-fg focus-visible:ring-mcs-error-fg"
+            />
+          </NoTranslate>
           {/* 确认目标取自实例列表：读不到名字时确认按钮会一直禁用，必须给出原因
               （否则用户只看到一个永远点不动的按钮，不知道是加载失败还是自己没输对） */}
           {!instanceNameLoaded && (
@@ -473,72 +476,6 @@ export function BackupPanel({ instanceId }: BackupPanelProps) {
           )}
         </div>
       </ConfirmDialog>
-
-      {/* ── 归档快照：卸载实例保留下来、但已无索引的快照目录 ── */}
-      {archivedQuery.isError && (
-        <p className="mt-2 border-t border-mcs-border-subtle px-4 py-3 text-mcs-xs text-mcs-text-muted">
-          归档快照清点失败（服务端暂时不可用），刷新页面可重试。
-        </p>
-      )}
-      {archived.length > 0 && (
-        <div className="mt-2 border-t border-mcs-border-subtle px-4 py-3">
-          <h4 className="flex items-center gap-1 text-mcs-sm font-semibold text-mcs-text-default">
-            归档快照（未建立索引）
-            <InfoHint label="归档快照说明">
-              卸载实例时会保留其快照目录（磁盘上的事实副本），但备份表里已无索引——它们不出现在任何实例的备份列表中，未挂载的会随保留期被自动清理。挂载只登记索引，不复制、不移动磁盘内容；挂载后它们就是本实例的普通备份条目，计入本实例的备份配额，超出保留策略（数量/天数）时按创建时间最旧优先被自动清理（挂载行按挂载时刻计时）；删除条目会连带删除磁盘上的原归档快照。
-            </InfoHint>
-          </h4>
-          <div className="mt-2 space-y-1.5">
-            {archived.map((group) => (
-              <div
-                key={group.archiveId}
-                className="flex flex-wrap items-center gap-2 rounded-mcs-md border border-mcs-border-muted px-3 py-2"
-              >
-                <div className="min-w-0 flex-1">
-                  <p
-                    className="truncate font-mono text-mcs-xs text-mcs-text-default"
-                    title={group.archiveId}
-                  >
-                    {group.archiveId}
-                  </p>
-                  <p className="text-mcs-2xs text-mcs-text-muted">
-                    {group.instanceExists ? '现存实例的未索引快照' : '来自已卸载实例'} · 可挂载{' '}
-                    {group.usableCount}/{group.snapshotCount} 份 · 最近{' '}
-                    {formatBackupDate(group.latestMtime)}
-                  </p>
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  aria-label={`挂载到本实例（归档 ${group.archiveId}）`}
-                  onClick={() => setAttachTarget(group.archiveId)}
-                >
-                  <FolderInput className="size-3.5" aria-hidden />
-                  挂载到本实例
-                </Button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* 挂载确认（把别人的历史快照登记到本实例：会出现在本实例的备份列表里） */}
-      <ConfirmDialog
-        open={attachTarget != null}
-        onOpenChange={(open) => {
-          if (!open) setAttachTarget(null)
-        }}
-        title="挂载归档快照到本实例？"
-        description={
-          `归档「${attachTarget ?? ''}」中可识别的快照会登记为实例「${instanceName || instanceId}」的备份，` +
-          '随后可在本列表里恢复、下载或删除。原归档目录不会被复制或移动，仍留在磁盘原处——' +
-          '也因为没有第二份副本，删除这些条目会删除磁盘上的原归档快照。'
-        }
-        warning="挂载后的条目计入本实例的备份配额，超出保留策略时按创建时间最旧优先被自动清理"
-        confirmText="挂载"
-        loading={attachMutation.isPending}
-        onConfirm={() => void handleAttachConfirm()}
-      />
 
       {/* 删除确认（危险操作：此操作不可撤销） */}
       <ConfirmDialog

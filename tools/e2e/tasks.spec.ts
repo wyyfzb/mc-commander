@@ -30,9 +30,10 @@ test.describe('任务页', () => {
     for (const name of ['每日自动重启', '每日备份', '清理告示牌命令']) {
       await expect(page.getByText(name)).toBeVisible()
     }
-    // 类型徽章（重启/备份/命令）
+    // 类型徽章。定时任务的备份类型标「自动备份」，与侧栏「备份」页（可恢复的存档点）分开：
+    // 同一个词指两处，用户搜「备份」就分不清会落到哪
     await expect(page.getByText('重启', { exact: true })).toBeVisible()
-    await expect(page.getByText('备份', { exact: true })).toBeVisible()
+    await expect(page.getByRole('main').getByText('自动备份', { exact: true })).toBeVisible()
     await expect(page.getByText('命令', { exact: true })).toBeVisible()
     // cron mono 与命令文本
     await expect(page.getByText('0 4 * * *')).toBeVisible()

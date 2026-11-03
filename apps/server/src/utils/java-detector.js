@@ -422,11 +422,8 @@ export function findJavaPathStrict(requiredVersion) {
  * 1. 主版本恰好等于要求的——类版本严格匹配，绝不会因版本过低报 UnsupportedClassVersionError；
  * 2. 高于要求的最小版本——能跑，但运行时行为会跟目标版本有差（官方允许的宽容档）；
  * 3. 候选全都**低于**要求 ⇒ 返回 null，调用方据此报「缺哪个版本」。
- *
- * 第 3 档不能改成「尽力取最高」：低版本 JVM 加载高版本 class 会抛
- * `UnsupportedClassVersionError: class file version 69.0 ... up to 61.0`，
- * 那是一条只有开发者看得懂的堆栈，且**看起来像服务端坏了而不是缺 Java**。
- * 与其猜一个跑不起来的版本，不如在启动前就说清「要 25、宿主没有」。
+ *    低版本 JVM 加载高版本 class 必然抛 `UnsupportedClassVersionError`
+ *    （class file version 69.0 … up to 61.0），故第 3 档不选任何候选。
  *
  * 要求未知（null/非数字）时取最高版本：没有目标就无从判「够不够」，
  * 挑最新的至少覆盖最多情形。

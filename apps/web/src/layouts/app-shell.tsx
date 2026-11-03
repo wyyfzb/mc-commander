@@ -7,6 +7,7 @@ import { CommandBridge } from './command-bridge'
 import { DegradationBanners } from './degradation-banners'
 import { ErrorBoundary } from '@/components/mcs/error-boundary'
 import { LastOutputDialog } from '@/components/mcs/last-output-dialog'
+import { PerfSheet } from '@/features/diagnostics/perf-sheet'
 import { useUiStore } from '@/stores/ui'
 import { useServerStore } from '@/stores/server'
 import { useInstances } from '@/api/queries'
@@ -89,6 +90,8 @@ export function AppShell() {
       <CommandBridge />
       {/* 末尾日志弹窗（崩溃/熔断 toast 深入链接入口） */}
       <LastOutputDialog />
+      {/* 性能诊断 Sheet（告警条 / 崩溃卡 / 实例卡三处入口共用同一实例） */}
+      <PerfSheet />
     </div>
   )
 }

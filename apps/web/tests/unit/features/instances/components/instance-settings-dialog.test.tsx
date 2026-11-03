@@ -351,7 +351,7 @@ describe('InstanceSettingsDialog', () => {
     expect(preview).not.toHaveTextContent('-Daikars.new.flags=true')
   })
 
-  it('两处设置行同形：容器逐类等集 + 行外无额外包裹（就绪态）', async () => {
+  it('三处设置行同形：容器逐类等集 + 行外无额外包裹（就绪态）', async () => {
     renderDialog()
     // 锁实际使用形态：等开关就位（占位态另有用例）
     await screen.findByRole('switch', { name: '实时推送' })
@@ -359,6 +359,7 @@ describe('InstanceSettingsDialog', () => {
     /** 行容器配方；groupClass = 行所属分组容器，用来判「行外无额外包裹」 */
     const cases = [
       { title: "JVM 优化 (Aikar's Flags)", groupClass: 'flex flex-col gap-4' },
+      { title: '意外停止后自动重启', groupClass: 'flex flex-col gap-4' },
       {
         title: '实时推送',
         groupClass: 'flex flex-col gap-2 border-t border-mcs-border-muted pt-4',
@@ -486,6 +487,120 @@ describe('InstanceSettingsDialog', () => {
 
     await user.click(screen.getByRole('button', { name: '取消' }))
     expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+})
+
+describe('InstanceSettingsDialog 自动重启（实例级配置）', () => {
+  it('按服务端值渲染，并写明「默认开启」——不说这句，用户不知道自己从没设过它', () => {
+    renderDialog()
+
+    const toggle = screen.getByRole('switch', { name: '意外停止后自动重启' })
+    expect(toggle).toBeChecked()
+    // 「默认开启」是这段说明的主体：开关躺着就是开的，读不出「这是可以关的」
+    const desc = screen.getByText(/新建实例默认开启/)
+    expect(desc).toHaveClass('text-mcs-xs')
+    expect(desc).toHaveTextContent(
+      '服务器崩溃或意外退出后自动拉起，新建实例默认开启（手动停止不触发）；连续崩溃会先熔断暂停',
+    )
+  })
+
+  it('服务端已关（autoRestart=false）：开关如实为关', () => {
+    renderDialog(detailWith({ autoRestart: false }))
+
+    expect(screen.getByRole('switch', { name: '意外停止后自动重启' })).not.toBeChecked()
+  })
+
+  /* 读不到详情 ≠ 已开启：`?? true` 会把「不知道」显示成「已开启」，用户会以为崩溃后
+     真会自动重启——那是肯定式假信息。与推送开关同一口径：不知道就说不知道 */
+  it('详情未就绪：显示「状态未知」，不渲染开关', () => {
+    renderDialog(undefined)
+
+    expect(screen.getByText('状态未知')).toBeInTheDocument()
+    expect(screen.queryByRole('switch', { name: '意外停止后自动重启' })).toBeNull()
+  })
+
+  it('拨动只改草稿：不落库、不关弹窗（取消退得回来）', async () => {
+    const { onOpenChange } = renderDialog()
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('switch', { name: '意外停止后自动重启' }))
+
+    expect(screen.getByRole('switch', { name: '意外停止后自动重启' })).not.toBeChecked()
+    expect(putBodies).toHaveLength(0)
+    expect(onOpenChange).not.toHaveBeenCalled()
+  })
+
+  it('保存才落库：PUT 载荷只带 autoRestart=false + 启动配置字段，回执说「立即生效」', async () => {
+    const { onOpenChange } = renderDialog()
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('switch', { name: '意外停止后自动重启' }))
+    await user.click(screen.getByRole('button', { name: '保存配置' }))
+
+    await waitFor(() =>
+      expect(putBodies[0]).toMatchObject({ maxMemory: '2G', minMemory: '1G', jvmArgs: [] }),
+    )
+    expect(putBodies[0]?.autoRestart).toBe(false)
+    // 自动重启改的是服务端内存态，不需要重启实例 ⇒ 回执不能说成「重启后生效」
+    expect(await screen.findByText('自动重启已关闭，立即生效')).toBeInTheDocument()
+    // 只拨了自动重启 ⇒ 启动配置逐字未变，不得置「待重启」诱导一次无必要重启
+    expect(useRestartPendingStore.getState().pending['alpha']).toBeUndefined()
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
+  it('同时改了启动配置：一句回执分别交代两种生效时机', async () => {
+    renderDialog()
+    const user = userEvent.setup()
+
+    const slider = screen.getByRole('slider', { name: '内存分配' })
+    slider.focus()
+    await user.keyboard('{ArrowRight}')
+    await user.click(screen.getByRole('switch', { name: '意外停止后自动重启' }))
+    await user.click(screen.getByRole('button', { name: '保存配置' }))
+
+    expect(
+      await screen.findByText('自动重启已关闭，立即生效；启动配置重启实例后生效'),
+    ).toBeInTheDocument()
+    expect(putBodies[0]?.autoRestart).toBe(false)
+    expect(useRestartPendingStore.getState().pending['alpha']).toBeTypeOf('number')
+  })
+
+  /* 推送与自动重启的生效时机相反：自动重启立即生效、推送要重启。回执漏掉推送那半句，
+     用户会以为推送也已经生效——与「只改推送」时点名推送的口径不一致 */
+  it('同时改了实时推送：回执要分别点名推送与它的生效时机', async () => {
+    renderDialog()
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('switch', { name: '意外停止后自动重启' }))
+    await user.click(await screen.findByRole('switch', { name: '实时推送' }))
+    await user.click(screen.getByRole('button', { name: '保存配置' }))
+
+    expect(
+      await screen.findByText('自动重启已关闭，立即生效；实时推送已开启，重启实例后生效'),
+    ).toBeInTheDocument()
+    expect(apiSetPushChannel).toHaveBeenCalledWith(expect.anything(), 'alpha', true)
+  })
+
+  it('逐值未变不脏：不点开关就保存，载荷里没有 autoRestart（不写一条无意义的更新）', async () => {
+    renderDialog()
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('button', { name: '保存配置' }))
+
+    expect(await screen.findByText('设置已保存（与之前一致，无需重启）')).toBeInTheDocument()
+    expect(putBodies[0]).not.toHaveProperty('autoRestart')
+  })
+
+  it('开关参与「未保存的更改」判定：拨完直接关闭会先问一句', async () => {
+    renderDialog()
+    const user = userEvent.setup()
+
+    await user.click(screen.getByRole('switch', { name: '意外停止后自动重启' }))
+    await user.click(screen.getByRole('button', { name: '取消' }))
+
+    expect(
+      await screen.findByText('上面有未保存的更改，关闭后这些改动将丢失。'),
+    ).toBeInTheDocument()
   })
 })
 

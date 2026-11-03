@@ -74,10 +74,14 @@ export const FALLBACK_VERSIONS = [
 export const TASK_TYPES = ['restart', 'backup', 'command', 'stop', 'start'] as const
 export type TaskType = (typeof TASK_TYPES)[number]
 
-/** 任务类型中文标签 */
+/**
+ * 任务类型中文标签（列表行徽章用）
+ * backup 标成「自动备份」而不是「备份」：侧栏「备份」页指的是可恢复的存档点，
+ * 两者是两个东西；同一个词指两处，用户搜「备份」时就分不清会落到哪。
+ */
 export const TASK_TYPE_LABELS: Record<TaskType, string> = {
   restart: '重启',
-  backup: '备份',
+  backup: '自动备份',
   command: '命令',
   stop: '停止',
   start: '启动',

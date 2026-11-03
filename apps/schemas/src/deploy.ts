@@ -1,11 +1,6 @@
 import { z } from 'zod'
 
-/**
- * 面板可安装/升级的服务端类型（唯一声明源）。
- *
- * 部署与升级走同一个类型口径：两边各留一份枚举时，新增一类会出现「能建不能升」——
- * 实例建得出来却永远升不了，而报错是 `Invalid type`，用户无从知道这是能力缺失。
- */
+/** 面板可安装/升级的服务端类型（唯一声明源：部署与升级共用同一枚举） */
 export const SERVER_TYPES = ['vanilla', 'paper', 'fabric', 'forge', 'purpur'] as const
 export type ServerType = (typeof SERVER_TYPES)[number]
 

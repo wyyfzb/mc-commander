@@ -2,18 +2,23 @@
  * InstanceCards 测试：
  * 卡片渲染（名称/状态文本/版本 mono 徽章）/ 状态点 token / 当前徽章 + 无切换按钮 /
  * 操作行收敛（主操作两个 + 操作菜单）/ 切换·实例设置·升级·卸载回调 /
- * 卸载中禁用（他卡不受影响）/ 详情加载骨架 / 空态 + 部署入口
+ * 卸载中禁用（他卡不受影响）/ 详情加载骨架 / 空态 + 部署入口 /
+ * 熔断提示内嵌「重新启用自动重启」（只在熔断态出现、点下去发 PUT、成功刷新）
  * mock 数据为结构占位虚构（虚构实例名/版本），严禁真实服务器信息
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { Toaster, toast as sonnerToast } from 'sonner'
+import type { ReactElement } from 'react'
 import {
   InstanceCards,
   type InstanceCardsProps,
 } from '@/features/instances/components/instance-cards'
 import { mockInstanceStatus } from '@tests/support/handlers'
 import { FALLBACK_POLL_INTERVAL_MS } from '@/api/queries'
+import { useConnectionStore } from '@/stores/connection'
 import { useUpgradeStore } from '@/stores/upgrade'
 import { useRestartPendingStore } from '@/stores/restart-pending'
 import { useServerStore } from '@/stores/server'
@@ -27,6 +32,30 @@ const beta: InstanceSummary = { id: 'beta', name: '虚构乙服', isRunning: fal
 /** 打开某张卡的「操作菜单」（radix 触发器吃 pointerdown，须走 userEvent） */
 async function openMenu(user: ReturnType<typeof userEvent.setup>, name: string) {
   await user.click(screen.getByRole('button', { name: `${name} 操作菜单` }))
+}
+
+/** 卡片里的熔断复位入口要靠页面回调，render 仍需 QueryClient（详情/升级等查询共用） */
+function renderCards(ui: ReactElement) {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  return render(
+    <QueryClientProvider client={qc}>
+      {ui}
+      <Toaster />
+    </QueryClientProvider>,
+  )
+}
+
+/** 熔断态详情（连崩 3 次、自动重启已被服务端关掉） */
+function trippedDetail(overrides: Partial<InstanceStatus> = {}): InstanceStatus {
+  return {
+    ...mockInstanceStatus,
+    id: 'alpha',
+    name: '虚构甲服',
+    autoRestart: false,
+    circuitBreakerTripped: true,
+    consecutiveCrashes: 3,
+    ...overrides,
+  }
 }
 
 function baseProps(overrides: Partial<InstanceCardsProps> = {}): InstanceCardsProps {
@@ -68,7 +97,7 @@ describe('InstanceCards', () => {
   })
 
   it('渲染实例卡：名称 + 状态文本（运行中 · N 人在线 / 已停止）', () => {
-    render(<InstanceCards {...baseProps()} />)
+    renderCards(<InstanceCards {...baseProps()} />)
 
     expect(screen.getByText('虚构甲服')).toBeInTheDocument()
     expect(screen.getByText('虚构乙服')).toBeInTheDocument()
@@ -77,14 +106,14 @@ describe('InstanceCards', () => {
   })
 
   it('世界指标走 formatWorldSize 统一格式化（mock worldSize=1.2 → 1.2 GB）', () => {
-    render(<InstanceCards {...baseProps()} />)
+    renderCards(<InstanceCards {...baseProps()} />)
     // 有详情的卡显示格式化值；无详情卡显示 —（数量随 fixture detailStatuses 覆盖度变化，≥1 即证明格式化生效）
     expect(screen.getAllByText('1.2 GB').length).toBeGreaterThanOrEqual(1)
     expect(screen.queryByText('1.2GB')).not.toBeInTheDocument()
   })
 
   it('内存指标带 GB 单位，与同行「世界」口径一致（标签不写「JVM 堆」：字段实为进程内存）', () => {
-    render(<InstanceCards {...baseProps()} />)
+    renderCards(<InstanceCards {...baseProps()} />)
     expect(screen.getAllByText('3.2 GB').length).toBeGreaterThanOrEqual(1)
     expect(screen.queryByText('3.2G')).not.toBeInTheDocument()
     expect(screen.queryByText('JVM 堆')).not.toBeInTheDocument()
@@ -92,7 +121,7 @@ describe('InstanceCards', () => {
 
   it('统计未就绪（memoryUsage=0）时内存显示 —，不报「0 GB」', () => {
     // 只渲染甲服：乙服无详情也会渲染一枚「内存」标签，两枚会让 getByText 歧义
-    render(
+    renderCards(
       <InstanceCards
         {...baseProps({
           instances: [alpha],
@@ -115,7 +144,7 @@ describe('InstanceCards', () => {
         },
       })
     })
-    render(<InstanceCards {...baseProps()} />)
+    renderCards(<InstanceCards {...baseProps()} />)
 
     // 仅甲服有升级进度，徽标唯一
     expect(screen.getAllByText('升级中')).toHaveLength(1)
@@ -135,7 +164,7 @@ describe('InstanceCards', () => {
         },
       })
     })
-    render(<InstanceCards {...baseProps()} />)
+    renderCards(<InstanceCards {...baseProps()} />)
 
     expect(screen.queryByText('升级中')).not.toBeInTheDocument()
   })
@@ -154,13 +183,13 @@ describe('InstanceCards', () => {
         },
       })
     })
-    render(<InstanceCards {...baseProps()} />)
+    renderCards(<InstanceCards {...baseProps()} />)
 
     expect(screen.queryByText('升级中')).not.toBeInTheDocument()
   })
 
   it('版本徽章：detailStatuses 有 mcVersion 显示 mono 徽章，缺失不显示', () => {
-    const { container } = render(<InstanceCards {...baseProps()} />)
+    const { container } = renderCards(<InstanceCards {...baseProps()} />)
 
     // alpha 有详情 → 显示版本徽章（mono）
     expect(screen.getByText('1.21.4')).toBeInTheDocument()
@@ -173,7 +202,7 @@ describe('InstanceCards', () => {
   })
 
   it('状态点：运行中 success token / 停止 muted token', () => {
-    const { container } = render(<InstanceCards {...baseProps()} />)
+    const { container } = renderCards(<InstanceCards {...baseProps()} />)
     const runningDot = container.querySelector('[data-instance-status="running"]') as HTMLElement
     expect(runningDot.classList.contains('bg-mcs-success-fg')).toBe(true)
     const stoppedDot = container.querySelector('[data-instance-status="stopped"]') as HTMLElement
@@ -181,7 +210,7 @@ describe('InstanceCards', () => {
   })
 
   it('实例固定色相标识：左缘色条逐卡按 id 取槽（类名钉死，映射漂移即红）', () => {
-    const { container } = render(<InstanceCards {...baseProps()} />)
+    const { container } = renderCards(<InstanceCards {...baseProps()} />)
     const alphaCard = container.querySelector('[data-instance-id="alpha"]') as HTMLElement
     const betaCard = container.querySelector('[data-instance-id="beta"]') as HTMLElement
     // 色条与状态点是两个不同来源：色条只回答「哪个实例」，状态点回答「运行/停止」
@@ -197,7 +226,7 @@ describe('InstanceCards', () => {
   })
 
   it('详情加载中：仅该卡版本徽章位置显示骨架占位（他卡不受影响）', () => {
-    const { container } = render(
+    const { container } = renderCards(
       <InstanceCards {...baseProps({ loadingIds: new Set(['alpha']) })} />,
     )
     expect(container.querySelectorAll('[data-slot="skeleton"]').length).toBe(1)
@@ -208,7 +237,7 @@ describe('InstanceCards', () => {
   })
 
   it('当前实例：accent 徽章显示「当前」，且无切换按钮；其他实例有切换按钮', () => {
-    render(<InstanceCards {...baseProps({ currentId: 'alpha' })} />)
+    renderCards(<InstanceCards {...baseProps({ currentId: 'alpha' })} />)
 
     expect(screen.getByText('当前')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '切换到 虚构甲服' })).not.toBeInTheDocument()
@@ -217,7 +246,7 @@ describe('InstanceCards', () => {
 
   it('点击「切换」回调 onSwitch 并携带该实例', () => {
     const onSwitch = vi.fn()
-    render(<InstanceCards {...baseProps({ onSwitch })} />)
+    renderCards(<InstanceCards {...baseProps({ onSwitch })} />)
 
     fireEvent.click(screen.getByRole('button', { name: '切换到 虚构乙服' }))
     expect(onSwitch).toHaveBeenCalledTimes(1)
@@ -229,7 +258,7 @@ describe('InstanceCards', () => {
   /* 运行中恒有「停止」与「重启」两枚：两者后果不同（停止中断服务、重启不停服），
      一枚顶替另一枚就会剥夺另一种操作——有待重启时尤其不能拿掉「停止」 */
   it('运行中恒给停止与重启两枚操作，已停止只给启动', () => {
-    const { container } = render(<InstanceCards {...baseProps()} />)
+    const { container } = renderCards(<InstanceCards {...baseProps()} />)
     const card = (id: string) =>
       container.querySelector(`[data-instance-id="${id}"]`) as HTMLElement
 
@@ -251,7 +280,7 @@ describe('InstanceCards', () => {
   })
 
   it('当前实例只剩启停 + 操作菜单（无切换主操作）', () => {
-    const { container } = render(<InstanceCards {...baseProps({ currentId: 'alpha' })} />)
+    const { container } = renderCards(<InstanceCards {...baseProps({ currentId: 'alpha' })} />)
     const card = container.querySelector('[data-instance-id="alpha"]') as HTMLElement
 
     expect(
@@ -274,7 +303,7 @@ describe('InstanceCards', () => {
     const onRestart = vi.fn()
     const onStop = vi.fn()
     useRestartPendingStore.setState({ pending: { alpha: Date.now() } })
-    const { container } = render(<InstanceCards {...baseProps({ onRestart, onStop })} />)
+    const { container } = renderCards(<InstanceCards {...baseProps({ onRestart, onStop })} />)
     const card = container.querySelector('[data-instance-id="alpha"]') as HTMLElement
 
     expect(
@@ -300,7 +329,7 @@ describe('InstanceCards', () => {
 
   it('操作菜单：实例设置 / 升级版本 / 卸载实例三项，卸载为破坏性样式且与安全项分隔', async () => {
     const user = userEvent.setup()
-    render(<InstanceCards {...baseProps()} />)
+    renderCards(<InstanceCards {...baseProps()} />)
     await openMenu(user, '虚构乙服')
 
     expect(await screen.findByRole('menuitem', { name: '实例设置' })).toBeInTheDocument()
@@ -315,7 +344,7 @@ describe('InstanceCards', () => {
 
   it('运行中实例的菜单不含「升级版本」（升级要求先停止）', async () => {
     const user = userEvent.setup()
-    render(<InstanceCards {...baseProps()} />)
+    renderCards(<InstanceCards {...baseProps()} />)
     await openMenu(user, '虚构甲服')
 
     expect(await screen.findByRole('menuitem', { name: '实例设置' })).toBeInTheDocument()
@@ -325,7 +354,7 @@ describe('InstanceCards', () => {
   it('菜单「实例设置」回调 onOpenSettings 并携带该实例', async () => {
     const user = userEvent.setup()
     const onOpenSettings = vi.fn()
-    render(<InstanceCards {...baseProps({ onOpenSettings })} />)
+    renderCards(<InstanceCards {...baseProps({ onOpenSettings })} />)
 
     await openMenu(user, '虚构甲服')
     await user.click(await screen.findByRole('menuitem', { name: '实例设置' }))
@@ -336,7 +365,7 @@ describe('InstanceCards', () => {
   it('菜单「升级版本」回调 onUpgrade 并携带该实例', async () => {
     const user = userEvent.setup()
     const onUpgrade = vi.fn()
-    render(<InstanceCards {...baseProps({ onUpgrade })} />)
+    renderCards(<InstanceCards {...baseProps({ onUpgrade })} />)
 
     await openMenu(user, '虚构乙服')
     await user.click(await screen.findByRole('menuitem', { name: '升级版本' }))
@@ -347,7 +376,7 @@ describe('InstanceCards', () => {
   it('菜单「卸载实例」回调 onUninstall 并携带该实例', async () => {
     const user = userEvent.setup()
     const onUninstall = vi.fn()
-    render(<InstanceCards {...baseProps({ onUninstall })} />)
+    renderCards(<InstanceCards {...baseProps({ onUninstall })} />)
 
     await openMenu(user, '虚构甲服')
     await user.click(await screen.findByRole('menuitem', { name: '卸载实例' }))
@@ -358,7 +387,7 @@ describe('InstanceCards', () => {
   it('卸载中：对应卡菜单项禁用 + 「卸载中」，点击不触发；其他卡不受影响', async () => {
     const user = userEvent.setup()
     const onUninstall = vi.fn()
-    render(<InstanceCards {...baseProps({ uninstallingId: 'alpha', onUninstall })} />)
+    renderCards(<InstanceCards {...baseProps({ uninstallingId: 'alpha', onUninstall })} />)
 
     // 卡片面承接在途信号（卸载反馈原挂在行内按钮上，收进菜单后靠触发器 spinner）
     expect(screen.getByRole('button', { name: '虚构甲服 操作菜单' })).toHaveAttribute(
@@ -391,7 +420,7 @@ describe('InstanceCards', () => {
 
   it('空态：提示文案 + 「部署新实例」按钮触发 onDeploy', () => {
     const onDeploy = vi.fn()
-    render(<InstanceCards {...baseProps({ instances: [], onDeploy })} />)
+    renderCards(<InstanceCards {...baseProps({ instances: [], onDeploy })} />)
 
     expect(screen.getByText('暂无已安装的实例')).toBeInTheDocument()
     expect(screen.getByText('使用部署向导创建第一个实例')).toBeInTheDocument()
@@ -400,7 +429,7 @@ describe('InstanceCards', () => {
   })
 
   it('「当前」徽章只出现在当前实例卡内', () => {
-    const { container } = render(<InstanceCards {...baseProps({ currentId: 'beta' })} />)
+    const { container } = renderCards(<InstanceCards {...baseProps({ currentId: 'beta' })} />)
 
     const alphaCard = container.querySelector('[data-instance-id="alpha"]') as HTMLElement
     expect(within(alphaCard).queryByText('当前')).not.toBeInTheDocument()
@@ -417,7 +446,7 @@ describe('InstanceCards', () => {
 describe('InstanceCards 详情失败', () => {
   it('失败且无旧值：给失败提示 + 重试，且版本徽章显「版本未知」而非消失', () => {
     const onRetryDetail = vi.fn()
-    const { container } = render(
+    const { container } = renderCards(
       <InstanceCards
         {...baseProps({
           detailStatuses: {},
@@ -437,7 +466,7 @@ describe('InstanceCards 详情失败', () => {
   })
 
   it('他卡不受影响：未失败的卡既无失败提示也无「版本未知」', () => {
-    const { container } = render(
+    const { container } = renderCards(
       <InstanceCards {...baseProps({ detailErrorIds: new Set(['beta']) })} />,
     )
 
@@ -452,7 +481,7 @@ describe('InstanceCards 详情失败', () => {
     // 「有 detail」的卡即使失败集命中也会走 mcVersion 分支，看不出泄漏；
     // 真正的判定面是**无数据且未失败**的卡——它必须既无提示也无「版本未知」，
     // 否则说明实现用的是 detailErrorIds.size > 0 而非 .has(id)
-    const { container } = render(
+    const { container } = renderCards(
       <InstanceCards
         {...baseProps({
           detailStatuses: {
@@ -474,7 +503,7 @@ describe('InstanceCards 详情失败', () => {
   })
 
   it('有旧值可留时不出失败提示：旧数据仍在卡上，加提示只会打断', () => {
-    const { container } = render(
+    const { container } = renderCards(
       <InstanceCards
         {...baseProps({
           detailErrorIds: new Set(['alpha']),
@@ -507,7 +536,7 @@ describe('InstanceCards 实例事实载体（刷新时机 / 低 TPS / 待重启�
 
   /** 单卡渲染：详情按用例覆盖（caps / tps 是这三条事实的真值来源） */
   function renderOne(detail: Partial<InstanceStatus> = {}) {
-    return render(
+    return renderCards(
       <InstanceCards
         {...baseProps({
           instances: [alpha],
@@ -560,7 +589,7 @@ describe('InstanceCards 实例事实载体（刷新时机 / 低 TPS / 待重启�
 
   it('待重启徽章只出现在置位的那台卡上', () => {
     useRestartPendingStore.setState({ pending: { alpha: Date.now() } })
-    const { container } = render(<InstanceCards {...baseProps()} />)
+    const { container } = renderCards(<InstanceCards {...baseProps()} />)
 
     const alphaCard = container.querySelector('[data-instance-id="alpha"]') as HTMLElement
     const betaCard = container.querySelector('[data-instance-id="beta"]') as HTMLElement
@@ -648,18 +677,18 @@ describe('InstanceCards 实例事实载体（刷新时机 / 低 TPS / 待重启�
       c.querySelector(`[data-instance-id="${id}"]`) as HTMLElement
 
     it('卡片显示该实例自己的连接地址', () => {
-      const { container } = render(<InstanceCards {...baseProps()} />)
+      const { container } = renderCards(<InstanceCards {...baseProps()} />)
       expect(within(card(container)).getByText('1.2.3.4:25565')).toBeInTheDocument()
     })
 
     it('没有详情时不编造地址', () => {
-      const { container } = render(<InstanceCards {...baseProps()} />)
+      const { container } = renderCards(<InstanceCards {...baseProps()} />)
       // beta 无详情数据
       expect(within(card(container, 'beta')).queryByText('玩家连接')).not.toBeInTheDocument()
     })
 
     it('可达性为 blocked 时明确说玩家还连不进来', () => {
-      const { container } = render(
+      const { container } = renderCards(
         <InstanceCards
           {...baseProps({
             detailStatuses: {
@@ -678,7 +707,7 @@ describe('InstanceCards 实例事实载体（刷新时机 / 低 TPS / 待重启�
 
     it('可达或未检测时不打扰（不显示警示）', () => {
       for (const reachability of ['reachable', null, undefined] as const) {
-        const { container, unmount } = render(
+        const { container, unmount } = renderCards(
           <InstanceCards
             {...baseProps({
               detailStatuses: {
@@ -698,7 +727,7 @@ describe('InstanceCards 实例事实载体（刷新时机 / 低 TPS / 待重启�
     })
 
     it('运行中的实例才有检测按钮，已停止不给（端口未监听，测了只会误报）', () => {
-      const { container } = render(<InstanceCards {...baseProps()} />)
+      const { container } = renderCards(<InstanceCards {...baseProps()} />)
       expect(within(card(container)).getByRole('button', { name: '检测' })).toBeInTheDocument()
       // beta 已停止
       expect(within(card(container, 'beta')).queryByRole('button', { name: '检测' })).toBeNull()
@@ -707,17 +736,107 @@ describe('InstanceCards 实例事实载体（刷新时机 / 低 TPS / 待重启�
     it('点检测触发回调并携带实例 id', async () => {
       const user = userEvent.setup()
       const onCheckReachability = vi.fn()
-      const { container } = render(<InstanceCards {...baseProps({ onCheckReachability })} />)
+      const { container } = renderCards(<InstanceCards {...baseProps({ onCheckReachability })} />)
       await user.click(within(card(container)).getByRole('button', { name: '检测' }))
       expect(onCheckReachability).toHaveBeenCalledWith('alpha')
     })
 
     it('检测中按钮转文案并禁用', () => {
-      const { container } = render(
+      const { container } = renderCards(
         <InstanceCards {...baseProps({ checkingReachabilityId: 'alpha' })} />,
       )
       const btn = within(card(container)).getByRole('button', { name: '检测中…' })
       expect(btn).toBeDisabled()
     })
+  })
+})
+
+/**
+ * 熔断提示的恢复出口：只报「自动重启已禁用」而不给入口，用户知道出事了却不知道去哪开。
+ * 本组锁卡片的三个面：只在熔断态出按钮、点击把该卡实例 id 交给页面、在途态转 spinner。
+ * 真正发出去的 PUT 与回执文案由页面持有（instances-page-reenable.test.tsx）。
+ */
+describe('InstanceCards 熔断提示的恢复出口', () => {
+  beforeEach(() => {
+    sonnerToast.dismiss()
+    useConnectionStore.setState({ baseUrl: '', apiKey: 'test-key', status: 'ready' })
+  })
+
+  const withTripped = (overrides: Partial<InstanceCardsProps> = {}) =>
+    baseProps({
+      instances: [alpha],
+      detailStatuses: { alpha: trippedDetail() },
+      onReenableAutoRestart: vi.fn(),
+      ...overrides,
+    })
+
+  it('熔断态：提示里同时给「重新启用自动重启」，并写明崩了几次', () => {
+    const { container } = renderCards(<InstanceCards {...withTripped()} />)
+
+    const alphaCard = container.querySelector('[data-instance-id="alpha"]') as HTMLElement
+    expect(
+      within(alphaCard).getByText('崩溃循环熔断已触发，自动重启已禁用（连续崩溃 3 次）'),
+    ).toBeInTheDocument()
+    const button = within(alphaCard).getByRole('button', { name: '重新启用自动重启' })
+    // 文案/提示写清点下去的后果：重开会同时清崩溃计数、解除熔断
+    expect(button).toHaveAttribute('title', '重新开启自动重启：崩溃计数清零、熔断解除')
+  })
+
+  it('非熔断态：不渲染该按钮（哪怕近期有崩溃）', () => {
+    const { container } = renderCards(
+      <InstanceCards
+        {...withTripped({
+          detailStatuses: {
+            alpha: trippedDetail({ circuitBreakerTripped: false, consecutiveCrashes: 2 }),
+          },
+        })}
+      />,
+    )
+
+    const alphaCard = container.querySelector('[data-instance-id="alpha"]') as HTMLElement
+    expect(
+      within(alphaCard).queryByRole('button', { name: '重新启用自动重启' }),
+    ).not.toBeInTheDocument()
+    // 正向锚点：「近期崩溃」这一行仍在，否定断言不是靠整块消失才成立的
+    expect(within(alphaCard).getByText('近期崩溃 2 次')).toBeInTheDocument()
+  })
+
+  /* 可选回调缺省时只留告警文案：熔断这条事实必须仍在（它是实例状态，不是入口），
+     但按钮不渲染——渲染一个点了没反应的按钮比没有更糟 */
+  it('页面没给回调：仍报熔断，但不渲染按钮', () => {
+    const { container } = renderCards(
+      <InstanceCards {...withTripped({ onReenableAutoRestart: undefined })} />,
+    )
+
+    const alphaCard = container.querySelector('[data-instance-id="alpha"]') as HTMLElement
+    expect(within(alphaCard).getByText(/崩溃循环熔断已触发/)).toBeInTheDocument()
+    expect(
+      within(alphaCard).queryByRole('button', { name: '重新启用自动重启' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('点击把该卡的实例 id 交给页面（不是别的卡）', async () => {
+    const user = userEvent.setup()
+    const onReenableAutoRestart = vi.fn()
+    const { container } = renderCards(<InstanceCards {...withTripped({ onReenableAutoRestart })} />)
+
+    const alphaCard = container.querySelector('[data-instance-id="alpha"]') as HTMLElement
+    await user.click(within(alphaCard).getByRole('button', { name: '重新启用自动重启' }))
+    expect(onReenableAutoRestart).toHaveBeenCalledWith('alpha')
+  })
+
+  it('在途：按钮转「重新启用中」并禁用（防连点）', () => {
+    const { container } = renderCards(<InstanceCards {...withTripped({ reenablingId: 'alpha' })} />)
+
+    const alphaCard = container.querySelector('[data-instance-id="alpha"]') as HTMLElement
+    const btn = within(alphaCard).getByRole('button', { name: /重新启用中/ })
+    expect(btn).toBeDisabled()
+  })
+
+  it('在途的是别的卡：本卡按钮仍可点', () => {
+    const { container } = renderCards(<InstanceCards {...withTripped({ reenablingId: 'beta' })} />)
+
+    const alphaCard = container.querySelector('[data-instance-id="alpha"]') as HTMLElement
+    expect(within(alphaCard).getByRole('button', { name: '重新启用自动重启' })).toBeEnabled()
   })
 })

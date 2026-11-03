@@ -7,17 +7,13 @@ import { logger } from '../utils/logger.js';
 import { collectSnapshot, PerfCaptureError } from '../services/mc-server/perf-collect.js';
 
 /**
- * 性能诊断路由。
+ * 性能诊断路由：POST /instances/:id/perf/snapshot 取一次快照。
  *
- * POST /instances/:id/perf/snapshot —— 取一次快照（同步等到产物落地才返回）。
+ * POST 而非 GET：会触发采集（`/perf start` 写盘、`/jfr start` 开 JVM 录制），不是幂等读取；
+ * GET 可能被预取或重试重放，一次「看性能」变成连开两段录制。
  *
- * 为什么是 POST 而不是 GET：它会在服务器上**触发一次采集**（`/perf start` 会写盘、
- * `/jfr start` 会开一段 JVM 录制），不是幂等的读取。GET 会被浏览器预取、被重试中间件
- * 重放，一次「看性能」变成连开两段录制。
- *
- * 为什么同步等：整个窗口固定（perf 10 秒 / jfr 15 秒），同步返回能让「点一下 → 出结论」
- * 是一条直线，不需要前端轮询 + 服务端存中间态。代价是单次请求可能占十几秒，
- * 前端那条请求的超时必须相应放大。
+ * 同步返回：窗口固定（perf 10 秒 / jfr 15 秒），等产物落地再回，前端不需要轮询与服务端中间态；
+ * 代价是单次请求可能十几秒，前端超时须相应放大。
  */
 export function createPerfRoutes(serverManager) {
   const router = Router();

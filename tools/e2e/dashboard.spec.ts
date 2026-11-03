@@ -81,7 +81,7 @@ test.describe('仪表盘', () => {
     expect(await fontSizeOf(page.getByText('TPS', { exact: true }))).toBe('18px')
   })
 
-  test('最近备份卡：渲染备份行与状态徽章，「全部」跳转设置页备份子路由', async ({ page }) => {
+  test('最近备份卡：渲染备份行与状态徽章，「全部」跳转备份页', async ({ page }) => {
     await setupConnection(page)
     await page.goto('/dashboard')
     // 精确匹配（非子串）：夹具名一旦重新内嵌日期，这里必须变红
@@ -89,10 +89,10 @@ test.describe('仪表盘', () => {
     await expect(page.getByText('失败的备份', { exact: true })).toBeVisible()
     await expect(page.getByText('已就绪', { exact: true })).toBeVisible()
     await expect(page.getByText('失败', { exact: true })).toBeVisible()
-    // 入口必须落在真实子路由 /settings/backup（历史上曾指向不存在的 /settings/backups）
+    // 入口落在侧栏一级的备份页（备份不再是设置子路由）
     await page.getByRole('button', { name: '查看全部备份' }).click()
-    await expect(page).toHaveURL(/\/settings\/backup$/)
-    await expect(page.getByText('备份管理').first()).toBeVisible()
+    await expect(page).toHaveURL(/\/backups$/)
+    await expect(page.getByRole('heading', { name: '备份', level: 2 })).toBeVisible()
   })
 
   test('MC 时钟·世界控制：天气/时间按钮点击即发命令', async ({ page }) => {
@@ -400,5 +400,67 @@ test.describe('仪表盘', () => {
     await expect(page.locator('html')).toHaveClass(/light/)
     await page.waitForTimeout(500)
     await maybeShot(page, 'dashboard-light.png')
+  })
+  test('性能诊断 Sheet：从崩溃指引条的「查卡顿」打开，出一句结论', async ({ page }) => {
+    await setupConnection(page)
+    // 指引条在工具条里，满档需要终端卡容器 ≥750px
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.goto('/dashboard')
+
+    await page.getByRole('button', { name: '查卡顿' }).click()
+
+    const sheet = page.getByRole('dialog')
+    await expect(sheet).toBeVisible()
+    // 标题与「这是一次取样」的说明都在首屏
+    await expect(sheet.getByRole('heading', { name: '性能诊断' })).toBeVisible()
+
+    await sheet.getByRole('button', { name: /取一次快照/ }).click()
+
+    // 结论是一句人话，而不是让用户自己读数据表
+    await expect(sheet.getByRole('heading', { name: /没发现瓶颈/ })).toBeVisible()
+    // 取样口径必须诚实标注：不能让人以为是持续监控
+    await expect(sheet.getByTestId('perf-window')).toContainText('不会自动更新')
+    // 佐证区与原始产物都在
+    await expect(sheet.getByTestId('perf-verdict')).toBeVisible()
+    await expect(sheet.getByRole('button', { name: /下载产物/ })).toBeVisible()
+  })
+
+  test('性能诊断 Sheet：Esc 关闭后重开仍可再取一次', async ({ page }) => {
+    await setupConnection(page)
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.goto('/dashboard')
+
+    await page.getByRole('button', { name: '查卡顿' }).click()
+    const sheet = page.getByRole('dialog')
+    await expect(sheet).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(page.getByRole('dialog')).toBeHidden()
+
+    // 入口仍可用（关闭只清 store，不留残态）
+    await page.getByRole('button', { name: '查卡顿' }).click()
+    await expect(page.getByRole('dialog')).toBeVisible()
+    await expect(page.getByRole('button', { name: /取一次快照/ })).toBeEnabled()
+  })
+
+  // Sheet 覆盖基座的 sm:max-w-sm（384px）：三列表格与结论正文在这个宽度下会挤成
+  // 每列几个字符。锁住窄视口下它仍占满可用宽（w-full）
+  test('性能诊断 Sheet：375px 视口下占满宽度而不是被压到 384px 上限', async ({ page }) => {
+    await setupConnection(page)
+    await page.setViewportSize({ width: 375, height: 812 })
+    await page.goto('/dashboard')
+
+    // 窄屏下崩溃指引条整条不渲染（见另一组用例），改从实例卡的操作菜单进入
+    await page.goto('/instances')
+    await page
+      .getByRole('button', { name: /操作菜单/ })
+      .first()
+      .click()
+    await page.getByRole('menuitem', { name: '性能体检' }).click()
+
+    const sheet = page.getByRole('dialog')
+    await expect(sheet).toBeVisible()
+    const box = (await sheet.boundingBox())!
+    // 占满视口宽（基座 w-3/4 会把 375 压到 281px）
+    expect(box.width).toBeGreaterThan(375 * 0.9)
   })
 })

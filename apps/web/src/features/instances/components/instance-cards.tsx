@@ -16,12 +16,14 @@
  * （串用现场见 app-topbar 的注释）。刷新时机的判据与文案唯一声明源是 lib/instance-refresh。
  */
 import {
+  Activity,
   ArrowRightLeft,
   ArrowUpCircle,
   Loader2,
   MoreHorizontal,
   Play,
   RefreshCw,
+  RotateCcw,
   Server,
   Settings,
   ShieldAlert,
@@ -31,6 +33,7 @@ import {
   TriangleAlert,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { useUiStore } from '@/stores/ui'
 import { copyText } from '@/lib/clipboard'
 import { useEffect, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
@@ -50,6 +53,7 @@ import { instanceRefreshMark } from '@/lib/instance-refresh'
 import { tpsLevel } from '@/lib/mc-tps'
 import { SEMANTIC_TONE_CLASSES } from '@/components/mcs/tone'
 import { StatusPill } from '@/components/mcs/status-pill'
+import { LoadingButton } from '@/components/mcs/loading-button'
 import { Card } from '@/components/mcs/card'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
 import { EmptyState } from '@/components/mcs/empty-state'
@@ -116,6 +120,10 @@ export interface InstanceCardsProps {
   onCheckReachability?: (id: string) => void
   /** 正在检测的实例 id（按钮转「检测中」并禁用） */
   checkingReachabilityId?: string | null
+  /** 熔断后重新启用自动重启；页面负责写接口与失效缓存 */
+  onReenableAutoRestart?: (id: string) => void
+  /** 正在重新启用的实例 id（该卡按钮转「重新启用中」并禁用） */
+  reenablingId?: string | null
 }
 
 export function InstanceCards({
@@ -139,6 +147,8 @@ export function InstanceCards({
   remainingMemoryText,
   onCheckReachability,
   checkingReachabilityId,
+  onReenableAutoRestart,
+  reenablingId,
 }: InstanceCardsProps) {
   if (instances.length === 0) {
     return (
@@ -179,6 +189,10 @@ export function InstanceCards({
             onCheckReachability ? () => onCheckReachability(instance.id) : undefined
           }
           checkingReachability={checkingReachabilityId === instance.id}
+          onReenableAutoRestart={
+            onReenableAutoRestart ? () => onReenableAutoRestart(instance.id) : undefined
+          }
+          reenabling={reenablingId === instance.id}
           className={`animate-mcs-fade-up mcs-delay-${Math.min(index + 1, 6)}`}
         />
       ))}
@@ -213,6 +227,8 @@ function InstanceCard({
   onRestart,
   onCheckReachability,
   checkingReachability,
+  onReenableAutoRestart,
+  reenabling,
   className,
 }: {
   instance: InstanceSummary
@@ -236,6 +252,10 @@ function InstanceCard({
   /** 现测玩家可达性（页面负责调接口与刷新详情） */
   onCheckReachability?: () => void
   checkingReachability?: boolean
+  /** 熔断后重新启用自动重启（页面负责写接口与失效缓存） */
+  onReenableAutoRestart?: () => void
+  /** 重新启用请求在途（按钮转「重新启用中」并禁用） */
+  reenabling?: boolean
   /** 入场 stagger（页面组合处注入，组件内不内嵌动效类） */
   className?: string
 }) {
@@ -245,6 +265,7 @@ function InstanceCard({
   const mcVersion = detail?.mcVersion
   // 升级中标识：WS 订阅补发/实时事件驱动；终态残留不误显示
   // （终态 store 清理由升级弹窗打开时做，卡片只认非终态）
+  const setPerfSheetInstanceId = useUiStore((s) => s.setPerfSheetInstanceId)
   const upgradeStage = useUpgradeStore((s) => s.progress[id]?.stage)
   const upgrading = upgradeStage != null && !isUpgradeTerminal(upgradeStage)
   /* 待重启生效：置位在实例设置弹窗保存时，清除见下面两条（WS 事件 + 按详情判）。 */
@@ -270,6 +291,9 @@ function InstanceCard({
         ? SEMANTIC_TONE_CLASSES.warning.text
         : undefined
 
+  /* 熔断复位：PUT autoRestart=true 交由服务端一并清崩溃计数、解除熔断（读侧不自行推断，
+     详情刷新后熔断态自然消失）。写与失效都由页面持有——本组件只负责把入口摆在提示旁，
+     与 onStop/onRestart 同构；在途态由页面经 reenabling 传入，卡片据此转 spinner */
   return (
     <Card
       as="div"
@@ -450,10 +474,31 @@ function InstanceCard({
         </NoticeBanner>
       )}
 
-      {/* 熔断告警行 */}
+      {/* 熔断告警行：出口必须在提示旁——只报「自动重启已禁用」而不给入口，
+          用户知道出事了却不知道去哪开，而重开这件事只存在于另一个页面 */}
       {detail?.circuitBreakerTripped && (
         <NoticeBanner variant="error" icon={ShieldAlert}>
-          崩溃循环熔断已触发，自动重启已禁用
+          <span className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
+            <span>
+              崩溃循环熔断已触发，自动重启已禁用（连续崩溃 {detail.consecutiveCrashes} 次）
+            </span>
+            {/* 文案写点下去的**后果**：这次 PUT 除了重开 autoRestart，还会把崩溃计数清零并解除
+                熔断（服务端 status.js 在同一分支里做）。只说「重新启用」会让人以为历史还在、
+                下次再崩就立刻熔断，实际是从零开始计数 */}
+            {onReenableAutoRestart && (
+              <LoadingButton
+                variant="outline"
+                size="xs"
+                loading={reenabling}
+                loadingText="重新启用中…"
+                title="重新开启自动重启：崩溃计数清零、熔断解除"
+                onClick={onReenableAutoRestart}
+              >
+                <RotateCcw aria-hidden />
+                重新启用自动重启
+              </LoadingButton>
+            )}
+          </span>
         </NoticeBanner>
       )}
       {detail && !detail.circuitBreakerTripped && detail.consecutiveCrashes > 0 && (
@@ -545,6 +590,14 @@ function InstanceCard({
               （onClick 被原样组合到 DOM 上，仅靠 data-disabled:pointer-events-none 兜底），
               卸载中的禁用必须由 JS 拦住第二次请求，不能只依赖一条工具类 */}
           <DropdownMenuContent align="end">
+            {/* 体检放菜单里而非操作行：它是**低频主动动作**（用户怀疑卡了才查一次），
+                与停止/重启这类日常操作不同级。操作行已有 2–3 个按钮 + 菜单触发器，
+                再塞一枚会把它挤成「每行都是按钮」；而菜单正是用户「想对这台服做点什么」
+                时会点开的地方 */}
+            <DropdownMenuItem onSelect={() => setPerfSheetInstanceId(instance.id)}>
+              <Activity aria-hidden />
+              性能体检
+            </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => onOpenSettings(instance)}>
               <Settings aria-hidden />
               实例设置

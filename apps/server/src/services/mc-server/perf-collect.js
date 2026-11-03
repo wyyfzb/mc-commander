@@ -1,9 +1,8 @@
 /**
  * 性能快照采集域：经 RCON 触发 `/perf` 或 `/jfr`，把落地产物读成一次结论。
  *
- * 两条命令都是**一次性取样**，不是持续监控：`/perf start` 固定采 10 秒后自己压包落地，
- * `/jfr` 从 start 到 stop 之间录制。所以面板这里的形态是「点一次 → 等窗口 → 出结论」，
- * 界面上必须说清这是一次取样（见 perf.ts 契约的 windowMs）。
+ * 两条命令都是**一次性取样**：`/perf start` 固定采 10 秒后自己压包落地，`/jfr` 从 start
+ * 到 stop 之间录制。故形态是「点一次 → 等窗口 → 出结论」，界面须说清这是一次取样。
  *
  * 产物落点是**命令自己写的**，回包不携带可靠路径，故不能靠回包判断成败：
  * - `/perf start` 立刻回一句「已开始」，ZIP 在 10 秒后才出现在 `debug/profiling/`；
@@ -20,6 +19,7 @@ import fs from 'fs';
 import path from 'path';
 import AdmZip from 'adm-zip';
 import { logger } from '../../utils/logger.js';
+import { PERF_SNAPSHOT_WINDOW_MS } from '@mc-commander/schemas';
 import {
   countCsvRows,
   deriveJfrVerdict,
@@ -36,8 +36,9 @@ import {
 /**
  * 服务端侧 `/perf` 的固定窗口（命令自身写死 10 秒，面板无从缩短或延长）。
  * 导出是因为它带下界语义：落地等待必须覆盖它，改小了会在窗口还没走完时就判超时。
+ * 数值取自契约包：界面的等待提示由同一份派生，两端各写一份时改一处就开始骗人。
  */
-export const PERF_SERVER_WINDOW_MS = 10_000;
+export const PERF_SERVER_WINDOW_MS = PERF_SNAPSHOT_WINDOW_MS.perf;
 /** 等 ZIP 落地的上限：窗口 10 秒 + 压缩与磁盘写入，留三倍余量 */
 export const PERF_DONE_TIMEOUT_MS = 30_000;
 /**
@@ -47,7 +48,7 @@ export const PERF_DONE_TIMEOUT_MS = 30_000;
  * 退化成同一个值（实测 452 ms 的录制里 p50=p75=p90=p99=max，当分布看就是错的）。
  * 导出是为了让「窗口不得低于下界」这条性质有用例守着——它不是可随手调小的魔数。
  */
-export const JFR_WINDOW_MS = 15_000;
+export const JFR_WINDOW_MS = PERF_SNAPSHOT_WINDOW_MS.jfr;
 /** 等 summary 落地的上限 */
 export const JFR_DONE_TIMEOUT_MS = 20_000;
 /** 轮询间隔：产物是「几十 KB 的文件出现」，500 ms 足够且不会把磁盘打满 */
@@ -188,8 +189,7 @@ export function readPerfArchive(zipPath) {
   const heap = summarizeHeap(heapSamples, system?.heapMaxMiB ?? null);
 
   // 维度清单从 levels/ 下的目录名取，不写死三个：模组可以新增维度。
-  // 命名空间也必须从产物里取——模组维度的目录是 `levels/<命名空间>/<维度>/`，
-  // 回读时写死 `minecraft/` 会让这些维度静默变成 0 区块 0 实体。
+  // 命名空间也从产物里取：模组维度是 `levels/<命名空间>/<维度>/`
   const dimensions = [];
   for (const entry of zip.getEntries()) {
     const match = /^(server\/levels\/([^/]+)\/([^/]+))\/chunks\.csv$/.exec(entry.entryName);

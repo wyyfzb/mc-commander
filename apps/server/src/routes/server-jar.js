@@ -461,10 +461,8 @@ export function createServerJarRoutes(serverManager) {
               ),
             ),
           ]
-            // 只保留版本号形态，不按主版本前缀过滤：MC 26.x 起主版本号不再是 1，
-            // 而 promotions 的键里除了版本号还有 `1.20.1-recommended` 这类已剥掉后缀的
-            // 纯版本号与少量非版本键。写死 `startsWith('1.')` 会把 26.1/26.2/26.3
-            // 整批丢掉，用户在 Forge 下拉里根本选不到这些版本（能力存在但不可达）。
+            // 只保留版本号形态：promotions 的键里除版本号还有 `1.20.1-recommended`
+            // 这类带后缀的键与少量非版本键。按主版本前缀筛会漏掉 MC 26.x（主版本不再是 1）
             .filter((v) => /^\d+(\.\d+)*$/.test(v))
             .reverse()
             .slice(0, 30);

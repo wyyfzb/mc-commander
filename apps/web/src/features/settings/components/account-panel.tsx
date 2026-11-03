@@ -1,5 +1,5 @@
 /**
- * AccountPanel —— 设置页「账号与安全」面板（安全主线）
+ * AccountPanel —— 设置页「登录与密码」面板（安全主线）
  * - 当前身份卡：会话登录（Bearer）/ API Key 直连 双模式徽章 + 会话到期时间
  * - 修改密码：验旧密改新密；服务端踢其余会话保留当前（响应 kickedSessions）
  * - 未提交密码输入接入 useUnsavedGuard（与同页 connection-form 同模式），路由离开前确认

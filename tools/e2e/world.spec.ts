@@ -32,6 +32,19 @@ async function setupConnection(page: Page) {
 }
 
 test.describe('世界页', () => {
+  /* 页头 description 只列本页真有的三项：写上一项本页没有的功能就是假承诺，用户按描述
+     找会落空。同时锁住备份按钮的去向——它是通往侧栏「备份」页的入口，不是设置子页。 */
+  test('页头描述只列本页真有的功能，备份按钮落 /backups', async ({ page }) => {
+    await setupConnection(page)
+    await page.goto('/world')
+    await expect(page.getByText('服务器属性 · 游戏规则 · 数据包')).toBeVisible()
+    await expect(page.getByText(/服务器属性 · 游戏规则 · 存档/)).toHaveCount(0)
+
+    await page.getByRole('button', { name: '备份管理' }).click()
+    await expect(page).toHaveURL(/\/backups$/)
+    await expect(page.getByRole('heading', { name: '备份', level: 2 })).toBeVisible()
+  })
+
   test('左栏世界信息卡 + 维度卡渲染', async ({ page }) => {
     await setupConnection(page)
     await page.goto('/world')

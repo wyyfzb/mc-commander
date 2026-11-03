@@ -6,16 +6,14 @@ import {
   CircleHelp,
   LayoutDashboard,
   LayoutGrid,
-  Activity,
   Users,
   Globe,
   FolderOpen,
   CalendarClock,
+  History,
   Puzzle,
   Server,
   Settings,
-  ScrollText,
-  Webhook as WebhookIcon,
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -47,12 +45,10 @@ const PRIMARY_NAV: NavItem[] = [
   { to: '/world', label: '世界', icon: Globe },
   { to: '/files', label: '文件', icon: FolderOpen },
   { to: '/tasks', label: '任务', icon: CalendarClock },
+  { to: '/backups', label: '备份', icon: History },
   { to: '/plugins', label: '插件', icon: Puzzle },
   { to: '/instances', label: '实例', icon: Server },
   { to: '/fleet', label: '全局总览', icon: LayoutGrid },
-  { to: '/diagnostics', label: '性能诊断', icon: Activity },
-  { to: '/webhooks', label: 'Webhook', icon: WebhookIcon },
-  { to: '/audit', label: '审计日志', icon: ScrollText },
 ]
 
 // 底部辅助区与「设置」并列：帮助是查阅型静态内容，不进日常操作主序列

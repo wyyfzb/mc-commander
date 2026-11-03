@@ -42,6 +42,62 @@ const CRASH_ARTIFACT = {
   stack: ['at net.minecraft.server.MinecraftServer.tick(MinecraftServer.java:1)'],
 }
 
+// 性能快照夹具：形状照 apps/schemas/src/perf.ts 的 perfSnapshotResponseSchema。
+// 结论取 healthy 而不是 critical —— e2e 要断言「点一下能出结论」这条链路，
+// 造一份故障数据会让截图与断言的意图混在一起（故障档由单测覆盖）。
+const PERF_SNAPSHOT = {
+  kind: 'perf',
+  collectedAt: '2026-10-07T09:20:00.000Z',
+  windowMs: 10013,
+  verdict: {
+    level: 'healthy',
+    headline: '没发现瓶颈：耗时与内存都还有余量',
+    detail: '单刻平均耗时 0.1 ms（预算 50 ms）；堆峰值 197 MiB，占上限 19.2%。',
+    findings: [
+      {
+        label: '单刻平均耗时',
+        value: '0.1 ms',
+        hint: '20 TPS 的单刻预算是 50 ms，越接近越容易掉刻',
+      },
+      { label: '堆峰值占用', value: '197 / 1024 MiB（19.2%）', hint: '口径是已用堆，不是已提交' },
+    ],
+  },
+  perf: {
+    mcVersion: '26.3',
+    javaVersion: '25.0.5, Amazon.com Inc.',
+    cpus: 4,
+    processCpuPercent: 17.55,
+    tick: {
+      averageMs: 0.129312,
+      p99Ms: 0.2,
+      maxMs: 0.25,
+      samples: 100,
+      tickSpan: 201,
+      timeSpanMs: 10013,
+      ticksPerSecond: 20.07,
+    },
+    heap: {
+      usedPeakMiB: 197.01,
+      usedStartMiB: 194.91,
+      usedEndMiB: 197.01,
+      maxMiB: 1024,
+      usedPeakPercent: 19.24,
+      samples: 201,
+    },
+    hotspots: [
+      { name: 'unspecified', sharePercent: 93.66 },
+      { name: 'scheduledPacketProcessing', sharePercent: 6.34 },
+    ],
+    dimensions: [
+      { name: 'overworld', chunks: 12, entities: 140 },
+      { name: 'the_nether', chunks: 0, entities: 0 },
+    ],
+  },
+  jfr: null,
+  archivePath: 'debug/profiling/2026-10-07_09_20_00-world-26_3.zip',
+  parseWarnings: [],
+}
+
 const CRASH_HISTORY_ITEMS = [
   {
     kind: 'crash-report',
@@ -1035,7 +1091,7 @@ const server = createServer((req, res) => {
     }
     if (path === '/api/v1/instances') return res.end(ok([instanceView(req)]))
     if (path === '/api/v1/instances/e2e-demo') {
-      // PUT：实例配置更新（general-panel autoRestart 用；合并白名单字段）
+      // PUT：实例配置更新（实例设置弹窗的 autoRestart 用；合并白名单字段）
       if (req.method === 'PUT') {
         try {
           Object.assign(instance, JSON.parse(body || '{}'))
@@ -1459,6 +1515,55 @@ const server = createServer((req, res) => {
       return res.end(
         ok({ instanceId: 'e2e-demo', cancelled: true }, 'Upgrade cancellation requested'),
       )
+    }
+
+    // 性能快照：一条端点覆盖 perf 与 jfr 两档（请求体 kind 决定返回哪份 detail）。
+    // 采集在真服务端要等 10–15 秒，mock 直接返回即可——e2e 验的是入口与呈现链路，
+    // 不是服务端的采集时序（时序由服务端单测用假定时器覆盖）。
+    const perfMatch = /^\/api\/v1\/instances\/([^/]+)\/perf\/snapshot$/.exec(path)
+    if (perfMatch && req.method === 'POST') {
+      // 实例不存在必须与真服务端同答（404）：mock 对任意 id 都回一份合法快照时，
+      // 前端「把请求打到错的实例上」这类缺陷在 e2e 里永远绿
+      if (perfMatch[1] !== instance.id) {
+        res.statusCode = 404
+        return res.end(err(40401, '实例不存在'))
+      }
+      // 复用顶层已聚合好的 body：再注册一次 req.on('data')/'end' 会永远等不到第二次 end，
+      // 请求挂住直到超时（真实症状是「请求的资源不存在」，因为挂起的请求被 404 兜底接走）
+      let kind = 'perf'
+      try {
+        kind = JSON.parse(body || '{}').kind ?? 'perf'
+      } catch {
+        // 非法请求体按缺省档处理：mock 不承担校验职责
+      }
+      if (kind === 'jfr') {
+        return res.end(
+          ok({
+            ...PERF_SNAPSHOT,
+            kind: 'jfr',
+            windowMs: 15368,
+            perf: null,
+            jfr: {
+              durationMs: 15368,
+              gcCount: 2,
+              gcOverheadPercent: 0.015,
+              gcTotalDurationMs: 236,
+              allocationRateMiBPerSecond: 0.07,
+              cpuJvmAveragePercent: 0.0003,
+              tickAverageMs: 0.163,
+              tickMaxMs: 0.163,
+            },
+            verdict: {
+              level: 'healthy',
+              headline: '没发现垃圾回收压力：GC 开销很低',
+              detail: '窗口内 GC 开销 0.02%，累计 236 ms。',
+              findings: [{ label: 'GC 开销占比', value: '0%', hint: '窗口内共 2 次回收' }],
+            },
+            archivePath: 'debug/jfr-report-server-2026-10-07-092000.json',
+          }),
+        )
+      }
+      return res.end(ok(PERF_SNAPSHOT))
     }
 
     // ── 世界/属性域 ──
