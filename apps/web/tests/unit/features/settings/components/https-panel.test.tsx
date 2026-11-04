@@ -39,9 +39,18 @@ describe('HttpsPanel', () => {
       'fetch',
       vi.fn(
         async () =>
-          new Response(JSON.stringify({ status: 'ok', code: 0, data: ENABLED_STATUS }), {
-            headers: { 'content-type': 'application/json' },
-          }),
+          new Response(
+            JSON.stringify({
+              status: 'ok',
+              code: 0,
+              message: 'Success',
+              data: ENABLED_STATUS,
+              timestamp: new Date().toISOString(),
+            }),
+            {
+              headers: { 'content-type': 'application/json' },
+            },
+          ),
       ),
     )
   })
@@ -85,9 +94,18 @@ describe('HttpsPanel', () => {
       vi.fn(async () => {
         call += 1
         if (call === 1) {
-          return new Response(JSON.stringify({ status: 'ok', code: 0, data: ENABLED_STATUS }), {
-            headers: { 'content-type': 'application/json' },
-          })
+          return new Response(
+            JSON.stringify({
+              status: 'ok',
+              code: 0,
+              message: 'Success',
+              data: ENABLED_STATUS,
+              timestamp: new Date().toISOString(),
+            }),
+            {
+              headers: { 'content-type': 'application/json' },
+            },
+          )
         }
         throw new TypeError('Failed to fetch')
       }),
@@ -110,7 +128,9 @@ describe('HttpsPanel', () => {
             JSON.stringify({
               status: 'ok',
               code: 0,
+              message: 'Success',
               data: { ...ENABLED_STATUS, enabled: false, disabledReason: '系统缺少 openssl 命令' },
+              timestamp: new Date().toISOString(),
             }),
             { headers: { 'content-type': 'application/json' } },
           ),

@@ -21,13 +21,25 @@ const server = setupServer(
   }),
   http.get('http://localhost:25566/api/v1/backups/2/download', () => {
     return HttpResponse.json(
-      { status: 'error', code: 40000, message: 'Validation failed', details: null },
+      {
+        status: 'error',
+        code: 40000,
+        message: 'Validation failed',
+        details: null,
+        timestamp: new Date().toISOString(),
+      },
       { status: 400 },
     )
   }),
   http.get('http://localhost:25566/api/v1/backups/999/download', () => {
     return HttpResponse.json(
-      { status: 'error', code: 40402, message: 'Backup not found', details: null },
+      {
+        status: 'error',
+        code: 40402,
+        message: 'Backup not found',
+        details: null,
+        timestamp: new Date().toISOString(),
+      },
       { status: 404 },
     )
   }),
@@ -109,7 +121,13 @@ describe('apiDownloadBackup', () => {
     server.use(
       http.get('http://localhost:25566/api/v1/backups/1/download', () =>
         HttpResponse.json(
-          { status: 'error', code: 40103, message: 'session expired', details: null },
+          {
+            status: 'error',
+            code: 40103,
+            message: 'session expired',
+            details: null,
+            timestamp: new Date().toISOString(),
+          },
           { status: 401 },
         ),
       ),

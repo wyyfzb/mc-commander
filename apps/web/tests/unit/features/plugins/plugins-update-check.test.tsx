@@ -49,12 +49,24 @@ let updateStatus = 200
 const server = setupServer(
   http.post('/api/v1/instances/demo/plugins/check-updates', () =>
     HttpResponse.json(
-      { status: 'ok', code: 0, message: 'ok', data: UPDATE_FIXTURE },
+      {
+        status: 'ok',
+        code: 0,
+        message: 'ok',
+        data: UPDATE_FIXTURE,
+        timestamp: new Date().toISOString(),
+      },
       { status: updateStatus },
     ),
   ),
   http.get('/api/v1/instances/demo/plugins', () =>
-    HttpResponse.json({ status: 'ok', code: 0, message: 'ok', data: { plugins: [] } }),
+    HttpResponse.json({
+      status: 'ok',
+      code: 0,
+      message: 'ok',
+      data: { plugins: [] },
+      timestamp: new Date().toISOString(),
+    }),
   ),
 )
 
@@ -109,7 +121,12 @@ describe('apiCheckPluginUpdates', () => {
     server.use(
       http.post('/api/v1/instances/demo/plugins/check-updates', () =>
         HttpResponse.json(
-          { status: 'error', code: 50301, message: 'Modrinth upstream error' },
+          {
+            status: 'error',
+            code: 50301,
+            message: 'Modrinth upstream error',
+            timestamp: new Date().toISOString(),
+          },
           { status: 502 },
         ),
       ),
@@ -138,7 +155,13 @@ describe('MarketSheet initialQuery（更新徽章直达搜索）', () => {
     server.use(
       http.get('/api/v1/instances/demo/plugins/market/search', ({ request }) => {
         requestedQ = new URL(request.url).searchParams.get('q')
-        return HttpResponse.json({ status: 'ok', code: 0, message: 'ok', data: SEARCH_FIXTURE })
+        return HttpResponse.json({
+          status: 'ok',
+          code: 0,
+          message: 'ok',
+          data: SEARCH_FIXTURE,
+          timestamp: new Date().toISOString(),
+        })
       }),
     )
     renderSheet({ initialQuery: 'EssentialsX' })
@@ -153,7 +176,13 @@ describe('MarketSheet initialQuery（更新徽章直达搜索）', () => {
     server.use(
       http.get('/api/v1/instances/demo/plugins/market/search', ({ request }) => {
         requestedQ = new URL(request.url).searchParams.get('q')
-        return HttpResponse.json({ status: 'ok', code: 0, message: 'ok', data: SEARCH_FIXTURE })
+        return HttpResponse.json({
+          status: 'ok',
+          code: 0,
+          message: 'ok',
+          data: SEARCH_FIXTURE,
+          timestamp: new Date().toISOString(),
+        })
       }),
     )
     renderSheet()
@@ -166,7 +195,13 @@ describe('MarketSheet initialQuery（更新徽章直达搜索）', () => {
     server.use(
       http.get('/api/v1/instances/demo/plugins/market/search', ({ request }) => {
         requestedQ = new URL(request.url).searchParams.get('q')
-        return HttpResponse.json({ status: 'ok', code: 0, message: 'ok', data: SEARCH_FIXTURE })
+        return HttpResponse.json({
+          status: 'ok',
+          code: 0,
+          message: 'ok',
+          data: SEARCH_FIXTURE,
+          timestamp: new Date().toISOString(),
+        })
       }),
     )
     const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })

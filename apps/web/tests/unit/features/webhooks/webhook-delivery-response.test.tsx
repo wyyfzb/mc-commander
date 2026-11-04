@@ -282,7 +282,12 @@ describe('WebhookPage 投递日志错误态', () => {
     server.use(
       http.get('*/api/v1/webhooks/1/deliveries', () =>
         HttpResponse.json(
-          { status: 'error', code: 500, message: 'internal error' },
+          {
+            status: 'error',
+            code: 500,
+            message: 'internal error',
+            timestamp: new Date().toISOString(),
+          },
           { status: 500 },
         ),
       ),

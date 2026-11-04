@@ -79,7 +79,17 @@ describe('RecentBackupsCard', () => {
 
   it('空态：显示引导文案，入口跳转备份页', async () => {
     const user = userEvent.setup()
-    server.use(http.get(BACKUPS_URL, () => HttpResponse.json({ status: 'ok', data: [] })))
+    server.use(
+      http.get(BACKUPS_URL, () =>
+        HttpResponse.json({
+          status: 'ok',
+          code: 0,
+          message: 'Success',
+          data: [],
+          timestamp: new Date().toISOString(),
+        }),
+      ),
+    )
     renderCard()
     await waitFor(() => expect(screen.getByText('暂无备份记录')).toBeInTheDocument())
 

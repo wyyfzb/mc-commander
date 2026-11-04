@@ -98,7 +98,13 @@ describe('PlayersPage', () => {
   it('无实例：实例门替换整页，不谎报「暂无在线玩家」', async () => {
     server.use(
       http.get('*/api/v1/instances', () =>
-        HttpResponse.json({ status: 'ok', code: 0, message: 'Success', data: [] }),
+        HttpResponse.json({
+          status: 'ok',
+          code: 0,
+          message: 'Success',
+          data: [],
+          timestamp: new Date().toISOString(),
+        }),
       ),
     )
     useServerStore.setState({ instanceId: null })

@@ -150,16 +150,34 @@ let marketSearchUrls: string[] = []
 
 const server = setupServer(
   http.get('/api/v1/instances/demo/plugins/market/profile', () =>
-    HttpResponse.json({ status: 'ok', code: 0, message: 'ok', data: PROFILE_FIXTURE }),
+    HttpResponse.json({
+      status: 'ok',
+      code: 0,
+      message: 'ok',
+      data: PROFILE_FIXTURE,
+      timestamp: new Date().toISOString(),
+    }),
   ),
   http.get('/api/v1/instances/demo/mods', () =>
-    HttpResponse.json({ status: 'ok', code: 0, message: 'ok', data: { plugins: MODS_FIXTURE } }),
+    HttpResponse.json({
+      status: 'ok',
+      code: 0,
+      message: 'ok',
+      data: { plugins: MODS_FIXTURE },
+      timestamp: new Date().toISOString(),
+    }),
   ),
   http.get('/api/v1/instances/demo/plugins', () => {
     pluginsListCalls += 1
     // 模组实例读 plugins/ 是把路径当成了寻址手段：这张表不该被拉到
     return HttpResponse.json(
-      { status: 'ok', code: 0, message: 'ok', data: { plugins: [] } },
+      {
+        status: 'ok',
+        code: 0,
+        message: 'ok',
+        data: { plugins: [] },
+        timestamp: new Date().toISOString(),
+      },
       { status: 500 },
     )
   }),
@@ -170,17 +188,36 @@ const server = setupServer(
       code: 0,
       message: 'ok',
       data: { deleted: String(params.file) },
+      timestamp: new Date().toISOString(),
     })
   }),
   http.get('/api/v1/instances/demo/plugins/market/search', ({ request }) => {
     marketSearchUrls.push(request.url)
-    return HttpResponse.json({ status: 'ok', code: 0, message: 'ok', data: SEARCH_FIXTURE })
+    return HttpResponse.json({
+      status: 'ok',
+      code: 0,
+      message: 'ok',
+      data: SEARCH_FIXTURE,
+      timestamp: new Date().toISOString(),
+    })
   }),
   http.get('/api/v1/instances/demo/plugins/market/projects/:slug/versions', () =>
-    HttpResponse.json({ status: 'ok', code: 0, message: 'ok', data: VERSIONS_FIXTURE }),
+    HttpResponse.json({
+      status: 'ok',
+      code: 0,
+      message: 'ok',
+      data: VERSIONS_FIXTURE,
+      timestamp: new Date().toISOString(),
+    }),
   ),
   http.post('/api/v1/instances/demo/plugins/market/install', () =>
-    HttpResponse.json({ status: 'ok', code: 0, message: 'ok', data: INSTALL_RESULT }),
+    HttpResponse.json({
+      status: 'ok',
+      code: 0,
+      message: 'ok',
+      data: INSTALL_RESULT,
+      timestamp: new Date().toISOString(),
+    }),
   ),
 )
 
@@ -269,6 +306,7 @@ describe('PluginsPage 模组模式', () => {
         meta: null,
         overwritten: false,
       },
+      timestamp: new Date().toISOString(),
     })
     expect(await screen.findByText(/落入 mods\//)).toBeInTheDocument()
   })
@@ -294,10 +332,17 @@ describe('PluginsPage 模组模式', () => {
           code: 0,
           message: 'ok',
           data: { kind: 'plugin', loader: null },
+          timestamp: new Date().toISOString(),
         }),
       ),
       http.get('/api/v1/instances/demo/plugins', () =>
-        HttpResponse.json({ status: 'ok', code: 0, message: 'ok', data: { plugins: [] } }),
+        HttpResponse.json({
+          status: 'ok',
+          code: 0,
+          message: 'ok',
+          data: { plugins: [] },
+          timestamp: new Date().toISOString(),
+        }),
       ),
     )
     renderPage()
@@ -345,7 +390,12 @@ describe('MarketSheet 模组模式', () => {
     server.use(
       http.post('/api/v1/instances/demo/plugins/market/install', () =>
         HttpResponse.json(
-          { status: 'error', code: 40912, message: 'Mod file already exists' },
+          {
+            status: 'error',
+            code: 40912,
+            message: 'Mod file already exists',
+            timestamp: new Date().toISOString(),
+          },
           { status: 409 },
         ),
       ),

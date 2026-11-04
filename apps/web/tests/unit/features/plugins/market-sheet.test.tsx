@@ -80,7 +80,13 @@ let installBody: { slug?: string; versionNumber?: string } | undefined
 
 const server = setupServer(
   http.get('/api/v1/instances/demo/plugins', () =>
-    HttpResponse.json({ status: 'ok', code: 0, message: 'ok', data: { plugins: [] } }),
+    HttpResponse.json({
+      status: 'ok',
+      code: 0,
+      message: 'ok',
+      data: { plugins: [] },
+      timestamp: new Date().toISOString(),
+    }),
   ),
   http.get('/api/v1/instances/demo/plugins/market/search', ({ request }) => {
     const url = new URL(request.url)
@@ -93,16 +99,28 @@ const server = setupServer(
         requestedQ: url.searchParams.get('q'),
         gameVersion: url.searchParams.get('game_version'),
       },
+      timestamp: new Date().toISOString(),
     })
   }),
   http.get('/api/v1/instances/demo/plugins/market/projects/:slug/versions', () =>
-    HttpResponse.json({ status: 'ok', code: 0, message: 'ok', data: VERSIONS_FIXTURE }),
+    HttpResponse.json({
+      status: 'ok',
+      code: 0,
+      message: 'ok',
+      data: VERSIONS_FIXTURE,
+      timestamp: new Date().toISOString(),
+    }),
   ),
   http.post('/api/v1/instances/demo/plugins/market/install', async ({ request }) => {
     installBody = (await request.json()) as { slug?: string; versionNumber?: string }
     if (installStatus === 409) {
       return HttpResponse.json(
-        { status: 'error', code: 40912, message: 'Plugin file already exists' },
+        {
+          status: 'error',
+          code: 40912,
+          message: 'Plugin file already exists',
+          timestamp: new Date().toISOString(),
+        },
         { status: 409 },
       )
     }
@@ -121,6 +139,7 @@ const server = setupServer(
         source: 'modrinth',
         originalFileName: 'EssentialsX-2.21.0.jar',
       },
+      timestamp: new Date().toISOString(),
     })
   }),
 )
@@ -215,7 +234,12 @@ describe('MarketSheet', () => {
     server.use(
       http.get('/api/v1/instances/demo/plugins/market/search', () =>
         HttpResponse.json(
-          { status: 'error', code: 50301, message: 'Modrinth upstream error' },
+          {
+            status: 'error',
+            code: 50301,
+            message: 'Modrinth upstream error',
+            timestamp: new Date().toISOString(),
+          },
           { status: 502 },
         ),
       ),
@@ -243,6 +267,7 @@ describe('MarketSheet', () => {
             code: 0,
             message: 'ok',
             data: { totalHits: 0, hits: [], cached: false },
+            timestamp: new Date().toISOString(),
           })
         }
         lastQ = q
@@ -251,6 +276,7 @@ describe('MarketSheet', () => {
           code: 0,
           message: 'ok',
           data: SEARCH_FIXTURE,
+          timestamp: new Date().toISOString(),
         })
       }),
     )

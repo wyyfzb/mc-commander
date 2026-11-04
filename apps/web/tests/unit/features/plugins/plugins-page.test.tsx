@@ -132,7 +132,13 @@ const CHECK_UPDATES_FIXTURE = {
 
 const server = setupServer(
   http.get('/api/v1/instances/demo/plugins', () =>
-    HttpResponse.json({ status: 'ok', code: 0, message: 'ok', data: { plugins: PLUGINS_FIXTURE } }),
+    HttpResponse.json({
+      status: 'ok',
+      code: 0,
+      message: 'ok',
+      data: { plugins: PLUGINS_FIXTURE },
+      timestamp: new Date().toISOString(),
+    }),
   ),
   http.put('/api/v1/instances/demo/plugins/:file/enabled', ({ params }) =>
     HttpResponse.json({
@@ -140,6 +146,7 @@ const server = setupServer(
       code: 0,
       message: 'ok',
       data: { file: String(params.file), enabled: true },
+      timestamp: new Date().toISOString(),
     }),
   ),
   http.delete('/api/v1/instances/demo/plugins/:file', ({ params }) =>
@@ -148,6 +155,7 @@ const server = setupServer(
       code: 0,
       message: 'ok',
       data: { deleted: String(params.file) },
+      timestamp: new Date().toISOString(),
     }),
   ),
   http.post('/api/v1/instances/demo/plugins/check-updates', () =>
@@ -156,6 +164,7 @@ const server = setupServer(
       code: 0,
       message: 'ok',
       data: CHECK_UPDATES_FIXTURE,
+      timestamp: new Date().toISOString(),
     }),
   ),
 )
@@ -216,6 +225,7 @@ function okUploadEnvelope(file: string) {
     code: 0,
     message: 'Success',
     data: { file, sizeBytes: 4605977, mtimeMs: 1760000000000, meta: null, overwritten: false },
+    timestamp: new Date().toISOString(),
   }
 }
 
@@ -240,7 +250,13 @@ describe('PluginsPage 列表渲染', () => {
     // 本地 server 不含 /instances（onUnhandledFrame: error）：显式覆写为「确实零实例」
     server.use(
       http.get('/api/v1/instances', () =>
-        HttpResponse.json({ status: 'ok', code: 0, message: 'ok', data: [] }),
+        HttpResponse.json({
+          status: 'ok',
+          code: 0,
+          message: 'ok',
+          data: [],
+          timestamp: new Date().toISOString(),
+        }),
       ),
     )
     useServerStore.setState({ instanceId: null })
@@ -351,7 +367,13 @@ describe('PluginsPage 空态与更新检测', () => {
   it('列表为空展示空态：暂无插件 + 市场一键安装 CTA', async () => {
     server.use(
       http.get('/api/v1/instances/demo/plugins', () =>
-        HttpResponse.json({ status: 'ok', code: 0, message: 'ok', data: { plugins: [] } }),
+        HttpResponse.json({
+          status: 'ok',
+          code: 0,
+          message: 'ok',
+          data: { plugins: [] },
+          timestamp: new Date().toISOString(),
+        }),
       ),
     )
     renderPage()
@@ -363,7 +385,12 @@ describe('PluginsPage 空态与更新检测', () => {
     server.use(
       http.get('/api/v1/instances/demo/plugins', () =>
         HttpResponse.json(
-          { status: 'error', code: 50000, message: 'internal error' },
+          {
+            status: 'error',
+            code: 50000,
+            message: 'internal error',
+            timestamp: new Date().toISOString(),
+          },
           { status: 500 },
         ),
       ),
@@ -396,6 +423,7 @@ describe('PluginsPage 空态与更新检测', () => {
             skipped: { disabled: 2, overLimit: 3, noMeta: 1 },
             results: [],
           },
+          timestamp: new Date().toISOString(),
         }),
       ),
     )
