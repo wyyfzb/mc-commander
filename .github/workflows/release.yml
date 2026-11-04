@@ -92,8 +92,11 @@ jobs:
           EOF
 
       # 三个包的依赖都在根一次装齐（根 lock 是唯一事实源）
+      # --ignore-scripts：与用户机部署脚本走同一条安装路径——用户机上同样不装编译工具链，
+      # 靠包内 prebuilds 运行。这里若允许编译，发布前的 sanity check 就验证不了
+      # 用户真正会遇到的那条路。
       - name: 安装依赖（workspace 根）
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       # 产物组成的唯一声明处就是这一步调用的脚本：白名单（默认拒绝）+ 前端与契约包产物
       # 现场构建注入 + 依赖改写 + lock 生成，产物里出现白名单外的文件即 fail-closed。
@@ -106,8 +109,11 @@ jobs:
       - name: 发布前 sanity check
         run: |
           cd .staging
-          npm ci --omit=dev
+          npm ci --omit=dev --ignore-scripts
           node -e "const schemas = require('@mc-commander/schemas'); const keys = Object.keys(schemas); if (!keys.length) throw new Error('schemas 加载为空对象'); console.log('sanity check 通过: @mc-commander/schemas 加载成功，' + keys.length + ' 个导出')"
+          # 原生模块必须能真加载：部署脚本跳过 node-gyp 后靠的就是包内 prebuilds，
+          # 这条断言与部署脚本的 check_native_modules 同口径
+          node -e "const D=require('better-sqlite3');const db=new D(':memory:');db.exec('create table t(a)');db.prepare('insert into t values(1)').run();if(db.prepare('select a from t').get().a!==1)throw new Error('读写结果不符');db.close();console.log('sanity check 通过: better-sqlite3 预编译产物可加载')"
 
       # 资产名不含 tag：部署脚本用 releases/latest/download/<asset> 取最新版，
       # 该地址无法预知 tag，故名字必须固定

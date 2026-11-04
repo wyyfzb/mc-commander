@@ -19,9 +19,16 @@ MC\_Commander 是一个自托管的 Minecraft 服务器管理面板：不装插�
 | `tools/`               | 维护者工具（不住包内）：`gates/`（设计 token / 对比度 / 体积）、`e2e/`（Playwright 配置 + spec + mock 后端）、`ci/local-check.sh`、`check-layout.mjs`（目录结构）、`dev/`（生成器）、`ops/`（运维）、`deploy/`（发布载荷） |
 | `docs/`                | 使用者文档（`architecture.md`、`user-guide.md`） |
 
-仓库是 **npm workspaces**：在**仓库根**跑一次 `npm ci` 即装齐三包依赖，根 `package-lock.json`
-是依赖的唯一事实源（包内不再各放一份 lock 与 `.npmrc`）。包间依赖走 workspace 链接
-（`apps/server` 声明 `@mc-commander/schemas: "*"`），因此**服务端消费契约包产物**——
+仓库是 **npm workspaces**：在**仓库根**跑一次 `npm ci --ignore-scripts` 即装齐三包依赖，
+根 `package-lock.json` 是依赖的唯一事实源（包内不再各放一份 lock 与 `.npmrc`）。
+`--ignore-scripts` 不是可选项：`better-sqlite3` 自带 `prebuilds/<platform>-<arch>.node`，
+运行时 `lib/binding.js` 优先加载它，而 npm 见到 `binding.gyp` 会隐式跑 `node-gyp rebuild`
+——上游用 `binding.gyp` 的 `prebuild_exists` 想让它空转，但 `node-gyp` 的 configure 阶段
+**先找工具链、再读 `binding.gyp`**，于是这段空转在没有 Visual Studio 的 Windows 上直接
+失败、在 Linux 上则要求装一整套编译器。生产依赖里没有任何包需要 install 脚本（唯一有
+install 脚本的 `fsevents` 是 macOS 专用的 optional 包），故跳过不会漏掉必要构建。
+跳过之后**必须验一次真实加载**（`require` + 建表读写）：编译成功也不等于二进制能加载。
+包间依赖走 workspace 链接（`apps/server` 声明 `@mc-commander/schemas: "*"`），因此**服务端消费契约包产物**——
 `apps/schemas/dist` 必须先构建：`npm run build -w apps/schemas`。前端则经 vite alias
 直读 `apps/schemas/src`（改契约立即可见）。**`dist` 是构建产物、不入库**：服务端测试与运行前
 必须先在仓库根 `npm run build -w apps/schemas`（`npm test` 已带 `pretest` 自动做；CI 的 server
@@ -35,7 +42,11 @@ job 与 `local-check.sh` 也都显式构建），因此不存在可漂移的提�
 bash tools/ci/local-check.sh
 
 # 仓库根＝workspace 根：一次装齐三包依赖 + Biome
-npm ci
+# --ignore-scripts：better-sqlite3 自带 prebuilds/ 产物、运行时优先加载它，npm 见到
+# binding.gyp 隐式发起的 node-gyp rebuild 是纯空转（无 Visual Studio 的 Windows 上还会
+# 直接失败）。跳过之后必须验一次真实加载——省掉的是编译，不是检查：
+npm ci --ignore-scripts
+node -e "const D=require('better-sqlite3');new D(':memory:').exec('create table t(a)');console.log('ok')"
 npm run format               # 按 biome.jsonc 格式化全仓
 npm run format:check         # 只检查不改写（CI 与 local-check 用这条）
 npm run check:layout         # 目录结构门禁（顶层白名单 / 源码面无测试 / 无产物入库）

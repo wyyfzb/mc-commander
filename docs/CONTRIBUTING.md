@@ -23,7 +23,9 @@ git clone <仓库地址>
 cd mc-commander
 
 # 依赖：仓库根执行一次（npm workspaces，根 lock 是唯一事实源）
-npm ci
+# --ignore-scripts 跳过 better-sqlite3 的隐式 node-gyp 编译（包内自带 prebuilds 产物，
+# 运行时优先加载它；无 Visual Studio 的 Windows 上不加这个参数会直接装不上）
+npm ci --ignore-scripts
 
 # 契约包：服务端运行时消费它的构建产物 dist，故先建
 npm run build -w apps/schemas
@@ -35,8 +37,8 @@ npm run test -w apps/server        # 需要时先 cp apps/server/.env.example ap
 npm run build -w apps/web
 npm run test -w apps/web
 ```
-三个包由仓库根的 npm workspaces 统一管理：**在仓库根执行一次 `npm ci`** 即装齐全部依赖
-（根 `package-lock.json` 是唯一事实源）。仓库根另有一个工具包 `package.json`，
+三个包由仓库根的 npm workspaces 统一管理：**在仓库根执行一次 `npm ci --ignore-scripts`**
+即装齐全部依赖（根 `package-lock.json` 是唯一事实源）。仓库根另有一个工具包 `package.json`，
 只装全仓共用的代码格式化器 Biome（`npm ci` 后 `npm run format`），不参与构建与运行。
 
 `apps/schemas` 是 web 与服务端共用的 zod 契约包：改动其 `src/` 后必须 `npm run build`
