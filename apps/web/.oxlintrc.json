@@ -1,6 +1,8 @@
 {
   "$schema": "../../node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
+  // vitest 插件：测试文件本来就在 lint 范围内，但没有它时 it.only / it.skip 完全不被
+  // 拦截——提交一个只跑一条用例的文件，其余用例静默不跑且 CI 全绿。
+  "plugins": ["react", "typescript", "oxc", "vitest"],
   // correctness 整档必须显式设 error：oxlint 默认该档为 warn，而 warn 不产生非零退出码
   // ⇒ 缺这行时该档 128 条规则全部只报不拦，lint 全绿也挡不住回归
   "categories": { "correctness": "error" },
@@ -26,6 +28,21 @@
     "no-empty": ["error", { "allowEmptyCatch": true }],
     // 刻意不启 no-undef：TS 编译期已拦未定义标识符，该规则对 TS 项目只产噪音
     // （且本包无 env 声明，浏览器全局会被它误报）
-    "no-undef": "off"
+    "no-undef": "off",
+    // 用例必须真的断言：没有断言时用例只验证「不抛异常」，实现被删掉也照样绿。
+    // assertFunctionNames 要列全本仓的断言辅助函数，否则它们被当成「无断言」误报
+    "vitest/expect-expect": [
+      "error",
+      { "assertFunctionNames": ["expect", "expectStrong", "expectWeakOnly"] }
+    ],
+    // 以下四条对 vitest API 的判断与实现不符，开启后全是误报：
+    // valid-expect 不认 expect(value, message) 的消息参数（vitest 支持且会输出）；
+    // no-conditional-expect 与 it.each 分流、按数据分支的写法冲突；
+    // require-mock-type-parameters 要求 vi.fn<T>()，本仓统一走推断；
+    // require-to-throw-message 要求每条 toThrow 带消息，对断言「会抛」的用例过严
+    "vitest/valid-expect": "off",
+    "vitest/no-conditional-expect": "off",
+    "vitest/require-mock-type-parameters": "off",
+    "vitest/require-to-throw-message": "off"
   }
 }

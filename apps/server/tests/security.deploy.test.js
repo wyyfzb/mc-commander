@@ -1430,6 +1430,7 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
   //
   // 只跳真依赖 /proc 的那几条：同组里「没有 var/servers 就直接返回」这类分支
   // 与 /proc 无关，整组跳过会把它们一起藏掉。
+  // oxlint-disable-next-line vitest/expect-expect -- 这是用例别名，不是用例本身
   const linuxIt = it.skipIf(process.platform !== 'linux');
   describe('卸载前停止运行中的实例', () => {
     const fnSource = script.match(/stop_running_instances\(\) \{[\s\S]*?\n\}/);

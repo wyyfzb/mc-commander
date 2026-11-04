@@ -24,7 +24,9 @@
   //   ② 旧配置的 sourceType:'module' 无对应物（oxlint 顶层无该选项），改由文件内
   //      有无 import/export 推断严格模式；本仓 221 个文件全含 import/export
   // 存量 `// eslint-disable` 注释无需改写：oxlint 同时识别 eslint- 与 oxlint- 前缀
-  "plugins": ["oxc"],
+  // vitest 插件：测试文件本来就在 lint 范围内，但没有它时 it.only / it.skip 完全不被
+  // 拦截——提交一个只跑一条用例的文件，其余用例静默不跑且 CI 全绿
+  "plugins": ["oxc", "vitest"],
   "env": { "node": true, "es2024": true },
   // 与旧 eslint 配置的 ignores 等价：运行时数据/备份/构建投放目录不参与 lint
   "ignorePatterns": [
@@ -49,6 +51,30 @@
     "no-prototype-builtins": "error",
     "no-redeclare": "error",
     "no-regex-spaces": "error",
-    "no-unexpected-multiline": "error"
+    "no-unexpected-multiline": "error",
+    // 用例必须真的断言：没有断言时用例只验证「不抛异常」，实现被删掉也照样绿。
+    // additionalTestBlockFunctions 与 assertFunctionNames 都要列全本仓的自造名：
+    // linuxIt / linuxOnly 是按平台跳过用的测试块别名，expectValidationError 一类是
+    // 断言辅助函数——不登记时它们分别被误报为「expect 不在测试块内」与「无断言」
+    "vitest/expect-expect": [
+      "error",
+      {
+        "assertFunctionNames": ["expect", "expectValidationError"],
+        "additionalTestBlockFunctions": ["linuxIt", "linuxOnly"]
+      }
+    ],
+    "vitest/no-standalone-expect": [
+      "error",
+      { "additionalTestBlockFunctions": ["linuxIt", "linuxOnly"] }
+    ],
+    // 以下四条对 vitest API 的判断与实现不符，开启后全是误报：
+    // valid-expect 不认 expect(value, message) 的消息参数（vitest 支持且会输出）；
+    // no-conditional-expect 与按数据分支的写法冲突；
+    // require-to-throw-message 要求每条 toThrow 带消息，对断言「会抛」的用例过严；
+    // no-disabled-tests 把 it.skipIf（平台条件跳过）当成被禁用的用例
+    "vitest/valid-expect": "off",
+    "vitest/no-conditional-expect": "off",
+    "vitest/require-to-throw-message": "off",
+    "vitest/no-disabled-tests": "off"
   }
 }

@@ -90,6 +90,7 @@ function buildApp() {
 //
 // 但同组里的清点/导出/migrate 校验/removal-preview 这些端点不碰 sudo，照常能测，
 // 故只给真正驱动 systemd 的用例打 skip。
+// oxlint-disable-next-line vitest/expect-expect -- 这是用例别名，不是用例本身
 const linuxIt = it.skipIf(process.platform !== 'linux');
 describe('面板去留端点', () => {
   beforeEach(() => {

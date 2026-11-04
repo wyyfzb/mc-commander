@@ -64,15 +64,24 @@ describe('ErrorBoundary', () => {
     expect(onReset).toHaveBeenCalledOnce()
   })
 
-  it('无 onReset 时点击重新加载不报错（兜底刷新）', async () => {
+  it('无 onReset 时点击重新加载：清掉错误态并重试渲染子组件', async () => {
     const user = userEvent.setup()
+    let renders = 0
+    function CountingBadChild(): never {
+      renders++
+      throw new Error('测试渲染异常')
+    }
     render(
       <ErrorBoundary>
-        <BadChild />
+        <CountingBadChild />
       </ErrorBoundary>,
     )
-    // 无 onReset 时不抛异常
+    const before = renders
     await user.click(screen.getByRole('button', { name: '重新加载' }))
+    // 判据是「重新尝试渲染」：没有 onReset 时 setState 仍是唯一的重试来源。
+    // 只看降级 UI 是否还在，会把「按钮点了没反应」误判为通过。
+    expect(renders).toBeGreaterThan(before)
+    expect(screen.getByText('页面渲染出现异常，请尝试重新加载')).toBeInTheDocument()
   })
 
   it('点击重新加载后降级 UI 消失、子组件恢复渲染（按钮真的起作用）', async () => {
