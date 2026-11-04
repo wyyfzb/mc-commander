@@ -479,6 +479,95 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
     });
   });
 
+  /* better-sqlite3 自带 prebuilds/<platform>-<arch>.node，运行时 lib/binding.js 优先
+     加载它，正常安装路径下从不需要编译器。但包内没有 install 脚本，npm 见到 binding.gyp
+     就隐式跑 node-gyp rebuild：上游靠 binding.gyp 的 prebuild_exists 把它变成空 target，
+     而 node-gyp 的 configure 阶段先找工具链、再读 binding.gyp——顺序决定了空转在
+     Windows 上直接报错退出（找不到 Visual Studio），在 Linux 上则是装完编译器后什么都
+     没编。故部署改为 --ignore-scripts 跳过 + 一次真实加载验证。
+
+     这组断言锁的是「跳过」与「验证」必须成对出现：只跳过不验证，等于把安装期的
+     编译失败换成了运行期的加载失败——后者要到用户点开面板才暴露。 */
+  describe('原生模块走预编译产物：跳过编译但必须验证可加载', () => {
+    /** 取「安装 npm 依赖」到「生成 .env」之间的脚本文本 */
+    function installSection() {
+      const start = script.indexOf('# 8. 安装 npm 依赖');
+      if (start < 0) throw new Error('未能定位安装依赖段');
+      const end = script.indexOf('# 9. 生成/读取 .env', start);
+      return script.slice(start, end < 0 ? start + 3000 : end);
+    }
+
+    it('npm ci 跳过隐式 node-gyp rebuild', () => {
+      const sec = installSection();
+      // 锚真实命令行，不锚注释里的说明文字
+      expect(sec).toContain('npm ci --omit=dev --ignore-scripts');
+      // 两个源的回退分支共用同一个封装，故只应有一条命令行
+      expect(sec.match(/npm ci --omit=dev/g)).toHaveLength(1);
+    });
+
+    it('不再安装编译工具链', () => {
+      // 装编译器是为了让 node-gyp 的 configure 能过，而它编出来的东西运行时根本不用。
+      // 保留这段会让目标机多装几百 MB 的包，且卸载时不会被清理。
+      // 判据取可执行语句（行首是 install_pkg 的那种），注释里说明来由的提及不算
+      expect(script).not.toMatch(/^\s*[a-z]+\) install_pkg .*build-essential/m);
+      expect(script).not.toMatch(/^\s*[a-z]+\) install_pkg .*gcc-c\+\+/m);
+      expect(script).not.toMatch(/^\s*[a-z]+\) install_pkg .*build-base/m);
+      // node-gyp 的头文件镜像也随之失去意义
+      expect(script).not.toMatch(/^\s*export npm_config_node_mirror/m);
+    });
+
+    it('跳过编译后立刻验证二进制真能加载', () => {
+      const sec = installSection();
+      const ciAt = sec.indexOf('npm ci --omit=dev --ignore-scripts');
+      // 锚调用点而非函数定义：函数定义在更靠前的原生模块段落里，位置不构成「装完才验」的证据
+      const callAt = sec.indexOf('if ! check_native_modules; then');
+      expect(callAt).toBeGreaterThan(ciAt);
+      // 必须真跑一次读写，不能只判断文件存在：ABI 不匹配、下载残缺都要到 require 才暴露
+      const fnSrc = script.match(/check_native_modules\(\) \{[\s\S]*?\n\}/);
+      if (!fnSrc) throw new Error('未能在部署脚本中定位 check_native_modules');
+      expect(fnSrc[0]).toContain('require("better-sqlite3")');
+      expect(fnSrc[0]).toContain('create table');
+      expect(fnSrc[0]).toContain('insert into t values(1)');
+    });
+
+    it('验证失败即中止安装，不带着坏依赖继续启动', () => {
+      const sec = installSection();
+      expect(sec).toMatch(/if ! check_native_modules; then[\s\S]*?exit 1/);
+    });
+
+    it('验证失败先回滚代码再退出，而不是只 exit', () => {
+      // on_exit 见 PANEL_STOPPED=1 会「把面板恢复运行」，此时盘上是新代码 + 装坏的依赖，
+      // 拉起来只会立刻崩。只 exit 等于把「升级失败」升级成「面板再也起不来」。
+      const sec = installSection();
+      const failAt = sec.indexOf('if ! check_native_modules; then');
+      expect(failAt).toBeGreaterThan(-1);
+      const branch = sec.slice(failAt, failAt + 300);
+      expect(branch).toContain('restore_code_backup');
+      // 顺序：先回滚，再退出
+      expect(branch.indexOf('restore_code_backup')).toBeLessThan(branch.indexOf('exit 1'));
+    });
+
+    it('回滚后 on_exit 不再重复拉起面板', () => {
+      const trapStart = script.indexOf('on_exit() {');
+      const trapBody = script.slice(trapStart, script.indexOf('trap on_exit EXIT'));
+      // 回滚分支已经自己 restart 并验过就绪，再 start 一次会把它刚拉起来的服务踢掉
+      expect(trapBody).toContain('CODE_RESTORED');
+    });
+
+    it('失败信息给出可执行动作，而不是只报「加载失败」', () => {
+      const fnSrc = script.match(/check_native_modules\(\) \{[\s\S]*?\n\}/)[0];
+      // uncommon 平台（prebuilds 未覆盖的架构）只能本地编译，必须告诉用户怎么办
+      expect(fnSrc).toContain('npm rebuild better-sqlite3');
+      expect(fnSrc).toContain('uname -s');
+    });
+
+    it('原始堆栈默认不外泄，DEBUG=1 才回放', () => {
+      const fnSrc = script.match(/check_native_modules\(\) \{[\s\S]*?\n\}/)[0];
+      // 默认输出里堆栈会淹掉「怎么办」；但排查时又需要它
+      expect(fnSrc).toContain('${DEBUG:-0}');
+    });
+  });
+
   describe('systemd 低权限运行', () => {
     it('面板服务不以 root 运行', () => {
       // 只判面板本体那个单元：删除执行单元必须以 root 运行才能删专用用户与系统单元，
@@ -715,7 +804,9 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
         .map((s) => s.trim());
     }
 
-    it('覆盖全部保留段与边界：两侧判定逐个一致', () => {
+    // 逐个地址两侧对拍：每个 IP 都要起一次 bash 跑脚本里的判定函数，几十个地址
+    // 在 Git Bash 上就是几十次进程 fork，并发时会被挤过全局 15s 上限。
+    it('覆盖全部保留段与边界：两侧判定逐个一致', { timeout: 60_000 }, () => {
       const ips = [
         // 各段内部 + 段外相邻地址（错一个段或边界就会在这里分叉）
         '0.0.0.0',
@@ -787,7 +878,9 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
 
   // 就绪判定是「这次部署成没成」的唯一出口：判错会把崩溃重启中的服务报成部署完成。
   // 这里不只断言脚本里有某段字符串——把函数原样抽出来灌响应真跑，否则逻辑写错照样全绿。
-  describe('就绪判定：认得出「这不是本次装的面板」', () => {
+  // 每条都起 bash 跑 wait_until_ready，而该函数的等待预算被压到 1s（判据不成立的
+  // 用例必须走完整条超时路径才作数）。耗时由「起进程 + 走满等待预算」决定。
+  describe('就绪判定：认得出「这不是本次装的面板」', { timeout: 30_000 }, () => {
     const fnSource = script.match(/wait_until_ready\(\) \{[\s\S]*?\n\}/);
     if (!fnSource) throw new Error('未能在部署脚本中定位 wait_until_ready');
 
@@ -817,8 +910,11 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
         if (hasPackage) {
           writeFileSync(path.join(appDir, 'package.json'), JSON.stringify({ version: '0.9.0' }));
         }
+        // 路径经环境变量传入，不拼进脚本源码：Windows 路径里的反斜杠在 bash -c 里
+        // 会被当成转义序列吃掉（\U → U），于是 MC_COMMANDER_DIR 变成一个不存在的
+        // 相对路径，INSTALLED_VERSION 读空 ⇒ 落进「读不到版本号即有响应即就绪」分支，
+        // 断言假绿/假红。环境变量不经过 shell 解析，任何平台都安全。
         const prog = [
-          'MC_COMMANDER_DIR=' + appDir,
           'SERVER_PORT=25566',
           'READY_TIMEOUT=1',
           fnSource[0],
@@ -828,6 +924,7 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
           encoding: 'utf8',
           env: {
             ...process.env,
+            MC_COMMANDER_DIR: appDir,
             PATH: stub + ':' + process.env.PATH,
             FAKE_CURL_BODY: body,
             FAKE_CURL_EXIT: String(curlExit),
@@ -922,6 +1019,10 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
         const prog = [
           'set -euo pipefail',
           'set -o errtrace',
+          // log() 每行调一次 date；Git Bash 上那是 fork 一个 Windows 进程，
+          // 250 行要 20s+。替身保持 log() 源码原样（被测的仍是真实实现），
+          // 只去掉与断言无关的时钟调用
+          'date() { printf "00:00:00\\n"; }',
           'LOG_LINES=()',
           'LOG_LINES_MAX=200',
           'ERR_SHOWN=0',
@@ -969,13 +1070,39 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
     });
 
     it('进度回放只取最近几行，不会把整段日志重打一遍', () => {
-      // 安装全程上百行；回放整段等于让用户在几百行里再找一次出错点
-      const r = runWithTrap('for i in $(seq 1 250); do log "第 $i 步"; done\nfalse');
+      // 安装全程上百行；回放整段等于让用户在几百行里再找一次出错点。
+      //
+      // 只造 8 行而不是 250 行：这条要验的是「回放取末尾 3 条」这个窗口语义，
+      // 行数超过 3 就足以判定。真实调用 250 次在 Git Bash 上要 fork 数百个进程，
+      // 并发跑时必然撞 15s 上限——那时测的是宿主 fork 速度，不是回放逻辑。
+      // 数组本身的长度上限（LOG_LINES_MAX）由下一条用例单独验。
+      const r = runWithTrap('for ((i = 1; i <= 8; i++)); do log "第 $i 步"; done\nfalse');
       expect(r.status).toBe(1);
       const replay = r.stdout.split('最后几行进度：')[1].split('出错位置：')[0];
       const bullets = replay.split('\n').filter((l) => l.trim().startsWith('·'));
       expect(bullets).toHaveLength(3);
-      expect(bullets[2]).toContain('第 250 步');
+      expect(bullets[2]).toContain('第 8 步');
+    });
+
+    it('log() 只保留最近 LOG_LINES_MAX 行，不会无限增长', () => {
+      // 长安装会打出上百行；不截断的话失败回放虽然只取末尾 3 条，数组本身仍会
+      // 一直变长——长时间挂着的安装（如下载卡住后重试）能吃掉可观内存。
+      // 直接观察数组而不打 200+ 行：判据是 len 与首元素，与打印开销无关。
+      const r = runWithTrap(
+        [
+          'LOG_LINES_MAX=5',
+          'for ((i = 1; i <= 12; i++)); do log "第 $i 步" >/dev/null 2>&1 || true; done',
+          'echo "LEN=${#LOG_LINES[@]}"',
+          'echo "FIRST=${LOG_LINES[0]}"',
+          'echo "LAST=${LOG_LINES[${#LOG_LINES[@]}-1]}"',
+          'false',
+        ].join('\n'),
+      );
+      expect(r.status).toBe(1);
+      // 12 条写进上限 5 的环：只留最后 5 条
+      expect(r.stdout).toContain('LEN=5');
+      expect(r.stdout).toContain('FIRST=第 8 步');
+      expect(r.stdout).toContain('LAST=第 12 步');
     });
 
     it('脚本自身真的装了这套兜底：errtrace 已开、trap 已挂、err 短路在位', () => {
@@ -1295,6 +1422,15 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
   // 卸载删目录前必须先把仍在跑的实例停干净：实例是 detached 进程，面板停了它们还在写世界。
   // 直接 rm -rf 会把存档从进程底下抽走——进程不报错、文件已消失，玩家看到区块加载失败，
   // 而存档已经救不回来。故这里把函数真的跑起来，用一个真进程冒充实例进程。
+  //
+  // 平台前提：这组用例判定的是「按 /proc/<pid>/cmdline 认进程」，而 /proc 是 Linux
+  // 专有文件系统。Windows/macOS 上被测代码走的是「读不到 /proc ⇒ 不接管」分支，
+  // 于是用例断言的「已停止」永远不会出现——那不是实现坏了，是这台机器上根本没有
+  // /proc。部署脚本本身也只面向 Linux（systemd / apt / ss），故按平台跳过而非改判据。
+  //
+  // 只跳真依赖 /proc 的那几条：同组里「没有 var/servers 就直接返回」这类分支
+  // 与 /proc 无关，整组跳过会把它们一起藏掉。
+  const linuxIt = it.skipIf(process.platform !== 'linux');
   describe('卸载前停止运行中的实例', () => {
     const fnSource = script.match(/stop_running_instances\(\) \{[\s\S]*?\n\}/);
     if (!fnSource) throw new Error('未能在部署脚本中定位 stop_running_instances');
@@ -1398,7 +1534,7 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
       );
     }
 
-    it('实例在跑 → 发 TERM 并等它退出', () => {
+    linuxIt('实例在跑 → 发 TERM 并等它退出', () => {
       const dir = mkdtempSync(path.join(os.tmpdir(), 'mcs-purge-'));
       try {
         const instDir = setupInstance(dir, 0);
@@ -1416,7 +1552,7 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
       }
     });
 
-    it('pid 已被复用给别的进程（命令行不含实例目录）→ 不误杀', () => {
+    linuxIt('pid 已被复用给别的进程（命令行不含实例目录）→ 不误杀', () => {
       const dir = mkdtempSync(path.join(os.tmpdir(), 'mcs-purge-'));
       try {
         // 指向一个真实存在、但命令行与实例目录无关的进程（本进程自己）
@@ -1433,6 +1569,7 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
     });
 
     it('没有 var/servers 目录 → 直接返回，不报错', () => {
+      // 不依赖 /proc：servers_dir 不存在时函数在开头就 return 0，还没走到进程判定
       const dir = mkdtempSync(path.join(os.tmpdir(), 'mcs-purge-'));
       try {
         const r = runStop(dir);
@@ -1488,7 +1625,7 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
       return child;
     }
 
-    it('无 pidfile 的实例按进程命令行识别：面板自己生成的 server-<版本>.jar 也要命中', () => {
+    linuxIt('无 pidfile 的实例按进程命令行识别：面板自己生成的 server-<版本>.jar 也要命中', () => {
       // 面板升级后的 jar 叫 server-<mcVersion>.jar、Forge 是 forge-*.jar，
       // 按 server.jar 写死名字会一个都认不出来——实例继续写存档，userdel 必然失败
       const dir = mkdtempSync(path.join(os.tmpdir(), 'mcs-orphan-'));
@@ -1509,7 +1646,7 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
       }
     });
 
-    it('命令行里带 jar 路径但不是 java 的进程不误杀（tail/rsync 备份该目录）', () => {
+    linuxIt('命令行里带 jar 路径但不是 java 的进程不误杀（tail/rsync 备份该目录）', () => {
       // 判据只按路径子串匹配时，备份/看日志这类进程会被一起 SIGTERM 掉
       const dir = mkdtempSync(path.join(os.tmpdir(), 'mcs-notjava-'));
       try {
@@ -1525,7 +1662,7 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
       }
     });
 
-    it('数据目录改到别处（.env 里指绝对路径）时，仍能停到那里的实例', () => {
+    linuxIt('数据目录改到别处（.env 里指绝对路径）时，仍能停到那里的实例', () => {
       // 用户把实例目录换到大盘是常态；按 var/servers 硬编码会「停了个空目录」，
       // 真实实例继续写存档，随后 --purge 从底下抽走文件。
       const dir = mkdtempSync(path.join(os.tmpdir(), 'mcs-purge-custom-'));
@@ -1545,8 +1682,17 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
         rmSync(outside, { recursive: true, force: true });
       }
     });
+  });
 
-    it('数据目录解析四档都按服务端口径：绝对路径原样、相对路径锚安装目录、带引号去壳、缺省回退', () => {
+  // 数据目录解析不依赖 /proc：它是纯字符串拼接（.env 取值 → 相对锚安装目录 / 绝对原样）。
+  // 故不挂在「卸载前停止实例」那个按平台跳过的大组里——挂了就等于在非 Linux 上
+  // 连这条与平台无关的判据也一起不跑了。
+  describe('数据目录解析（跨平台）', () => {
+    // 单独取一份：上面那个按平台跳过的大组里取的是同一个函数，但作用域不外溢
+    const resolveSrc = script.match(/resolve_data_dir\(\) \{[\s\S]*?\n\}/);
+    if (!resolveSrc) throw new Error('未能在部署脚本中定位 resolve_data_dir');
+
+    it('四档都按服务端口径：绝对路径原样、相对路径锚安装目录、带引号去壳、缺省回退', () => {
       const dir = mkdtempSync(path.join(os.tmpdir(), 'mcs-rdd-'));
       const run = (envLine) => {
         writeFileSync(path.join(dir, '.env'), envLine);
@@ -1555,18 +1701,24 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
           ['-c', 'eval "$FN_SRC"\nresolve_data_dir SERVERS_DIR ./var/servers'],
           {
             encoding: 'utf8',
-            env: { ...process.env, MC_COMMANDER_DIR: dir, FN_SRC: dirResolverSource[0] },
+            env: { ...process.env, MC_COMMANDER_DIR: dir, FN_SRC: resolveSrc[0] },
           },
         );
         return r.stdout.trim();
       };
+      // 两侧分隔符口径不同是正常的：被测函数用 bash 拼路径（恒为 '/'），而这里用
+      // path.join 造期望值（Windows 上是 '\'）。两者语义相同，比较前统一归一——
+      // 否则这条断言只在 Linux 宿主上成立，测的其实是「宿主分隔符是不是 /」。
+      const samePath = (actual, expected) => path.normalize(actual) === path.normalize(expected);
       try {
         // 服务端把相对路径锚定包根（安装目录），不是 cwd——两侧必须同一口径
         expect(run('SERVERS_DIR=/mnt/big/servers\n')).toBe('/mnt/big/servers');
-        expect(run('SERVERS_DIR=./var/servers\n')).toBe(path.join(dir, 'var', 'servers'));
-        expect(run('SERVERS_DIR=data/srv\n')).toBe(path.join(dir, 'data', 'srv'));
+        expect(samePath(run('SERVERS_DIR=./var/servers\n'), path.join(dir, 'var', 'servers'))).toBe(
+          true,
+        );
+        expect(samePath(run('SERVERS_DIR=data/srv\n'), path.join(dir, 'data', 'srv'))).toBe(true);
         expect(run('SERVERS_DIR="/mnt/x/y"\n')).toBe('/mnt/x/y');
-        expect(run('')).toBe(path.join(dir, 'var', 'servers'));
+        expect(samePath(run(''), path.join(dir, 'var', 'servers'))).toBe(true);
       } finally {
         rmSync(dir, { recursive: true, force: true });
       }
@@ -1644,7 +1796,11 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
   });
 
   /* 端口被占时 node 以 EADDRINUSE 退出，systemd 每 3 秒重试，就绪检查空等满 30 秒
-     才报「未就绪」——用户去修一个不存在的面板问题。起服务前必须先把真因说出来。 */
+     才报「未就绪」——用户去修一个不存在的面板问题。起服务前必须先把真因说出来。
+
+     平台前提：判据是 `ss -ltnp` 的真实输出，ss 是 iproute2 的命令、Linux 专有。
+     只跳真正需要 ss 的两条；「端口空闲 → 放行」走的是 `command -v ss` 失败即
+     return 0 的早退分支，没有 iproute2 也能验——那正是非 Linux 的真实路径。 */
   describe('起服务前预检端口', () => {
     const fnSource = script.match(/check_port_free\(\) \{[\s\S]*?\n\}/);
     if (!fnSource) throw new Error('未能在部署脚本中定位 check_port_free');
@@ -1668,7 +1824,7 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
       expect(r.stderr).toBe('');
     });
 
-    it('端口被占 → 拦下并报出占用进程与处置办法', async () => {
+    linuxIt('端口被占 → 拦下并报出占用进程与处置办法', async () => {
       const { createServer } = await import('node:net');
       const srv = createServer();
       await new Promise((res) => srv.listen(59996, '0.0.0.0', res));
@@ -1684,7 +1840,7 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
       }
     });
 
-    it('预检发生在启动服务之前，且不早于「停旧面板」', () => {
+    linuxIt('预检发生在启动服务之前，且不早于「停旧面板」', () => {
       // 早于停旧面板：升级时面板本就占着端口，会把自己判成占用者，正常升级被拦
       const stopAt = script.indexOf(
         'systemctl stop mc-commander 2>/dev/null || true\n    # 升级中途失败',
@@ -1763,10 +1919,15 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
       const copyAt = script.indexOf('cp -rf "$TMP_EXTRACT/." "$MC_COMMANDER_DIR/"');
       expect(backupAt).toBeGreaterThan(-1);
       expect(backupAt).toBeLessThan(copyAt);
-      // 失败分支里要真的把旧代码放回去并重启
-      const failAt = script.indexOf('正在回退到升级前的版本');
+      // 回滚要真的把旧代码放回去并重启。判定落在函数体内而非「某处起 800 字符」：
+      // 回滚逻辑被两处失败共用，按位置切片会在函数移位后假红/假绿。
+      const fnSrc = script.match(/restore_code_backup\(\) \{[\s\S]*?\n\}/);
+      if (!fnSrc) throw new Error('未能定位 restore_code_backup');
+      expect(fnSrc[0]).toContain('cp -a "$CODE_BACKUP/$entry"');
+      expect(fnSrc[0]).toContain('systemctl restart mc-commander');
+      // 就绪失败分支必须调用它，否则「起不来」时新代码会留在盘上
+      const failAt = script.indexOf('restore_code_backup\n  echo ""');
       expect(failAt).toBeGreaterThan(copyAt);
-      expect(script.slice(failAt, failAt + 800)).toContain('systemctl restart mc-commander');
     });
 
     it('更新先清掉要重铺的条目，避免旧文件残留', () => {

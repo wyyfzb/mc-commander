@@ -181,7 +181,12 @@ describe('_getWorldSize 缓存失效：dirty 标记（实测缺陷回归：子�
 
   // 承重断言：调用返回时遍历仍在进行。世界变大时事件循环必须仍能跑别的任务——
   // 探针：把 _refreshWorldSize 改回同步遍历（返回前完成），本用例转红。
-  it('大目录统计不阻塞事件循环：调用返回时遍历尚未完成，且并发调用共用一次遍历', async () => {
+  // 4000 个文件的建树 + 遍历是重 IO，耗时由文件数决定。按用例声明余量而不是
+  // 把 4000 降下去——规模本身就是「遍历跨过多个 tick」的判据，降了这条用例
+  // 就不再承重。
+  it('大目录统计不阻塞事件循环：调用返回时遍历尚未完成，且并发调用共用一次遍历', {
+    timeout: 60_000,
+  }, async () => {
     const bigDir = path.join(tmpBase, 'ws-big');
     const bigWorld = path.join(bigDir, 'world');
     const regionDir = path.join(bigWorld, 'region');

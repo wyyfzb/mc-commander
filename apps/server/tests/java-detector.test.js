@@ -24,7 +24,11 @@
  * 成立，不按平台 skip。
  */
 import path from 'node:path';
+import { createRequire } from 'node:module';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+/** 绕过 vi.mock('fs') 拿真实实现：只用于注入树未命中时的兜底探测 */
+const actualFs = createRequire(import.meta.url)('node:fs');
 
 /** 夹具键与断言值统一归一：实现用 path.join 拼路径，Windows 产物是 '\' */
 const norm = (p) => path.normalize(p);
@@ -47,11 +51,20 @@ const cpState = vi.hoisted(() => ({ execSync: vi.fn(), spawnSync: vi.fn() }));
 
 vi.mock('fs', async (importOriginal) => {
   const actual = await importOriginal();
+  // 注入的文件树优先；查不到时落回真实 fs。
+  //
+  // 落回是必需的，不是宽容：src/config.js 在模块加载时用 existsSync 向上找
+  // package.json 来定位包根（jreDir 等运行期目录都锚在它上面）。纯 mock 的
+  // existsSync 恒返回 undefined，包根探测只能回退到 __dirname（src/），
+  // 于是 config.jreDir 变成 src/var/jre —— 用例断言的是「面板自供 JRE 优先」，
+  // 却因为夹具把包根弄错而永远命中不了。注入树里没有的路径交给真实 fs，
+  // 探测链才与生产一致。
+  const existsSync = vi.fn((p) => fsState.existsSync(p) ?? actual.default.existsSync(p));
   return {
     ...actual,
     default: {
       ...actual.default,
-      existsSync: fsState.existsSync,
+      existsSync,
       statSync: fsState.statSync,
       readdirSync: fsState.readdirSync,
     },
@@ -136,8 +149,13 @@ beforeEach(() => {
   fsState.broken.clear();
   versionByPath.clear();
 
-  fsState.existsSync.mockImplementation((p) =>
-    [fsState.files, fsState.dirs, fsState.broken].some((set) => set.has(norm(p))),
+  // 注入树命中即用注入结果；未命中落回真实 fs——src/config.js 靠 existsSync
+  // 向上找 package.json 定位包根，恒返回 false 会让包根退到 __dirname（src/），
+  // 于是 config.jreDir 变成 src/var/jre，面板自供 JRE 的用例永远命中不了
+  fsState.existsSync.mockImplementation(
+    (p) =>
+      [fsState.files, fsState.dirs, fsState.broken].some((set) => set.has(norm(p))) ||
+      actualFs.existsSync(p),
   );
   fsState.statSync.mockImplementation((p) => {
     if (fsState.broken.has(norm(p)))

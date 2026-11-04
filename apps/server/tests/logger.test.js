@@ -197,14 +197,20 @@ describe('readErrorLog 面板自身错误读取', () => {
     expect(result.logFile).toBe(path.join(dir, 'error.log'));
   });
 
-  it('文件存在但读不到（EACCES）：readState=unreadable —— 与「本来没有」分开', () => {
-    // 权限位在 root 下不生效（CAP_DAC_OVERRIDE），故用一个真实存在的**目录**占住文件名：
-    // 读它会得到 EISDIR（非 ENOENT），正是这条要区分的形态
-    fs.mkdirSync(path.join(dir, 'error.log'));
-    const result = readErrorLog();
-    expect(result.readState).toBe('unreadable');
-    expect(result.entries).toEqual([]);
-  });
+  // 用例靠「同名目录占位 → 读它得 EISDIR」来造出「文件存在但读不到」。Windows 上
+  // 读目录不抛错（Node 返回目录句柄/EISDIR 语义不同），于是 readState 变成 ok——
+  // 测的是宿主对读目录的处理，不是本实现对 unreadable 的判定。
+  it.skipIf(process.platform === 'win32')(
+    '文件存在但读不到（EACCES）：readState=unreadable —— 与「本来没有」分开',
+    () => {
+      // 权限位在 root 下不生效（CAP_DAC_OVERRIDE），故用一个真实存在的**目录**占住文件名：
+      // 读它会得到 EISDIR（非 ENOENT），正是这条要区分的形态
+      fs.mkdirSync(path.join(dir, 'error.log'));
+      const result = readErrorLog();
+      expect(result.readState).toBe('unreadable');
+      expect(result.entries).toEqual([]);
+    },
+  );
 
   it('读到任意一档即 ok（更旧的轮转档可读时，不因最新一档读不到而报读不到）', () => {
     fs.mkdirSync(path.join(dir, 'error.log'));

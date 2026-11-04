@@ -18,11 +18,21 @@ const TEST_RUNTIME_ROOT = path.join(os.tmpdir(), `mc-commander-server-vitest-${p
 export default defineConfig({
   test: {
     globalSetup: ['./tests/global-setup.js'],
-    // 并行门禁余量：私有 verify.ps1 三包并行时，重负载用例（如 scrypt N=131072 连做 4~5 次，
-    // 空载约 1.3s）会被挤过 vitest 默认的 5s 上限 ⇒ 同一提交在顺序执行的 local-check.sh 下
-    // 全绿、在三泳道并行下随机红，且每轮受害者不同。逐文件声明余量修不完（120 个文件里只有
-    // 1 个声明过），故在此统一给足；15s 仍能在用例真正挂死时失败，不是把超时当通过。
-    testTimeout: 15_000,
+    // 全局用 vitest 默认的 5s。重负载用例在**组级**声明余量
+    // （`describe(..., { timeout })`），不在这里统一放宽。
+    //
+    // 统一放宽会掩盖真实的性能退化：一个单次耗时数秒的实现缺陷，在宽松的全局值下
+    // 只会表现为「这个文件有点慢」，与并行抖动无法区分，于是没人回头查。全局值越小，
+    // 这类退化越早暴露。
+    //
+    // 需要余量的只有三类，理由写在各自的 describe 上：
+    //   ① 起真实 bash 进程跑部署/清理脚本（panel-routes、security.deploy）
+    //   ② 密码 scrypt（N=131072，计算密集型，单次数百毫秒）× 多次登录
+    //      （auth-totp、admin-auth）
+    //   ③ 大目录遍历等重 IO（level-dat）
+    // 这三类的共同点：耗时由被测代码的真实工作决定，不随机器变好而消失。
+    // 新增慢用例时按同一口径在组上写清「慢在哪」，而不是把全局值再抬回去。
+    testTimeout: 5_000,
     env: {
       API_KEY_HASH: TEST_API_KEY_HASH,
       DATA_DIR: path.join(TEST_RUNTIME_ROOT, 'data'),

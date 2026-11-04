@@ -65,7 +65,7 @@ function withFakeSudo({ status = 0, stderr = '' } = {}) {
     { mode: 0o755 },
   );
   const originalPath = process.env.PATH;
-  process.env.PATH = `${bin}:${originalPath}`;
+  process.env.PATH = [bin, originalPath].join(path.delimiter);
   return {
     argv: () => fs.readFileSync(argvFile, 'utf8').trim().split('\n'),
     restore: () => {
@@ -84,6 +84,13 @@ function buildApp() {
   return app;
 }
 
+// 依赖 sudo + systemd 的端点在这台机器上跑不通，且不是「桩没生效」那么简单：
+// Windows 自带的 sudo.exe 在 System32 里，而 Node 的 spawn 在 Windows 上会搜
+// 系统目录，PATH 前缀挡不住它，于是桩被真 sudo 顶掉（它还只认 `--` 语法、不认 `-n`）。
+//
+// 但同组里的清点/导出/migrate 校验/removal-preview 这些端点不碰 sudo，照常能测，
+// 故只给真正驱动 systemd 的用例打 skip。
+const linuxIt = it.skipIf(process.platform !== 'linux');
 describe('面板去留端点', () => {
   beforeEach(() => {
     root = fs.mkdtempSync(path.join(os.tmpdir(), 'panel-routes-'));
@@ -134,7 +141,7 @@ describe('面板去留端点', () => {
     expect(list.stdout).toContain('inst-1/server.jar');
   });
 
-  it('POST /panel/stop 先回确认文案（停服务在响应之后）', async () => {
+  linuxIt('POST /panel/stop 先回确认文案（停服务在响应之后）', async () => {
     const fake = withFakeSudo({ status: 0 });
     try {
       const res = await request(buildApp()).post('/api/panel/stop').send({});
@@ -154,7 +161,7 @@ describe('面板去留端点', () => {
     }
   });
 
-  it('POST /panel/migrate 校验类别与目标路径，拒绝相对路径与非空目标', async () => {
+  linuxIt('POST /panel/migrate 校验类别与目标路径，拒绝相对路径与非空目标', async () => {
     const fake = withFakeSudo({ status: 0 });
     try {
       // 相对路径会按 root 的 cwd 解析，落到谁也找不到的位置
@@ -176,7 +183,7 @@ describe('面板去留端点', () => {
     }
   });
 
-  it('POST /panel/migrate 目标非空时拒绝（两份数据会混在一起）', async () => {
+  linuxIt('POST /panel/migrate 目标非空时拒绝（两份数据会混在一起）', async () => {
     const fake = withFakeSudo({ status: 0 });
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'migrate-nonempty-'));
     try {
@@ -192,7 +199,7 @@ describe('面板去留端点', () => {
     }
   });
 
-  it('POST /panel/migrate 父目录不存在时拒绝并说清怎么办', async () => {
+  linuxIt('POST /panel/migrate 父目录不存在时拒绝并说清怎么办', async () => {
     const fake = withFakeSudo({ status: 0 });
     try {
       const res = await request(buildApp())
@@ -207,7 +214,7 @@ describe('面板去留端点', () => {
     }
   });
 
-  it('POST /panel/update 先校验权限，再触发更新单元，且 tag 带进单元名', async () => {
+  linuxIt('POST /panel/update 先校验权限，再触发更新单元，且 tag 带进单元名', async () => {
     const fake = withFakeSudo({ status: 0 });
     try {
       const res = await request(buildApp()).post('/api/panel/update').send({ tag: 'v0.10.4' });
@@ -237,7 +244,7 @@ describe('面板去留端点', () => {
     }
   });
 
-  it('没有自更新权限 → 500 并说清怎么办，不谎报已开始', async () => {
+  linuxIt('没有自更新权限 → 500 并说清怎么办，不谎报已开始', async () => {
     const fake = withFakeSudo({ status: 1, stderr: 'sudo: a password is required' });
     try {
       const res = await request(buildApp()).post('/api/panel/update').send({ tag: 'v0.10.4' });
@@ -249,7 +256,7 @@ describe('面板去留端点', () => {
     }
   });
 
-  it('POST /panel/runtime-upgrade 触发固定的运行环境单元', async () => {
+  linuxIt('POST /panel/runtime-upgrade 触发固定的运行环境单元', async () => {
     const fake = withFakeSudo({ status: 0 });
     try {
       const res = await request(buildApp()).post('/api/panel/runtime-upgrade').send({});
@@ -268,7 +275,7 @@ describe('面板去留端点', () => {
     }
   });
 
-  it('没有升级运行环境的权限 → 500 且不谎报已开始', async () => {
+  linuxIt('没有升级运行环境的权限 → 500 且不谎报已开始', async () => {
     const fake = withFakeSudo({ status: 1, stderr: 'sudo: a password is required' });
     try {
       const res = await request(buildApp()).post('/api/panel/runtime-upgrade').send({});
@@ -320,7 +327,7 @@ describe('面板去留端点', () => {
     }
   });
 
-  it('没有停自身的权限 → 500 并说清怎么办，不谎报已停止', async () => {
+  linuxIt('没有停自身的权限 → 500 并说清怎么办，不谎报已停止', async () => {
     // 实机复现：sudo -u mc-commander systemctl stop 退出码 1 + Interactive authentication required
     const fake = withFakeSudo({ status: 1, stderr: 'Interactive authentication required' });
     try {
@@ -367,7 +374,7 @@ describe('面板去留端点', () => {
   });
 
   /* 删除触发失败必须当场回错：回「已开始清理」而实际没动，用户会一直等一个不会来的结果 */
-  it('删除执行单元缺失 → 500 且说明该走哪条路，不回成功文案', async () => {
+  linuxIt('删除执行单元缺失 → 500 且说明该走哪条路，不回成功文案', async () => {
     const fake = withFakeSudo({
       status: 5,
       stderr:
@@ -385,7 +392,7 @@ describe('面板去留端点', () => {
     }
   });
 
-  it('sudo 白名单缺失 → 500 且指出是权限问题', async () => {
+  linuxIt('sudo 白名单缺失 → 500 且指出是权限问题', async () => {
     const fake = withFakeSudo({ status: 1, stderr: 'sudo: a password is required' });
     try {
       const res = await request(buildApp())
@@ -398,7 +405,7 @@ describe('面板去留端点', () => {
     }
   });
 
-  it('触发成功才回「已开始清理」，且用 --no-block 让 oneshot 单元不阻塞', async () => {
+  linuxIt('触发成功才回「已开始清理」，且用 --no-block 让 oneshot 单元不阻塞', async () => {
     const fake = withFakeSudo();
     try {
       const res = await request(buildApp())
@@ -418,7 +425,7 @@ describe('面板去留端点', () => {
     }
   });
 
-  it('勾了保留存档 → 指向 keep 单元', async () => {
+  linuxIt('勾了保留存档 → 指向 keep 单元', async () => {
     const fake = withFakeSudo();
     try {
       await request(buildApp())
@@ -446,8 +453,10 @@ function runRemoval(installDir, mode = '--keep-data', tmpDir, extraEnv) {
       MC_COMMANDER_DIR: installDir,
       TMPDIR: tmpDir ?? os.tmpdir(),
       // 软件源文件的合法目录也是沙箱：否则用例只能靠 /etc 下的真实文件验证，
-      // 而它非 root 写不了，判定对不对都测不出来
-      REPO_FILE_ROOTS: installDir,
+      // 而它非 root 写不了，判定对不对都测不出来。
+      // 转 POSIX 形式：脚本按 `case "$1" in "$root"/*` 匹配，分隔符是字面 '/'。
+      // 生产里两边天然都是 '/'；Windows 上 path 拼出 '\'，与清单里的 '/' 撞不上。
+      REPO_FILE_ROOTS: installDir.split(path.sep).join('/'),
       ...extraEnv,
     },
   });
@@ -471,7 +480,11 @@ describe('清理脚本不接受按自身位置反推安装目录', () => {
   });
 });
 
-describe('清理脚本的失败必须可见', () => {
+// 两组都经 runRemoval 起一个真实 bash 进程跑 panel-removal.sh：耗时由进程创建
+// 与脚本执行决定，不随机器变快而消失（Windows 上进程创建尤其贵）。
+// 超时声明在组级而非逐条：组内几乎每条都要起进程，逐条标必然漏，漏掉的那条
+// 会在机器繁忙时随机红。
+describe('清理脚本的失败必须可见', { timeout: 30_000 }, () => {
   it('带 set -e：任一步失败都不该继续往下走并报「清理完成」', () => {
     // 面板侧只看退出码判定删除成功；无 -e 时 rm 失败后脚本仍走到末尾并 exit 0
     const src = fs.readFileSync(REMOVAL, 'utf8');
@@ -489,19 +502,26 @@ describe('清理脚本的失败必须可见', () => {
       fs.writeFileSync(path.join(dir, 'node_modules', 'locked', 'x'), 'x');
       fs.chmodSync(path.join(dir, 'node_modules', 'locked'), 0o500);
       const r = runRemoval(dir, '--keep-data', os.tmpdir());
-      // root 环境下权限拦不住，此时脚本会成功——只在非 root 时验证失败分支
+      // 只在「权限真能挡住 rm」的环境里验证失败分支。process.getuid 在 Windows 上
+      // 不存在（undefined ⇒ 整个条件直接短路），而 NTFS 上 0500 只读位挡不住
+      // `rm -rf`——脚本照样删干净并报成功，此时断言失败分支没有意义。
       if (process.getuid && process.getuid() !== 0) {
         expect(r.status).not.toBe(0);
         expect(r.out).not.toContain('清理完成');
       }
-      fs.chmodSync(path.join(dir, 'node_modules', 'locked'), 0o700);
+      // 收尾可能已被脚本删掉（Windows 上 0500 拦不住 rm），失败不该翻成用例错误
+      try {
+        fs.chmodSync(path.join(dir, 'node_modules', 'locked'), 0o700);
+      } catch {
+        // 目录已不存在即已达目的
+      }
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
   });
 });
 
-describe('清理脚本收尾本项目自己的残留', () => {
+describe('清理脚本收尾本项目自己的残留', { timeout: 30_000 }, () => {
   let dir;
   let tmpHome;
 
@@ -534,14 +554,19 @@ describe('清理脚本收尾本项目自己的残留', () => {
 
   it('按清单里的 repo-file 撤掉第三方软件源与密钥', () => {
     // 两个文件都落在沙箱的软件源根目录下：路径形态与生产一致（/etc/apt/sources.list.d 或
-    // /usr/share/keyrings 下的 .list / .gpg），只是根换成了临时目录
+    // /usr/share/keyrings 下的 .list / .gpg），只是根换成了临时目录。
+    //
+    // 清单里写 POSIX 形式：脚本的允许目录判定是 `case "$1" in "$root"/*`——分隔符
+    // 是字面正斜杠。生产环境里两边都是 '/'，天然一致；Windows 上 path.join 出 '\'，
+    // 拿它去撞这个模式永远不匹配，测的成了「MSYS 路径怎么表示」而不是白名单逻辑。
+    const toPosix = (p) => p.split(path.sep).join('/');
     const keyring = path.join(dir, 'corretto-keyring.gpg');
     const aptList = path.join(dir, 'corretto.list');
     fs.writeFileSync(keyring, 'key');
     fs.writeFileSync(aptList, 'deb ...');
     fs.writeFileSync(
       path.join(dir, '.install-manifest'),
-      `repo-file\t${keyring}\nrepo-file\t${aptList}\n`,
+      `repo-file\t${toPosix(keyring)}\nrepo-file\t${toPosix(aptList)}\n`,
     );
 
     const r = runRemoval(dir);
@@ -598,7 +623,7 @@ describe('清理脚本收尾本项目自己的残留', () => {
     );
 
     const r = runRemoval(dir, '--keep-data', tmpHome, {
-      PATH: `${bin}:${process.env.PATH}`,
+      PATH: [bin, process.env.PATH].join(path.delimiter),
       argvFile,
     });
     expect(r.status).toBe(0);
