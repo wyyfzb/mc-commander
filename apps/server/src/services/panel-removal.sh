@@ -62,15 +62,20 @@ esac
 
 # 源码树校验：安装目录或其任一祖先含 .git 说明这是开发检出，不是部署出来的安装。
 # 对源码树执行删除会连带删掉未提交改动，且删完无法从安装清单回滚。
+#
+# 上溯必须能终止：dirname 在 Windows 路径上到盘符（如 "C:"）后会原样返回，
+# 而 MSYS 的 dirname "C:" 仍得 "C:"，只判 "/" 就会死循环。故「上一层等于自己」也停。
 _probe="$INSTALL_DIR"
 while [ -n "$_probe" ] && [ "$_probe" != "/" ]; do
   if [ -e "$_probe/.git" ]; then
     echo "拒绝在源码树中执行删除：$INSTALL_DIR 位于 git 检出内（$_probe）" >&2
     exit 1
   fi
-  _probe="$(dirname "$_probe")"
+  _parent="$(dirname "$_probe")"
+  [ "$_parent" = "$_probe" ] && break
+  _probe="$_parent"
 done
-unset _probe
+unset _probe _parent
 
 log "开始清理（安装目录：$INSTALL_DIR，模式：$MODE）"
 

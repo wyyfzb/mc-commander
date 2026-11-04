@@ -383,6 +383,7 @@ export function _readWorldSpawnFromLevelDat(rawOverride) {
   const levelDatPath = path.join(this.serverPath, levelName, 'level.dat');
   if (!fs.existsSync(levelDatPath)) return null;
 
+  let result = null;
   try {
     // rawOverride：get _worldSpawn 已读取过原始字节时直接复用，避免重复读盘
     const raw = rawOverride ?? fs.readFileSync(levelDatPath);
@@ -415,7 +416,8 @@ export function _readWorldSpawnFromLevelDat(rawOverride) {
     if (spawnZ == null) spawnZ = data.SpawnZ?.value;
 
     if (spawnX != null && spawnY != null && spawnZ != null) {
-      this._worldSpawn = { x: spawnX, y: spawnY, z: spawnZ };
+      result = { x: spawnX, y: spawnY, z: spawnZ };
+      this._worldSpawn = result;
       // 记录本次成功解析的原始字节，供 get _worldSpawn 做运行期变更检测；
       // 仅在成功解析后更新，解析失败时下次访问会重试
       this._worldSpawnRaw = raw;
@@ -426,8 +428,10 @@ export function _readWorldSpawnFromLevelDat(rawOverride) {
   } catch (e) {
     logger.warn(`[${this.id}] Failed to read world spawn from level.dat:`, e.message);
   }
-  // 读出结果一并返回：调用方既可能用副作用（本方法同时刷新 this._worldSpawn），
-  // 也可能只想要「这次解析到的出生点」。返回 undefined 会让后者拿到「没有出生点」
-  // 与「解析失败」不可区分。
-  return this._worldSpawn ?? null;
+  // 返回本次解析到的出生点，不读 this._worldSpawn：后者是 getter，检测到 level.dat
+  // 字节变化时会回调本方法，本方法若再读它就是重入——两侧只在「解析出坐标并写入
+  // _worldSpawnRaw」之后才终止。存档里没有 spawn 字段时（老存档、异常存档、最小夹具）
+  // 永远写不进去，于是每读一次出生点就无限递归到栈耗尽。调用方要的是这次解析到什么，
+  // 返回局部结果既满足它，也切断了重入。
+  return result;
 }
