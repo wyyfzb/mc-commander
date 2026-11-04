@@ -54,9 +54,11 @@ function makeBareInstance(serverPath, properties = {}) {
   return inst;
 }
 
+// 收尾要递归删掉本文件造的全部 fixture；开着覆盖率插桩时同一批删除会慢数倍，
+// 默认 10s 的 hook 上限不够。这只是删除临时目录，放宽不影响任何断言
 afterAll(() => {
   fs.rmSync(tmpBase, { recursive: true, force: true });
-});
+}, 30_000);
 
 describe('level-dat 模块 require 复用语义', () => {
   it('12 个域方法经 Object.assign 注入 MCServerInstance 原型，实例调用 this 绑定正确', () => {

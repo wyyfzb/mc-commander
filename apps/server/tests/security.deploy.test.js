@@ -1332,7 +1332,9 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
     });
   });
 
-  describe('服务器地址探测：先问权威源，再退猜测', () => {
+  // 每条都起 bash 跑 get_public_ip：失败路径要依次试完元数据与出口 IP 探测才退回网卡，
+  // 耗时由「起进程 + 走满探测链」决定；覆盖率插桩后同一批 fork 更慢
+  describe('服务器地址探测：先问权威源，再退猜测', { timeout: 30_000 }, () => {
     const fn = script.match(/get_public_ip\(\) \{[\s\S]*?\n\}/);
     if (!fn) throw new Error('未能在部署脚本中定位 get_public_ip');
 

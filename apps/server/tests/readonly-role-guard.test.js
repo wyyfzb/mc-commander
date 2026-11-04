@@ -363,7 +363,9 @@ describe('拒绝语义与信息暴露', () => {
   });
 });
 
-describe('凭据通道与角色赋值', () => {
+// 逐端点遍历整个 API 面，每条请求都要过一次凭据校验（含哈希比较与临时 .env 改写），
+// 端点数量决定耗时；覆盖率插桩后同一批请求更慢
+describe('凭据通道与角色赋值', { timeout: 30_000 }, () => {
   it('管理员 API Key → admin 角色且不被角色门拦', async () => {
     for (const { method, pattern } of endpoints) {
       const url = API_V1_MOUNT + concreteUrl(pattern);

@@ -145,7 +145,9 @@ describe('两步验证端点的鉴权域', () => {
   });
 });
 
-describe('安全档位变更后的会话吊销（confirm / disable）', () => {
+// 本组每条都走完整登录链：密码 scrypt（N=131072，计算密集型）+ TOTP 校验，
+// 单条常含多次登录。耗时由哈希强度决定——降低它等于削弱密码存储，故只能给余量
+describe('安全档位变更后的会话吊销（confirm / disable）', { timeout: 30_000 }, () => {
   /** 新建一个会话（未启用阶段只需密码），返回明文令牌 */
   async function loginToken(totpCode) {
     const res = await request(app)
@@ -500,7 +502,8 @@ describe('关闭两步验证：密码 + 第二因子双证', () => {
   });
 });
 
-describe('登录第二因子', () => {
+// 同属 scrypt 重负载：每条都要先起一条已确认的会话，再做多次登录尝试
+describe('登录第二因子', { timeout: 30_000 }, () => {
   it('已启用但未带第二因子 → 401/40105，不签发会话', async () => {
     await enrollAndConfirm();
     // enrollAndConfirm 自身留下的那条会话来自身份确认前的登录：失败尝试不得新增
