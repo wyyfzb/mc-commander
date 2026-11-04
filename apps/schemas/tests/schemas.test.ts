@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises'
 import { describe, it, expect } from 'vitest'
+import { z } from 'zod'
 import {
   compareVersions,
   parseVersion,
@@ -63,6 +64,12 @@ import {
   instanceDeleteRequestBodySchema,
   taskCreatePayloadSchema,
   taskUpdatePayloadSchema,
+  restoreConfirmTarget,
+  fileMkdirRequestSchema,
+  fileRenameRequestSchema,
+  resolveMarketTarget,
+  makeApiEnvelopeSchema,
+  pushChannelRequestBodySchema,
 } from '../src/index'
 
 describe('schemas 基础校验', () => {
@@ -461,6 +468,38 @@ describe('请求侧契约（路由层 zod 统一）', () => {
     expect(() => fileSaveRequestSchema.parse({ path: '/a', content: 1 })).toThrow()
   })
 
+  it('fileSaveRequestSchema：两字段都缺失时给出合并文案，单缺一个只提该字段', () => {
+    // 字段缺失走 error 回调里的默认消息（iss.input === undefined 分支），
+    // 与「类型不对」是两条不同路径：类型错误必须保留 zod 自己的措辞
+    expect(() => fileSaveRequestSchema.parse({})).toThrow('File path and content are required')
+    expect(() => fileSaveRequestSchema.parse({ content: 'x' })).toThrow(
+      'File path and content are required',
+    )
+  })
+
+  it('fileMkdirRequestSchema：path 必填，缺失与空串各给对应文案', () => {
+    expect(fileMkdirRequestSchema.parse({ path: '/a' })).toEqual({ path: '/a' })
+    expect(() => fileMkdirRequestSchema.parse({})).toThrow('Directory path is required')
+    expect(() => fileMkdirRequestSchema.parse({ path: '' })).toThrow('Directory path is required')
+  })
+
+  it('fileRenameRequestSchema：path/newPath 双必填', () => {
+    expect(fileRenameRequestSchema.parse({ path: '/a', newPath: '/b' })).toEqual({
+      path: '/a',
+      newPath: '/b',
+    })
+    expect(() => fileRenameRequestSchema.parse({ path: '/a' })).toThrow(
+      'Old path and new path are required',
+    )
+    expect(() => fileRenameRequestSchema.parse({ path: '/a', newPath: '' })).toThrow(
+      'Old path and new path are required',
+    )
+    // 类型错误不是「缺失」：保留 zod 类型文案，否则「传了数字」会被报成「没填」
+    expect(() => fileRenameRequestSchema.parse({ path: 1, newPath: '/b' })).toThrow(
+      /expected string/,
+    )
+  })
+
   it('auditLogsQuerySchema：order 缺省/非法回落 desc（向后兼容语义），合法值保留', () => {
     expect(auditLogsQuerySchema.parse({}).order).toBe('desc')
     expect(auditLogsQuerySchema.parse({ order: 'asc' }).order).toBe('asc')
@@ -571,11 +610,44 @@ describe('请求侧契约（路由层 zod 统一）', () => {
 
   it('upgradeRequestSchema：mcVersion 必填（保留原文案），type 缺省 vanilla、非法保留 Invalid type 文案', () => {
     expect(() => upgradeRequestSchema.parse({ type: 'vanilla' })).toThrow(/mcVersion is required/)
+    // 数字不是「缺失」：走到 error 回调的另一侧，应保留 zod 自己的类型文案，
+    // 而不是把「类型不对」也说成「必填」
+    expect(() => upgradeRequestSchema.parse({ mcVersion: 121 })).toThrow(/expected string/)
     const parsed = upgradeRequestSchema.parse({ mcVersion: '1.21.4' })
     expect(parsed.type).toBe('vanilla')
     expect(() => upgradeRequestSchema.parse({ mcVersion: '1.21.4', type: 'bukkit' })).toThrow(
       /Invalid type/,
     )
+  })
+
+  it('restoreConfirmTarget：实例名优先，退到备份名，再退到 id', () => {
+    // 无论走哪一级都必须非空：空串天然匹配会让「输入实例名才能确认」这道闸门空转
+    expect(restoreConfirmTarget({ instanceName: '生存服', backupId: 7 })).toBe('生存服')
+    expect(restoreConfirmTarget({ instanceName: '  生存服  ', backupId: 7 })).toBe('生存服')
+    expect(restoreConfirmTarget({ instanceName: '', backupName: '每周备份', backupId: 7 })).toBe(
+      '每周备份',
+    )
+    // 实例名只有空白也算缺失
+    expect(restoreConfirmTarget({ instanceName: '   ', backupName: '每周备份', backupId: 7 })).toBe(
+      '每周备份',
+    )
+    expect(restoreConfirmTarget({ backupId: 7 })).toBe('7')
+    expect(restoreConfirmTarget({ instanceName: null, backupName: null, backupId: 'abc' })).toBe(
+      'abc',
+    )
+  })
+
+  it('resolveMarketTarget：模组系装载器落 mods/，其余一律 plugins/', () => {
+    for (const loader of ['fabric', 'forge', 'neoforge', 'quilt']) {
+      expect(resolveMarketTarget(loader)).toEqual({ kind: 'mod', loader })
+    }
+    // 大小写与空白都要归一：装载器名来自服务端返回值，写法不受控
+    expect(resolveMarketTarget(' Fabric ')).toEqual({ kind: 'mod', loader: 'fabric' })
+    // 未知值走 Bukkit 系是保守方向：插包装进 mods/ 会被当成插件目录读，
+    // 而模组装进 plugins/ 只是不生效
+    for (const loader of ['paper', 'purpur', 'vanilla', 'something-else', null, undefined]) {
+      expect(resolveMarketTarget(loader)).toEqual({ kind: 'plugin', loader: null })
+    }
   })
 
   it('taskCreatePayloadSchema：name/type/cronExpression 必填，type 限五值枚举', () => {
@@ -913,6 +985,18 @@ describe('实例控制面输入侧契约（五 body 端点）', () => {
     expect(
       instanceCommandRequestBodySchema.parse({ command: 'x'.repeat(2000) }).command,
     ).toHaveLength(2000)
+    // command 完全缺键走 iss.input === undefined 分支，与「类型不对」是两条文案
+    expect(() => instanceCommandRequestBodySchema.parse({ command: undefined })).toThrow(
+      /Command is required/,
+    )
+    // source 是白名单枚举而非自由字符串：放开会让调用方冒充 scheduler/rcon，
+    // 审计可回溯性失效
+    expect(
+      instanceCommandRequestBodySchema.parse({ command: '/list', source: 'replay' }).source,
+    ).toBe('replay')
+    expect(() =>
+      instanceCommandRequestBodySchema.parse({ command: '/list', source: 'rcon' }),
+    ).toThrow()
   })
 
   it('instancePropertiesRequestBodySchema：passthrough 保留全部属性键，数组/标量/null 拒收（原文案）', () => {
@@ -968,6 +1052,23 @@ describe('信封的未知负载字段（zod 4 起 z.unknown() 不再隐式可选
     expect(apiEnvelopeSchema.safeParse(base).success).toBe(true)
     expect(apiEnvelopeSchema.safeParse({ ...base, data: null }).success).toBe(true)
     expect(apiEnvelopeSchema.safeParse({ ...base, data: { a: 1 } }).success).toBe(true)
+  })
+
+  it('makeApiEnvelopeSchema：按传入 schema 收窄 data，非法 data 拒收', () => {
+    // 泛型信封的用途就是把 data 的类型钉到具体 schema 上，data 校验失效即失去意义
+    const schema = makeApiEnvelopeSchema(z.object({ n: z.number() }))
+    expect(schema.safeParse({ ...base, data: { n: 1 } }).success).toBe(true)
+    expect(schema.safeParse({ ...base, data: { n: 'x' } }).success).toBe(false)
+    expect(schema.safeParse({ ...base }).success).toBe(false)
+  })
+
+  it('pushChannelRequestBodySchema：enabled 必须是布尔值', () => {
+    expect(pushChannelRequestBodySchema.parse({ enabled: true })).toEqual({ enabled: true })
+    // 字符串 'true' 不算：前端常把开关值转成字符串，放行等于让服务端按真值表猜
+    expect(() => pushChannelRequestBodySchema.parse({ enabled: 'true' })).toThrow(
+      'enabled must be a boolean',
+    )
+    expect(() => pushChannelRequestBodySchema.parse({})).toThrow('enabled must be a boolean')
   })
 
   it('apiErrorEnvelopeSchema：缺 details 应通过', () => {
@@ -1051,6 +1152,10 @@ describe('版本号解析与比较（契约包唯一一份）', () => {
     expect(parseVersion('v1.21')).toEqual([1, 21, 0])
     expect(parseVersion('26.3-snapshot-2')).toEqual([26, 3, 0])
     expect(parseVersion('weird')).toBeNull()
+    // 缺段补零；null/undefined 也按不可解析处理（服务端返回值可能为空）
+    expect(parseVersion('1')).toEqual([1, 0, 0])
+    expect(parseVersion('1.21')).toEqual([1, 21, 0])
+    expect(parseVersion(null as unknown as string)).toBeNull()
   })
 
   it('周快照形态不可解析：25 是年份后两位，不是主版本号', () => {

@@ -49,13 +49,20 @@ export default defineConfig({
         'src/services/**',
         'src/utils/**',
         'src/db/**',
+        'src/middleware/**',
         'src/websocket.js',
       ],
       exclude: ['src/routes/*.test.js', '**/tests/**'],
       // 阈值由本包自己判，不做跨包合计：合计判阈值时一个包掉到 30%、
-      // 另一个 95% 也照样通过，等于没有门禁
+      // 另一个 95% 也照样通过，等于没有门禁。
+      // 四维全判：只看 statements 会放过「分支只走了一半」的情况——条件的一侧从未
+      // 执行，语句覆盖率依然可以是满的。数值取实测值下浮 3 个点，给正常波动留余量，
+      // 但不给整块功能掉线留余量。
       thresholds: {
-        statements: 70,
+        statements: 88,
+        branches: 81,
+        functions: 90,
+        lines: 89,
       },
     },
   },

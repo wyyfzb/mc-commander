@@ -212,9 +212,14 @@ export default defineConfig({
       include: ['src/**/*.{ts,tsx}'],
       exclude: ['tests/**'],
       // 阈值由本包自己判，不做跨包合计——合计判阈值会让一个包掉到 30%、
-      // 另一个 95% 也照样通过
+      // 另一个 95% 也照样通过。
+      // 四维全判：只看 statements 会放过「分支只走了一半」的情况——条件的一侧从未
+      // 执行，语句覆盖率依然可以是满的。数值取实测值下浮 3 个点。
       thresholds: {
-        statements: 70,
+        statements: 81,
+        branches: 77,
+        functions: 79,
+        lines: 82,
       },
     },
   },
