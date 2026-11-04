@@ -53,6 +53,39 @@ export const updateCheckResultSchema = z.object({
   url: z.string().optional(),
 })
 
+/** 面板数据占用调查的一项：一个运行期目录的规模与所在文件系统余量 */
+export const panelDataItemSchema = z.object({
+  key: z.string(),
+  label: z.string(),
+  path: z.string(),
+  entries: z.number(),
+  bytes: z.number(),
+  /** 文件系统余量；-1 表示目录不存在或平台不支持，前端据此显示「未知」而不是 0 */
+  freeBytes: z.number(),
+  mountPoint: z.string(),
+})
+
+export const panelDataResponseSchema = z.object({
+  items: z.array(panelDataItemSchema),
+})
+
+/** GET /panel/removal-preview：彻底删除前要用户确认的全部事实 */
+export const panelRemovalPreviewSchema = z.object({
+  items: z.array(panelDataItemSchema),
+  totpEnabled: z.boolean(),
+  installDir: z.string(),
+})
+
+/** 面板自管的 node 运行环境状态（升级按钮的依据） */
+export const panelRuntimeStatusSchema = z.object({
+  current: z.string(),
+  latest: z.string().nullable(),
+  hasUpdate: z.boolean(),
+  managed: z.boolean(),
+  /** managed 为 false 时必须给出「为什么不能自动升级」，否则用户只看到禁用按钮 */
+  reason: z.string().nullable(),
+})
+
 /**
  * 面板自身错误日志（`error.log` 及轮转档）中的一条。
  *

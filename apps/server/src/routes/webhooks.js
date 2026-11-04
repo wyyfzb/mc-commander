@@ -7,7 +7,7 @@
  */
 import { Router } from 'express';
 import { WebhookModel } from '../db/index.js';
-import { success, error, ErrorCodes } from '../utils/response.js';
+import { error, ErrorCodes } from '../utils/response.js';
 import { recordAudit, AuditActions } from '../utils/audit.js';
 import { WebhookService, WEBHOOK_EVENT_TYPES } from '../services/webhook.service.js';
 import { checkPublicUrl } from '../utils/url-guard.js';
@@ -15,6 +15,9 @@ import {
   webhookCreatePayloadSchema,
   webhookSchema,
   webhookDeliverySchema,
+  webhookEventTypesSchema,
+  webhookTestResultSchema,
+  nullDataSchema,
   WEBHOOK_PLATFORMS,
 } from '@mc-commander/schemas';
 import {
@@ -39,7 +42,7 @@ export function createWebhookRoutes() {
 
   // GET /webhooks/event-types — 查询可用事件类型
   router.get('/webhooks/event-types', (req, res) => {
-    res.json(success(WEBHOOK_EVENT_TYPES));
+    res.json(validatedSuccess(webhookEventTypesSchema, WEBHOOK_EVENT_TYPES));
   });
 
   // GET /webhooks — 列表
@@ -161,7 +164,7 @@ export function createWebhookRoutes() {
         targetId: String(id),
         detail: { name: webhook.name },
       });
-      res.json(success(webhook, 'Webhook 更新成功'));
+      res.json(validatedSuccess(webhookSchema, webhook, 'Webhook 更新成功'));
     }),
   );
 
@@ -179,7 +182,7 @@ export function createWebhookRoutes() {
       targetId: String(id),
       detail: { name: existing.name },
     });
-    res.json(success(null, 'Webhook 已删除'));
+    res.json(validatedSuccess(nullDataSchema, null, 'Webhook 已删除'));
   });
 
   // POST /webhooks/:id/test — 测试投递
@@ -201,7 +204,13 @@ export function createWebhookRoutes() {
       });
 
       if (result.success) {
-        res.json(success({ statusCode: result.statusCode, body: result.body }, '测试投递成功'));
+        res.json(
+          validatedSuccess(
+            webhookTestResultSchema,
+            { statusCode: result.statusCode, body: result.body },
+            '测试投递成功',
+          ),
+        );
       } else {
         res.status(500).json(error(ErrorCodes.WEBHOOK_TEST_FAILED, result.error || '测试投递失败'));
       }
