@@ -42,7 +42,6 @@
   --mcs-purple-fg: var(--ref-purple);
   --mcs-purple-bg-subtle: color-mix(in oklch, var(--ref-purple) 12%, var(--ref-dark-base));
   --mcs-purple-border: color-mix(in oklch, var(--ref-purple) 25%, transparent);
-  --mcs-orange-fg: var(--ref-orange);
 
   /* ── 品牌 accent（P6 品牌克制：全界面彩色像素 <5%，只给 CTA/激活态/品牌元素）── */
   --mcs-accent: var(--ref-accent);
@@ -198,7 +197,6 @@
   --mcs-purple-fg: var(--ref-purple-light);
   --mcs-purple-bg-subtle: color-mix(in oklch, var(--ref-purple-light) 10%, var(--ref-light-card));
   --mcs-purple-border: color-mix(in oklch, var(--ref-purple-light) 25%, transparent);
-  --mcs-orange-fg: var(--ref-orange-light);
 
   --mcs-accent: var(--ref-accent-light);
   --mcs-on-accent: var(--ref-on-accent);           /* 深绿黑字（10.6:1） */

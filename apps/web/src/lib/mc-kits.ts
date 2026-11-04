@@ -1,6 +1,6 @@
 /**
  * 预设礼包数据与持久化
- * - 6 个默认礼包（从未配置过时回退）
+ * - 5 个默认礼包（从未配置过时回退）
  * - 持久化 schema：{name, icon, desc, items:[{id,count}]}
  * - 礼包中可能存在不在物品目录中的 id（如 quartz_block），应用时"找不到则跳过"的容错由调用方保留
  */
@@ -21,7 +21,7 @@ export interface KitPreset {
   icon: string
   /** 描述 */
   desc: string
-  /** 物品列表（同一物品可重复出现，如药水包） */
+  /** 物品列表（按 id 去重合并，同 id 多次出现只累加数量） */
   items: KitItem[]
 }
 
@@ -97,18 +97,6 @@ export const DEFAULT_KITS: KitPreset[] = [
       { id: 'cooked_beef', count: 64 },
       { id: 'bread', count: 64 },
       { id: 'golden_apple', count: 64 },
-    ],
-  },
-  {
-    name: '药水包',
-    icon: '⚗️',
-    desc: '治疗/力量/速度/抗火/夜视各3瓶',
-    items: [
-      { id: 'potion', count: 3 },
-      { id: 'potion', count: 3 },
-      { id: 'potion', count: 3 },
-      { id: 'potion', count: 3 },
-      { id: 'potion', count: 3 },
     ],
   },
 ]

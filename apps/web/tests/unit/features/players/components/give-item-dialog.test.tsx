@@ -519,7 +519,7 @@ describe('GiveItemPanel 预设礼包', { timeout: 15000 }, () => {
     await user.click(screen.getByRole('tab', { name: '预设礼包' }))
   }
 
-  it('默认礼包 Tab：6 个默认礼包卡 + 新建礼包卡', async () => {
+  it('默认礼包 Tab：每个默认礼包各一张卡 + 新建礼包卡', async () => {
     const user = userEvent.setup()
     renderPanel()
     await openKitsTab(user)
@@ -544,7 +544,7 @@ describe('GiveItemPanel 预设礼包', { timeout: 15000 }, () => {
     expect(screen.getByTestId('item-cell-diamond')).toBeInTheDocument() // 已切回物品 Tab
   })
 
-  it('应用礼包：目录外 id 静默跳过（建材包 quartz_block 缺失）', async () => {
+  it('应用礼包：目录外 id 不静默丢弃（建材包 quartz_block 缺失须告知）', async () => {
     const user = userEvent.setup()
     renderPanel()
     await openKitsTab(user)
@@ -552,10 +552,10 @@ describe('GiveItemPanel 预设礼包', { timeout: 15000 }, () => {
     fireEvent.click(
       within(screen.getByTestId(`kit-card-${kit.name}`)).getByRole('button', { name: '添加' }),
     )
-    expect(await screen.findByText(`已添加「${kit.name}」到已选列表`)).toBeInTheDocument()
-    // 建材包 10 条里 1 条是目录外（quartz_block）⇒ 解析出 9 种。
-    // 修正前是 8 种：另一条 `brick_block` 是**写错的官方 id**（官方无此物品，应为
-    // `bricks`），也被当成「目录外」静默跳过——该用例当时正好掩盖了这个真缺陷。
+    // 建材包 10 条里 1 条是目录外（quartz_block）⇒ 解析出 9 种，且必须点名缺了哪个：
+    // 报「已添加」却少东西，用户会以为给齐了
+    expect(await screen.findByText(/1 件物品不在目录中已跳过/)).toBeInTheDocument()
+    expect(screen.getByText(/quartz_block/)).toBeInTheDocument()
     expect(screen.getByText(/已选 9 种物品/)).toBeInTheDocument()
   })
 

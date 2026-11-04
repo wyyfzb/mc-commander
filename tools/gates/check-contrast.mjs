@@ -109,7 +109,7 @@ const semantic = readFileSync(join(root, 'src/styles/tokens/semantic.css'), 'utf
 const refVars = extractVars(reference)
 const semanticScopes = resolveScopes(semantic)
 
-const STATUS_KEYS = ['success', 'warning', 'error', 'info', 'purple', 'orange']
+const STATUS_KEYS = ['success', 'warning', 'error', 'info', 'purple']
 const BG_KEYS = ['bg-default', 'bg-muted', 'bg-subtle', 'bg-emphasis', 'bg-secondary']
 
 /**

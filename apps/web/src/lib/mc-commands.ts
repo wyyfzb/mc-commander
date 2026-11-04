@@ -133,25 +133,6 @@ export function iconForCommand(name: string): LucideIcon {
   return Terminal
 }
 
-// ── 颜色映射（→ --mcs-*-fg token 工具类）──
-const COLOR_BY_PREFIX: Array<[RegExp, string]> = [
-  [/^give$/, 'text-mcs-info-fg'],
-  [/^gamemode$/, 'text-mcs-purple-fg'],
-  [/^time$/, 'text-mcs-warning-fg'],
-  [/^(tp|teleport)$/, 'text-mcs-success-fg'],
-  [/^kill$/, 'text-mcs-error-fg'],
-  [/^weather$/, 'text-mcs-info-fg'],
-  [/^effect$/, 'text-mcs-purple-fg'],
-  [/^summon$/, 'text-mcs-orange-fg'],
-]
-
-export function colorForCommand(name: string): string {
-  for (const [re, cls] of COLOR_BY_PREFIX) {
-    if (re.test(name)) return cls
-  }
-  return 'text-mcs-accent-fg'
-}
-
 // ── 补全逻辑（/ 开头；无空格命令名前缀；有空格参数子串；最多 10 条）──
 export interface CompletionItem {
   kind: 'command' | 'selector'

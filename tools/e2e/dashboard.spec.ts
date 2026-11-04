@@ -183,6 +183,30 @@ test.describe('仪表盘', () => {
     await cmdReq
   })
 
+  test('快捷指令：常态只有播放键，编辑态可行内改写', async ({ page }) => {
+    await setupConnection(page)
+    await page.goto('/dashboard')
+    await expect(page.getByLabel('服务器命令输入')).toBeEnabled({ timeout: 15_000 })
+
+    const preset = 'tp @a 0 100 0'
+    // 常态：chip 主体 + 播放键，没有编辑/删除
+    await expect(page.getByRole('button', { name: preset, exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: `发送 ${preset}` })).toBeVisible()
+    await expect(page.getByRole('button', { name: `编辑 ${preset}` })).toHaveCount(0)
+
+    // 编辑态：播放键换成编辑与删除
+    await page.getByRole('button', { name: '编辑快捷指令' }).click()
+    await expect(page.getByRole('button', { name: `编辑 ${preset}` })).toBeVisible()
+    await expect(page.getByRole('button', { name: `发送 ${preset}` })).toHaveCount(0)
+
+    // 行内改写：输入框原位展开，填新命令
+    await page.getByRole('button', { name: `编辑 ${preset}` }).click()
+    const editor = page.getByLabel(`编辑快捷指令 ${preset}`)
+    await expect(editor).toBeVisible()
+    await editor.fill('tp @a 0 64 0')
+    await expect(editor).toHaveValue('tp @a 0 64 0')
+  })
+
   test('命令补全：/ 开头出现下拉', async ({ page }) => {
     await setupConnection(page)
     await page.goto('/dashboard')

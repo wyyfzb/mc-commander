@@ -51,6 +51,7 @@ import { getFriendlyErrorText } from '@/api/errors'
 import { instanceLabel } from '@/lib/instance-label'
 import { queryKeys } from '@/api/queries'
 import { iconForCommand } from '@/lib/mc-commands'
+import { DEFAULT_COMMAND_PRESETS } from '@/lib/mc-command-presets'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 
 /**
@@ -59,14 +60,6 @@ import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
  * / 玩家搜索、给予/传送/封禁快捷入口
  * / 实例操作（重启/备份/停止：破坏性操作二次确认，备份直接执行）
  */
-
-const DEFAULT_PRESETS = [
-  'give @p diamond 64',
-  'gamemode creative',
-  'time set day',
-  'tp @p 0 100 0',
-  'kill @e[type=!player]',
-]
 
 interface PaletteAction {
   label: string
@@ -271,7 +264,9 @@ export function CommandPalette() {
 
   // 命令域：预设快捷命令。派生自面板偏好而非读一次快照——偏好是异步拉回的，
   // 读一次会把「还没拉回来」的默认值当成用户配置
-  const presets = usePanelPreferencesStore((s) => s.remote?.commandPresets ?? DEFAULT_PRESETS)
+  const presets = usePanelPreferencesStore(
+    (s) => s.remote?.commandPresets ?? DEFAULT_COMMAND_PRESETS,
+  )
 
   // 玩家域：搜索玩家（远程数据），点选打开玩家页详情；cmdk 按 value 过滤
   const playersQuery = usePlayers(instanceId)
