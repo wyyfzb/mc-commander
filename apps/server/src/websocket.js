@@ -15,6 +15,7 @@ import { logger } from './utils/logger.js';
 import { parseDbTime } from './utils/db-time.js';
 import { inFlightDeploys } from './utils/deploy-inflight.js';
 import { collectSystemStats } from './utils/system-stats.js';
+import { observeWsPayload } from './utils/ws-contract.js';
 
 export const WSEvents = {
   LOG: 'log',
@@ -461,21 +462,23 @@ export function setupWebSocket(wss, serverManager) {
             const inFlight = mayReceiveEvent(ws, WSEvents.WORLD_UPGRADE)
               ? (worldUpgradeInFlight.get(msg.instanceId) ?? null)
               : undefined;
+            const snapshotData = {
+              status: instance.isRunning ? 'running' : 'stopped',
+              isRunning: Boolean(instance.isRunning),
+              players: Array.from(instance.players?.values?.() ?? []),
+              tps: typeof instance.tps === 'number' ? instance.tps : null,
+              // 推送面真值随订阅快照一起给（与 REST 的 capabilities.msmpPush 同源同义）
+              msmpPush: Boolean(instance.isRunning && instance._msmpNotifConnected),
+              ...(inFlight === undefined
+                ? {}
+                : { worldUpgrade: inFlight && { progress: inFlight.progress } }),
+            };
+            observeWsPayload(WSEvents.STATUS_SNAPSHOT, snapshotData);
             ws.send(
               JSON.stringify({
                 type: WSEvents.STATUS_SNAPSHOT,
                 instanceId: msg.instanceId,
-                data: {
-                  status: instance.isRunning ? 'running' : 'stopped',
-                  isRunning: Boolean(instance.isRunning),
-                  players: Array.from(instance.players?.values?.() ?? []),
-                  tps: typeof instance.tps === 'number' ? instance.tps : null,
-                  // 推送面真值随订阅快照一起给（与 REST 的 capabilities.msmpPush 同源同义）
-                  msmpPush: Boolean(instance.isRunning && instance._msmpNotifConnected),
-                  ...(inFlight === undefined
-                    ? {}
-                    : { worldUpgrade: inFlight && { progress: inFlight.progress } }),
-                },
+                data: snapshotData,
                 timestamp: Date.now(),
               }),
             );
@@ -485,6 +488,7 @@ export function setupWebSocket(wss, serverManager) {
               if (!mayReceiveEvent(ws, type)) continue;
               const payload = build(instance);
               if (payload === null) continue;
+              observeWsPayload(type, payload);
               ws.send(
                 JSON.stringify({
                   type,
@@ -686,6 +690,8 @@ export function setupWebSocket(wss, serverManager) {
 
   /// 广播（带背压保护）：通知类事件先落库并携带事件 id
   function broadcast(instanceId, type, data) {
+    // 发送前观测一次载荷：漂移在这里变成告警，否则要到前端渲染成空白才被发现
+    observeWsPayload(type, data);
     let eventId = null;
     if (NOTIFICATION_EVENT_TYPES.has(type)) {
       eventId = persistNotificationEvent(instanceId, type, data);
@@ -719,6 +725,7 @@ export function setupWebSocket(wss, serverManager) {
   /// 控制台的人。信封与载荷仍携带实例归属，前端据此跳转；角色过滤不受影响
   /// （fanOut 内 mayReceiveEvent 照常生效，只读的失败静音是既有取舍）
   function broadcastCriticalInstanceEvent(type, data) {
+    observeWsPayload(type, data);
     const eventId = persistNotificationEvent(null, type, data);
     const message = JSON.stringify({
       ...(eventId != null ? { eventId } : {}),
@@ -734,6 +741,7 @@ export function setupWebSocket(wss, serverManager) {
   /// 发给所有在线客户端。用于无实例归属的低频高价值事件——部署终态：
   /// 部署实例在完成前不入库，订阅过滤不适用，broadcast 的订阅匹配会全部落空
   function broadcastGlobalNotification(type, data) {
+    observeWsPayload(type, data);
     const eventId = persistNotificationEvent(null, type, data);
     const message = JSON.stringify({
       ...(eventId != null ? { eventId } : {}),
@@ -902,6 +910,7 @@ export function setupWebSocket(wss, serverManager) {
     const lastSent = broadcastAllThrottle.get(type) || 0;
     if (now - lastSent < BROADCAST_ALL_THROTTLE_MS) return;
     broadcastAllThrottle.set(type, now);
+    observeWsPayload(type, data);
     const message = JSON.stringify({
       type,
       data,

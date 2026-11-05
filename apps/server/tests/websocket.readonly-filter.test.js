@@ -118,6 +118,9 @@ describe('只读角色的 WS 事件过滤', () => {
       serverManager.emit(emitterEvent, {
         instanceId: 's1',
         text: 'secret',
+        // 各事件的载荷都按契约给全：本用例判的是「收不到」，但服务端仍会
+        // 对载荷做一次契约观测，夹具缺字段会在日志里留下与用例无关的漂移告警
+        type: 'stdout',
         name: 'x',
         url: 'https://hook/?token=abc',
       });
@@ -127,8 +130,26 @@ describe('只读角色的 WS 事件过滤', () => {
     it.each([
       ['instance:status', WSEvents.STATUS_EVENT, { event: 'started', isRunning: true }],
       // 同一 emitter 的两种载荷形状：带 event 是跃迁、不带是快照（标题由类型区分）
-      ['instance:status', WSEvents.STATUS_SNAPSHOT, { status: 'running', isRunning: true }],
-      ['instance:performanceUpdate', WSEvents.PERFORMANCE_UPDATE, { tps: 20 }],
+      [
+        'instance:status',
+        WSEvents.STATUS_SNAPSHOT,
+        { status: 'running', isRunning: true, players: [], tps: 20, msmpPush: false },
+      ],
+      [
+        'instance:performanceUpdate',
+        WSEvents.PERFORMANCE_UPDATE,
+        {
+          cpu: 1,
+          memory: 2,
+          tps: 20,
+          mspt: 1,
+          worldTime: 0,
+          worldDay: 1,
+          sleepingPlayers: 0,
+          sleepingPlayerNames: [],
+          awakePlayerNames: [],
+        },
+      ],
       ['instance:weatherUpdate', WSEvents.WEATHER_UPDATE, { weather: 'clear' }],
       ['instance:playerStatsUpdate', WSEvents.PLAYER_STATS_UPDATE, { players: [] }],
       [
@@ -136,12 +157,12 @@ describe('只读角色的 WS 事件过滤', () => {
         WSEvents.NAME_LIST_CHANGED,
         { list: 'bans', action: 'added', target: 'Steve' },
       ],
-      ['instance:playerJoin', WSEvents.PLAYER_JOIN, { player: 'Steve' }],
-      ['instance:playerLeave', WSEvents.PLAYER_LEAVE, { player: 'Steve' }],
-      ['instance:playerDeath', WSEvents.PLAYER_DEATH, { players: ['Steve'], count: 1 }],
-      ['instance:playerRespawn', WSEvents.PLAYER_RESPAWN, { player: 'Steve' }],
-      ['instance:playerSleep', WSEvents.PLAYER_SLEEP, { player: 'Steve' }],
-      ['instance:achievement', WSEvents.ACHIEVEMENT, { player: 'Steve', achievement: 'stone' }],
+      ['instance:playerJoin', WSEvents.PLAYER_JOIN, { name: 'Steve' }],
+      ['instance:playerLeave', WSEvents.PLAYER_LEAVE, { name: 'Steve' }],
+      ['instance:playerDeath', WSEvents.PLAYER_DEATH, { name: 'Steve', message: 'died' }],
+      ['instance:playerRespawn', WSEvents.PLAYER_RESPAWN, { name: 'Steve' }],
+      ['instance:playerSleep', WSEvents.PLAYER_SLEEP, { name: 'Steve' }],
+      ['instance:achievement', WSEvents.ACHIEVEMENT, { name: 'Steve', advancement: 'stone' }],
     ])('只读收得到 %s（%s）', (emitterEvent, wsType, payload) => {
       const ro = connectAndSubscribe(READONLY_KEY);
       serverManager.emit(emitterEvent, { instanceId: 's1', ...payload });
