@@ -119,7 +119,7 @@ sudo VERSION=<旧版本标签> bash /tmp/deploy-mc-commander.sh
 
 | 变量 | 默认 | 说明 |
 |---|---|---|
-| `READONLY_API_KEY_HASH` | 空 | 只读凭据的 SHA-256 摘要。**留空 = 该通道不存在**（fail-closed）。生成入口：设置页「账号与安全 → 只读监控凭据」，或管理员调 `POST /api/v1/rotate-readonly-key`；**不要手写本行** |
+| `READONLY_API_KEY_HASH` | 空 | 只读凭据的 SHA-256 摘要。**留空 = 该通道不存在**（fail-closed）。生成入口：设置页「登录与密码 → 只读监控凭据」，或管理员调 `POST /api/v1/rotate-readonly-key`；**不要手写本行** |
 | `READONLY_API_KEY_ENABLED` | `true` | 只读通道开关（`true`/`false`/`1`/`0`）。关闭后该凭据一律 403、轮换端点同样 403 且不写 `.env`；哈希保留，设回 `true` 即恢复。与 `API_KEY_ENABLED` 相互独立 |
 
 ## 日志
@@ -219,7 +219,7 @@ Authorization: Bearer <session-token>
   （运维常把 JMX/DB 口令写进 JVM 参数）、`javaPath`、`seed`，监控所需字段照常返回；
   管理员响应不裁剪。
 
-  面板内置生成入口：**设置 → 账号与安全 → 只读监控凭据**（显示「尚未创建 / 已配置 /
+  面板内置生成入口：**设置 → 登录与密码 → 只读监控凭据**（显示「尚未创建 / 已配置 /
   通道已关闭」三态，一键生成或轮换，明文一次性展示且服务端只存摘要）。命令行等价操作：
 
   ```bash
