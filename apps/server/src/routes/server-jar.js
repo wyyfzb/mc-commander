@@ -265,7 +265,7 @@ async function downloadWithProgress(
   });
 }
 
-function generateServerProperties(instanceId, _mcVersion, gamePort) {
+export function generateServerProperties(instanceId, _mcVersion, gamePort) {
   // 生成随机 RCON 密码（16 位十六进制），确保 RCON 默认可用
   // RCON 是 MC Commander 获取玩家坐标/血量、世界时间等数据的核心通道
   const rconPassword = crypto.randomBytes(8).toString('hex');
@@ -287,7 +287,7 @@ generator-settings=
 enforce-secure-profile=true
 level-name=world
 motd=A Minecraft Server managed by MC_Commander
-query.port=25565
+query.port=${gamePort}
 pvp=true
 generate-structures=true
 max-chained-neighbor-updates=1000000
