@@ -343,3 +343,64 @@ describe('字号档位与配对行高', () => {
     }
   })
 })
+
+/**
+ * 等宽栈里没有 CJK 族时，落进 mono 上下文的中文逐字回退到系统字体：同一屏出现两套字形与字重，
+ * 看起来就是「字体不一致」。中文进 mono 的现场有 `.mcs-num` 的「未运行」、终端输出、审计日志。
+ */
+describe('字体栈完整性', () => {
+  const semanticCss = readCss('styles/tokens/semantic.css')
+  const PROJECT_FAMILIES = ['Noto Sans SC Subset', 'JetBrains Mono']
+  const GENERIC_LAST = 'monospace'
+
+  const stackOf = (token: string): string[] => {
+    const m = semanticCss.match(new RegExp(`${token}\\s*:\\s*([^;]+);`))
+    expect(m, `${token} 未定义`).not.toBeNull()
+    return m![1]!.split(',').map((part) => part.trim().replace(/^['"]|['"]$/g, ''))
+  }
+
+  it('等宽栈带项目 CJK 族，排在泛化族之前', () => {
+    const stack = stackOf('--mcs-font-mono')
+    expect(stack).toContain(PROJECT_FAMILIES[0])
+    expect(stack.at(-1)).toBe(GENERIC_LAST)
+    expect(stack[0]).toBe('JetBrains Mono')
+  })
+
+  it('无衬线栈同样以具体族开头、泛化族收尾', () => {
+    const stack = stackOf('--mcs-font-sans')
+    expect(stack[0]).toBe(PROJECT_FAMILIES[0])
+    expect(stack.at(-1)).toBe('sans-serif')
+  })
+
+  it('组件源码不手写字体族（字体族只在样式表声明，取值走 --mcs-font-* token）', () => {
+    // 判定面是具体族名而非「有没有引号」：读 token 的写法会带 '--mcs-font-mono' 这类变量名
+    const NEEDLES = [
+      ...PROJECT_FAMILIES,
+      'PingFang',
+      'Microsoft YaHei',
+      'ui-monospace',
+      'Cascadia',
+      'Consolas',
+    ]
+    const hits: string[] = []
+    const walk = (dir: string): void => {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        if (['node_modules', 'dist'].includes(entry.name)) continue
+        const full = join(dir, entry.name)
+        if (entry.isDirectory()) {
+          walk(full)
+          continue
+        }
+        if (!/\.(tsx?|mjs)$/.test(entry.name)) continue
+        readFileSync(full, 'utf-8')
+          .split('\n')
+          .forEach((line, i) => {
+            if (NEEDLES.some((n) => line.includes(n)))
+              hits.push(`${relative(srcDir, full)}:${i + 1}`)
+          })
+      }
+    }
+    walk(srcDir)
+    expect(hits).toEqual([])
+  })
+})

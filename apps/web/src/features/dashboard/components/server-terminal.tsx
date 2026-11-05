@@ -184,7 +184,7 @@ export function ServerTerminal({
     const term = new Terminal({
       convertEol: true,
       fontSize: 12,
-      fontFamily: "'JetBrains Mono', ui-monospace, Consolas, monospace",
+      fontFamily: cssVar('--mcs-font-mono') || 'monospace',
       lineHeight: 1.4,
       theme: buildXtermTheme(),
       scrollback: 2000,

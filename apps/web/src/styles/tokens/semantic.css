@@ -129,7 +129,9 @@
         mono + tnum + `.mcs-num` 专用（30px），与 --mcs-terminal-* 同理不占文字档位。
         故「偶数字号 ≤7 档」仍成立（6 文字档 + 1 数字档）── */
   --mcs-font-sans: 'Noto Sans SC Subset', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
-  --mcs-font-mono: 'JetBrains Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  /* mono 栈必须带项目 CJK 族（排在 JetBrains Mono 之后，只接中文与标点）：
+     缺了它，落进 mono 上下文的中文逐字回退到系统字体，同一屏出现两套字形与字重 */
+  --mcs-font-mono: 'JetBrains Mono', 'Noto Sans SC Subset', 'PingFang SC', 'Microsoft YaHei', ui-monospace, 'Cascadia Mono', Consolas, monospace;
   --mcs-font-size-2xs: 10px;  /* 角标/单位/短标签/mono 元数据；句子最低 xs——适用面见 AGENTS.md「设计 token」 */
   --mcs-font-size-xs: 12px;   /* 辅助 */
   --mcs-font-size-sm: 14px;   /* 正文基准（唯一行高 1.6 的档） */
