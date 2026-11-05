@@ -23,6 +23,7 @@ import { useUpgradeStore } from '@/stores/upgrade'
 import { useRestartPendingStore } from '@/stores/restart-pending'
 import { useServerStore } from '@/stores/server'
 import type { InstanceStatus, InstanceSummary } from '@/api/types'
+import type { ReachabilityState } from '@/lib/mc-reachability'
 
 // ── 虚构占位数据（虚构实例名，非真实服务器）──────────────────
 
@@ -269,7 +270,7 @@ describe('InstanceCards', () => {
         .map((b) => b.getAttribute('aria-label') ?? b.textContent?.trim() ?? '')
     expect(labels('alpha')).toEqual([
       '复制 虚构甲服 的玩家连接地址',
-      '检测',
+      '检测玩家能否连进来',
       '停止 虚构甲服',
       '重启 虚构甲服',
       '切换到 虚构甲服',
@@ -289,7 +290,7 @@ describe('InstanceCards', () => {
         .map((b) => b.getAttribute('aria-label') ?? b.textContent?.trim() ?? ''),
     ).toEqual([
       '复制 虚构甲服 的玩家连接地址',
-      '检测',
+      '检测玩家能否连进来',
       '停止 虚构甲服',
       '重启 虚构甲服',
       '虚构甲服 操作菜单',
@@ -312,7 +313,7 @@ describe('InstanceCards', () => {
         .map((b) => b.getAttribute('aria-label') ?? b.textContent?.trim() ?? ''),
     ).toEqual([
       '复制 虚构甲服 的玩家连接地址',
-      '检测',
+      '检测玩家能否连进来',
       '停止 虚构甲服',
       '重启 虚构甲服',
       '切换到 虚构甲服',
@@ -687,8 +688,8 @@ describe('InstanceCards 实例事实载体（刷新时机 / 低 TPS / 待重启�
       expect(within(card(container, 'beta')).queryByText('玩家连接')).not.toBeInTheDocument()
     })
 
-    it('可达性为 blocked 时明确说玩家还连不进来', () => {
-      const { container } = renderCards(
+    const renderWithReachability = (reachability: ReachabilityState | null) =>
+      renderCards(
         <InstanceCards
           {...baseProps({
             detailStatuses: {
@@ -696,48 +697,59 @@ describe('InstanceCards 实例事实载体（刷新时机 / 低 TPS / 待重启�
                 ...mockInstanceStatus,
                 id: 'alpha',
                 name: '虚构甲服',
-                reachability: 'blocked',
+                reachability,
               },
             },
           })}
         />,
       )
-      expect(within(card(container)).getByText('玩家还连不进来')).toBeInTheDocument()
+
+    it('blocked：说结论，并给出去云控制台放行哪个端口的动作', () => {
+      const { container } = renderWithReachability('blocked')
+      // 端口必须取自地址本身（1.2.3.4:25565 ⇒ 25565），用户才知道放行哪个
+      expect(within(card(container)).getByText('外网连不进来')).toBeInTheDocument()
+      expect(within(card(container)).getByText(/TCP 25565/)).toBeInTheDocument()
+      expect(within(card(container)).getByText(/安全组/)).toBeInTheDocument()
     })
 
-    it('可达或未检测时不打扰（不显示警示）', () => {
-      for (const reachability of ['reachable', null, undefined] as const) {
-        const { container, unmount } = renderCards(
-          <InstanceCards
-            {...baseProps({
-              detailStatuses: {
-                alpha: {
-                  ...mockInstanceStatus,
-                  id: 'alpha',
-                  name: '虚构甲服',
-                  reachability: reachability ?? null,
-                },
-              },
-            })}
-          />,
-        )
-        expect(within(card(container)).queryByText('玩家还连不进来')).not.toBeInTheDocument()
-        unmount()
-      }
+    it('reachable：说外网可连，且不给多余动作', () => {
+      const { container } = renderWithReachability('reachable')
+      expect(within(card(container)).getByText('外网可以连进来')).toBeInTheDocument()
+      expect(within(card(container)).queryByText(/安全组/)).not.toBeInTheDocument()
+    })
+
+    it('not_listening / no_public_address 各自有对应说明（不能与「没检测」同貌）', () => {
+      const notListening = renderWithReachability('not_listening')
+      expect(within(card(notListening.container)).getByText('端口还没有监听')).toBeInTheDocument()
+      notListening.unmount()
+
+      const noAddress = renderWithReachability('no_public_address')
+      expect(within(card(noAddress.container)).getByText('拿不到公网地址')).toBeInTheDocument()
+      noAddress.unmount()
+    })
+
+    it('未检测（null）时不渲染结果行', () => {
+      const { container } = renderWithReachability(null)
+      expect(within(card(container)).queryByText('外网可以连进来')).not.toBeInTheDocument()
+      expect(within(card(container)).queryByText(/安全组/)).not.toBeInTheDocument()
     })
 
     it('运行中的实例才有检测按钮，已停止不给（端口未监听，测了只会误报）', () => {
       const { container } = renderCards(<InstanceCards {...baseProps()} />)
-      expect(within(card(container)).getByRole('button', { name: '检测' })).toBeInTheDocument()
+      expect(
+        within(card(container)).getByRole('button', { name: '检测玩家能否连进来' }),
+      ).toBeInTheDocument()
       // beta 已停止
-      expect(within(card(container, 'beta')).queryByRole('button', { name: '检测' })).toBeNull()
+      expect(
+        within(card(container, 'beta')).queryByRole('button', { name: '检测玩家能否连进来' }),
+      ).toBeNull()
     })
 
     it('点检测触发回调并携带实例 id', async () => {
       const user = userEvent.setup()
       const onCheckReachability = vi.fn()
       const { container } = renderCards(<InstanceCards {...baseProps({ onCheckReachability })} />)
-      await user.click(within(card(container)).getByRole('button', { name: '检测' }))
+      await user.click(within(card(container)).getByRole('button', { name: '检测玩家能否连进来' }))
       expect(onCheckReachability).toHaveBeenCalledWith('alpha')
     })
 
@@ -745,7 +757,7 @@ describe('InstanceCards 实例事实载体（刷新时机 / 低 TPS / 待重启�
       const { container } = renderCards(
         <InstanceCards {...baseProps({ checkingReachabilityId: 'alpha' })} />,
       )
-      const btn = within(card(container)).getByRole('button', { name: '检测中…' })
+      const btn = within(card(container)).getByRole('button', { name: '正在检测外网连通…' })
       expect(btn).toBeDisabled()
     })
   })

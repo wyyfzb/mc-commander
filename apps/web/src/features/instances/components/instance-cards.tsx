@@ -20,6 +20,7 @@ import {
   ArrowRightLeft,
   ArrowUpCircle,
   Loader2,
+  CircleCheck,
   MoreHorizontal,
   Play,
   RefreshCw,
@@ -35,6 +36,7 @@ import {
 import { toast } from 'sonner'
 import { useUiStore } from '@/stores/ui'
 import { copyText } from '@/lib/clipboard'
+import { describeReachability, type ReachabilityState } from '@/lib/mc-reachability'
 import { useEffect, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import {
@@ -124,6 +126,14 @@ export interface InstanceCardsProps {
   onReenableAutoRestart?: (id: string) => void
   /** 正在重新启用的实例 id（该卡按钮转「重新启用中」并禁用） */
   reenablingId?: string | null
+}
+
+/** 可达性状态在地址行的短标签：结论行另给完整说明与动作 */
+const REACHABILITY_PILL_LABEL: Record<ReachabilityState, string> = {
+  reachable: '外网可连',
+  blocked: '玩家还连不进来',
+  not_listening: '端口未监听',
+  no_public_address: '无公网地址',
 }
 
 export function InstanceCards({
@@ -404,15 +414,15 @@ function InstanceCard({
           >
             <Copy className="size-3" aria-hidden />
           </button>
-          {/* 地址能显示 ≠ 玩家连得上：云主机的安全组是独立一层，面板放行不了，
-              只能测出来并指路。blocked 时才提示——可达或未检测都不打扰 */}
-          {detail.reachability === 'blocked' && (
+          {/* 地址能显示 ≠ 玩家连得上：云主机安全组是独立一层，面板放行不了，只能测出来并指路。
+              四种状态各有对应动作，缺任一种都是「点了检测没有下文」 */}
+          {detail.reachability != null && (
             <StatusPill
-              tone="warning"
+              tone={detail.reachability === 'reachable' ? 'success' : 'warning'}
               className="text-mcs-2xs"
-              title="本地已在监听，但外网连不进来；需要在云控制台放行这个端口"
+              title={describeReachability(detail.reachability, detail.address).summary}
             >
-              玩家还连不进来
+              {REACHABILITY_PILL_LABEL[detail.reachability]}
             </StatusPill>
           )}
           {isRunning && onCheckReachability && (
@@ -422,11 +432,31 @@ function InstanceCard({
               disabled={checkingReachability}
               className="rounded-mcs-xs px-1 text-mcs-2xs text-mcs-text-muted transition-colors hover:bg-mcs-state-hover hover:text-mcs-text-default focus-visible:outline-2 focus-visible:outline-mcs-focus-ring focus-visible:outline-offset-1 disabled:opacity-50"
             >
-              {checkingReachability ? '检测中…' : '检测'}
+              {checkingReachability ? '正在检测外网连通…' : '检测玩家能否连进来'}
             </button>
           )}
         </div>
       )}
+
+      {/* 检测结果行：结论 + 下一步动作。动作只在这里给——云安全组面板管不到，
+          用户必须知道去哪里放行，否则「连不进来」只是一个无法行动的坏消息 */}
+      {detail?.reachability != null &&
+        (() => {
+          const outcome = describeReachability(detail.reachability, detail.address)
+          return (
+            <NoticeBanner
+              variant={detail.reachability === 'reachable' ? 'success' : 'warning'}
+              icon={detail.reachability === 'reachable' ? CircleCheck : TriangleAlert}
+            >
+              <span className="flex flex-wrap items-baseline gap-x-1.5">
+                <span className="font-medium">{outcome.summary}</span>
+                {outcome.action != null && (
+                  <span className="text-mcs-text-muted">{outcome.action}</span>
+                )}
+              </span>
+            </NoticeBanner>
+          )
+        })()}
 
       {/* 指标行（在线/TPS/内存/世界大小；详情缺省 —）
           这里的 memoryUsage 是**进程驻留内存**（服务端 stats-collector 三平台分支分别取

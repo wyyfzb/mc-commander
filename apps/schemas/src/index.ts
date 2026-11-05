@@ -78,6 +78,7 @@ export {
   instanceSummarySchema,
   instanceStatusSchema,
   reachabilitySchema,
+  type Reachability,
   instanceStatusListSchema,
   instanceUpdatePayloadSchema,
   instanceSettingsRequestBodySchema,
