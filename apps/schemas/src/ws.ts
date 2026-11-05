@@ -321,6 +321,7 @@ export type WsStatusSnapshot = z.infer<typeof wsStatusSnapshotSchema>
 export type WsPerformancePayload = z.infer<typeof wsPerformancePayloadSchema>
 export type WsLogPayload = z.infer<typeof wsLogPayloadSchema>
 export type WsStatusEventPayload = z.infer<typeof wsStatusEventPayloadSchema>
+export type WsNameListChangedPayload = z.infer<typeof wsNameListChangedPayloadSchema>
 export type WsPlayerEventPayload = z.infer<typeof wsPlayerEventPayloadSchema>
 export type WsWeatherPayload = z.infer<typeof wsWeatherPayloadSchema>
 export type WsWorldUpgradePayload = z.infer<typeof wsWorldUpgradePayloadSchema>
