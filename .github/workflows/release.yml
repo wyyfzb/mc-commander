@@ -353,3 +353,98 @@ jobs:
             "https://gitee.com/$GITEE_OWNER/$GITEE_REPO/releases/download/$TAG_REF/SHA256SUMS.txt" \
             && echo "✓ Gitee 下载路径可达" \
             || echo "::warning::Gitee 下载路径不可达（附件可能尚未就绪）"
+
+  # 只判最终事实、不判同步过程：sync-gitee 过程抖动不红，结果不齐必红。
+  verify-mirror:
+    name: 校验两端对齐
+    needs: [build, sync-gitee]
+    runs-on: ubuntu-latest
+    # sync_only 补产物时 build 被跳过，那时照样要验
+    if: ${{ always() && github.repository == 'wyyfzb/mc-commander' && (needs.build.result == 'success' || needs.build.result == 'skipped') }}
+    permissions:
+      contents: read
+    env:
+      REPO: ${{ github.repository }}
+      TAG_REF: ${{ inputs.tag || github.ref_name }}
+      GITEE_OWNER: wyyfzb
+      GITEE_REPO: mc-commander
+    steps:
+      - name: 比对两端 tag 与产物
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          API="https://gitee.com/api/v5/repos/$GITEE_OWNER/$GITEE_REPO"
+          RETRY=(--retry 3 --retry-delay 5 --retry-all-errors)
+          ASSETS=(mc-commander-server.tar.gz SHA256SUMS.txt)
+          PROBLEMS=()
+          NAMES=""
+
+          # 有 / 确实没有 / 读不到，三者必须分开：把网络抖动读成「缺产物」，
+          # 这条断言就会在链路不稳时天天误红，红久了没人看。
+          probe_release() { # $1=端名 $2=url 其余=curl 头
+            local label=$1 url=$2; shift 2
+            local out code body
+            out=$(curl -sS "${RETRY[@]}" --max-time 30 -w '\n%{http_code}' "$@" "$url" 2>/dev/null || true)
+            code=${out##*$'\n'}
+            body=${out%$'\n'*}
+            # Gitee 对不存在的 release 回 200 + 字面量 null，与 GitHub 的 404 是同一件事
+            if [ "$code" = "404" ] || [ "$(tr -d ' \n\r\t' <<< "$body")" = "null" ]; then
+              PROBLEMS+=("$label 没有 $TAG_REF 的 Release")
+              return 1
+            fi
+            if [ "$code" != "200" ] || ! jq -e '.assets' <<< "$body" >/dev/null 2>&1; then
+              PROBLEMS+=("读不到 $label 的 $TAG_REF Release（HTTP ${code:-无响应}），无法断言对齐")
+              return 1
+            fi
+            NAMES=$(jq -r '.assets[].name' <<< "$body")
+            return 0
+          }
+
+          if probe_release GitHub "https://api.github.com/repos/$REPO/releases/tags/$TAG_REF" \
+               -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json"; then
+            for f in "${ASSETS[@]}"; do
+              grep -qxF "$f" <<< "$NAMES" || PROBLEMS+=("GitHub 缺 $f")
+            done
+          fi
+
+          if [ -z "${GITEE_TOKEN:-}" ]; then
+            PROBLEMS+=("未配置 GITEE_TOKEN，无法校验 Gitee 侧")
+          else
+            auth=(-H "Authorization: token $GITEE_TOKEN")
+            gitee_tags=$(curl -sS "${RETRY[@]}" --max-time 30 "${auth[@]}" \
+                           "$API/tags?per_page=100" 2>/dev/null | jq -r '.[].name? // empty' 2>/dev/null || true)
+            if [ -z "$gitee_tags" ]; then
+              PROBLEMS+=("读不到 Gitee 的 tag 列表（网络或凭据），无法断言对齐")
+            elif ! grep -qxF "$TAG_REF" <<< "$gitee_tags"; then
+              PROBLEMS+=("Gitee 镜像里没有 tag $TAG_REF：镜像的 Pull 同步已停")
+            fi
+            if probe_release Gitee "$API/releases/tags/$TAG_REF" "${auth[@]}"; then
+              for f in "${ASSETS[@]}"; do
+                grep -qxF "$f" <<< "$NAMES" || PROBLEMS+=("Gitee 缺 $f")
+              done
+            fi
+          fi
+
+          if [ ${#PROBLEMS[@]} -eq 0 ]; then
+            echo "✓ 两端对齐：$TAG_REF，${#ASSETS[@]} 个产物都在"
+            exit 0
+          fi
+
+          for p in "${PROBLEMS[@]}"; do echo "::error::$p"; done
+          {
+            echo "### 发布面不一致：\`$TAG_REF\`"
+            echo ""
+            echo "GitHub Release 已发布成功，本红叉只表示镜像侧没跟上。**不要重跑本工作流**——"
+            echo "已发布 tag 在 Immutable Releases 下资产不可覆盖，重跑构建必然失败。"
+            echo ""
+            echo "差异："
+            for p in "${PROBLEMS[@]}"; do echo "- $p"; done
+            echo ""
+            echo "补同步（只传产物、不重建）："
+            echo "\`gh workflow run release.yml --ref main -f tag=$TAG_REF -f sync_only=true\`"
+            echo ""
+            echo "镜像里连 tag 都没有时先修镜像：Gitee 仓库 → 镜像管理 → 更新 GitHub 凭据 → 手动同步一次。"
+          } >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+          exit 1
