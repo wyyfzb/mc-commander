@@ -12,29 +12,58 @@
  *   故不给「前往启用」这类界面做不到的出口，只写实情与动作）
  * 设计纪律：NoticeBanner 四色 token；禁用文案值一律由代码常量拼接，不写死
  */
-import { RefreshCw, ShieldAlert, WifiOff } from 'lucide-react'
+import { CloudDownload, RefreshCw, ShieldAlert, WifiOff } from 'lucide-react'
+import { useNavigate } from 'react-router'
 import { NoticeBanner, NoticeBannerAction } from '@/components/mcs/notice-banner'
 import { getSocketSingleton } from '@/hooks/use-server-socket'
 import { useServerStore } from '@/stores/server'
 import { useConnectionStore } from '@/stores/connection'
 import { useDeployStatusFallback } from '@/features/instances/hooks/use-deploy-status-fallback'
 import { FALLBACK_POLL_INTERVAL_MS } from '@/api/queries'
+import { DEPLOY_STAGE_LABELS, useDeployStore } from '@/stores/deploy'
 
 export function DegradationBanners() {
+  const navigate = useNavigate()
   const socketConnected = useServerStore((s) => s.socketConnected)
   const hasConnectedOnce = useServerStore((s) => s.hasConnectedOnce)
   const status = useServerStore((s) => s.status)
   const connectionReady = useConnectionStore((s) => s.status === 'ready')
   // 部署兜底快照：断线文案据实区分「有无部署在途」；冷启动断线由连接宽限期兜底
   const { duplicateDeployBlocked, connectStalled } = useDeployStatusFallback()
+  // 部署进度常驻：向导可关而服务端仍在跑，进度须在关窗后仍可见
+  const deploying = useDeployStore((s) => s.deploying)
+  const progress = useDeployStore((s) => s.progress)
 
   const wsDown = connectionReady && !socketConnected && (hasConnectedOnce || connectStalled)
   const rconDown = status?.isRunning === true && status.capabilities.rcon === false
 
-  if (!wsDown && !rconDown) return null
+  if (!deploying && !wsDown && !rconDown) return null
 
   return (
     <div className="flex shrink-0 flex-col gap-1.5 px-4 pt-2">
+      {deploying && (
+        <NoticeBanner variant="neutral" icon={CloudDownload}>
+          <span className="flex items-center justify-between gap-3">
+            <span className="min-w-0">
+              <b>
+                {progress?.instanceName != null
+                  ? `正在部署「${progress.instanceName}」`
+                  : '正在部署实例'}
+              </b>
+              {' · '}
+              {progress
+                ? (progress.detail ?? DEPLOY_STAGE_LABELS[progress.stage] ?? progress.stage)
+                : '准备中…'}
+              {progress != null &&
+                progress.percent > 0 &&
+                `（${Math.round(progress.percent * 100)}%）`}
+            </span>
+            <NoticeBannerAction onClick={() => navigate('/instances?tab=deploy')}>
+              查看进度
+            </NoticeBannerAction>
+          </span>
+        </NoticeBanner>
+      )}
       {wsDown && (
         <NoticeBanner variant="error" icon={WifiOff}>
           {/* 层级分离：文案靠左成一体，重连按钮独立右侧动作为实心边界按钮，

@@ -2,7 +2,7 @@
  * DeployDialog 测试（部署向导）：
  * - 三步流程：类型选择 → 版本自动出现 → 下一步 → 名称校验 → 确认摘要 → 部署成功 onDeployed → 完成关闭
  * - fabric 加载器下拉（自动回填首个 loader）
- * - 部署中：进度条（useDeployStore.setState 注入 progress）+ stage 中文标签 + 传输字节 MB + 禁用关闭
+ * - 部署中：进度条（useDeployStore.setState 注入 progress）+ stage 中文标签 + 传输字节 MB + 可关闭（进度转常驻条）
  * - 部署失败：error 块 + 重试回到步骤①
  * - 取消部署：确认后按实例 id 调服务端取消端点；cancelled 终态走「已取消」视图（非失败）
  * - dirty 关闭拦截（继续编辑 / 放弃配置）；未修改直接关闭
@@ -214,7 +214,7 @@ describe('DeployDialog', () => {
     )
   })
 
-  it('部署中：进度条 + stage 中文标签 + 传输字节 MB 格式化 + 禁用关闭', () => {
+  it('部署中：进度条 + stage 中文标签 + 传输字节 MB 格式化 + 允许关闭', () => {
     renderDialog()
     // 注入部署进度（挂载后注入：打开时组件会 resetDeploy 清态）
     act(() => {
@@ -230,8 +230,8 @@ describe('DeployDialog', () => {
     expect(screen.getByText('45%')).toBeInTheDocument()
     // 52428800B = 50.0 MB；104857600B = 100 MB
     expect(screen.getByText('已下载 50.0 / 100 MB')).toBeInTheDocument()
-    // 禁用关闭：无 X 按钮
-    expect(screen.queryByRole('button', { name: '关闭弹窗' })).not.toBeInTheDocument()
+    // 部署中可关：服务端执行体独立于弹窗，关窗后进度由常驻条承接
+    expect(screen.getByRole('button', { name: '关闭弹窗' })).toBeInTheDocument()
     // 无步骤导航
     expect(screen.queryByRole('button', { name: '上一步' })).not.toBeInTheDocument()
   })

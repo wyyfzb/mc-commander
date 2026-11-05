@@ -8,8 +8,9 @@
  * - EULA 同意随部署请求下发（服务端据此写 eula.txt）；部署成功且已同意时发启动指令
  *   （POST /start），结果块展示启动状态（首启闭环）
  * - 视图状态机：部署中 → 成功 → 已取消 → 失败 → 表单三步；恢复场景保留进行中进度；
- *   服务端报告在途部署时禁止再次发起（消除重复部署）；部署中禁用上一步与关闭（ESC/遮罩拦截），
- *   仅保留「取消部署」出口（服务端中断执行体并清理未完成目录）
+ *   服务端报告在途部署时禁止再次发起（消除重复部署）；部署中禁用上一步，但允许关闭——
+ *   服务端执行体独立于弹窗，关窗后进度由常驻条承接、点「查看进度」可回到本视图；
+ *   中止部署的出口是「取消部署」（服务端中断执行体并清理未完成目录）
  * - dirty 关闭拦截：表单与基线对比（自动回填的版本/加载器同步基线，不误判 dirty）
  * - 数据流：useDeployStore（progress/deploying/lastResult/cancelling/startDeploy/finishDeploy/resetDeploy）
  *   + useDeployStatusFallback（挂载/断线兜底快照）+ useDeployInstance().mutateAsync + apiCancelDeploy；关闭时 resetDeploy
@@ -314,17 +315,21 @@ export function DeployDialog({ open, onOpenChange, onDeployed }: DeployDialogPro
 
   /** 真正关闭：清部署状态 + 通知页面 */
   const handleClose = () => {
-    resetDeploy()
+    // 部署在途不重置：关窗只收起视图，进度须由常驻条与再次打开接住
+    if (!deploying) resetDeploy()
     onOpenChange(false)
   }
 
-  /** 关闭拦截：部署中禁关；dirty 先确认 */
+  /** 关闭拦截：部署中可直接关（进度转常驻条）；表单有改动先确认 */
   const handleOpenChange = (next: boolean) => {
     if (next) {
       onOpenChange(true)
       return
     }
-    if (deploying) return
+    if (deploying) {
+      handleClose()
+      return
+    }
     if (dirty) {
       setCloseConfirmOpen(true)
       return
@@ -355,18 +360,7 @@ export function DeployDialog({ open, onOpenChange, onDeployed }: DeployDialogPro
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent
-        className="sm:max-w-md"
-        showCloseButton={!deploying}
-        onInteractOutside={(e) => {
-          // 部署中禁止遮罩关闭（dirty 拦截走 onOpenChange）
-          if (deploying) e.preventDefault()
-        }}
-        onEscapeKeyDown={(e) => {
-          // 部署中禁止 ESC 关闭（dirty 拦截走 onOpenChange）
-          if (deploying) e.preventDefault()
-        }}
-      >
+      <DialogContent className="sm:max-w-md" showCloseButton>
         <DialogHeader>
           <DialogTitle>部署新实例</DialogTitle>
           <DialogDescription>按步骤选择服务端类型、配置实例并创建。</DialogDescription>
