@@ -2,8 +2,8 @@
  * DeployDialog —— 部署新实例三步向导（编排层：状态机 + 数据流，展示件见 ./deploy/）
  * - 三步流程状态：step 推进 / 表单与基线（dirty 判定）/ EULA / 自动启动 / 结果 / 关闭确认
  * - 步骤① 服务端类型 5 卡单选 + 版本 Select（useServerVersions 按类型拉取，切换类型触发新查询）
- *   + fabric/forge loader Select；步骤② 名称 + 内存档位；步骤③ 确认摘要 + EULA
- * - 自动回填：版本/加载器列表就绪回填首个；系统内存 → 推荐档位（用户手动调整后不覆盖），
+ *   + fabric/forge loader Select；步骤② 名称 + 内存分配；步骤③ 确认摘要 + EULA
+ * - 自动回填：版本/加载器列表就绪回填首个；系统内存 → 推荐值（用户手动调整后不覆盖），
  *   回填值同步基线不算 dirty
  * - EULA 同意随部署请求下发（服务端据此写 eula.txt）；部署成功且已同意时发启动指令
  *   （POST /start），结果块展示启动状态（首启闭环）
@@ -38,12 +38,7 @@ import { useDeployStatusFallback } from '../hooks/use-deploy-status-fallback'
 import { apiCancelDeploy } from '@/api/instances'
 import type { DeployRequest, DeployResult } from '@/api/types'
 import { INITIAL_FORM, type AutoStartState, type DeployForm } from './deploy/types'
-import {
-  hasRoomForInstance,
-  memoryBudget,
-  recommendNewInstanceGB,
-  selectableTiersGB,
-} from '@/lib/instance-memory'
+import { hasRoomForInstance, memoryBudget, recommendNewInstanceGB } from '@/lib/instance-memory'
 import { Stepper } from './deploy/stepper'
 import {
   DeployCancelledView,
@@ -108,11 +103,6 @@ export function DeployDialog({ open, onOpenChange, onDeployed }: DeployDialogPro
       ),
     [totalMemory, overviewQuery.data],
   )
-  /** 只留装得下的档：8G 摆在一台 7.4G 的机器上，点了才发现起不来 */
-  const memoryOptions = useMemo(
-    () => selectableTiersGB(budget.availableGB).map((gb) => `${gb}G`),
-    [budget.availableGB],
-  )
   const recommendMemory = `${recommendNewInstanceGB(budget.availableGB, budget.allocatableGB)}G`
   const memoryTouchedRef = useRef(false)
 
@@ -141,7 +131,7 @@ export function DeployDialog({ open, onOpenChange, onDeployed }: DeployDialogPro
     setCloseConfirmOpen(false)
   }, [open])
 
-  // 系统内存就绪 → 推荐档位覆盖默认 2G。
+  // 系统内存就绪 → 推荐值覆盖默认 2G。
   // 与表单重置同周期
   useEffect(() => {
     if (open) memoryTouchedRef.current = false
@@ -157,17 +147,19 @@ export function DeployDialog({ open, onOpenChange, onDeployed }: DeployDialogPro
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- recommendMemory 由预算派生，setter/ref 稳定引用
   }, [recommendMemory, open])
 
-  // 预算变小（别的实例占走了内存）而当前档位已装不下 → 拉回装得下的最大档。
-  // 不静默下发装不下的档：服务端不校验，用户会拿到一个必然互相抢内存的实例
+  // 预算变小（别的实例占走了内存）而当前值超出上限 → 拉回上限。
+  // 不静默下发装不下的量：服务端不校验，用户会拿到一个必然互相抢内存的实例
   useEffect(() => {
     if (memoryTouchedRef.current) return
+    const maxGB = Math.max(1, Math.floor(budget.availableGB * 2) / 2)
     setForm((f) => {
-      if (memoryOptions.includes(f.memory)) return f
-      const next = memoryOptions[memoryOptions.length - 1] ?? recommendMemory
+      const cur = Number.parseFloat(f.memory)
+      if (Number.isFinite(cur) && cur >= 1 && cur <= maxGB) return f
+      const next = `${maxGB}G`
       baselineRef.current = { ...baselineRef.current, memory: next }
       return { ...f, memory: next }
     })
-  }, [memoryOptions, recommendMemory])
+  }, [budget.availableGB])
 
   // 版本列表就绪 → 自动回填首个版本，并同步基线。
   // 依赖含 open 且用函数式更新内部判空：打开向导时重置清空 version，但 effect 读到的
@@ -432,7 +424,6 @@ export function DeployDialog({ open, onOpenChange, onDeployed }: DeployDialogPro
               <DeployStepConfig
                 form={form}
                 budget={budget}
-                memoryOptions={memoryOptions}
                 recommendGB={recommendNewInstanceGB(budget.availableGB, budget.allocatableGB)}
                 nameError={nameError}
                 onNameChange={(name) => {

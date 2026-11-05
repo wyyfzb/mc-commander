@@ -1,7 +1,7 @@
 'use client'
 
 /**
- * Slider —— shadcn/ui radix-nova 滑块基座（radix-ui Slider 封装，实例设置弹窗内存档位用）
+ * Slider —— shadcn/ui radix-nova 滑块基座（radix-ui Slider 封装，实例内存分配用）
  * 消费 Component 层映射 token（theme.css：primary=--mcs-accent / secondary=--mcs-bg-secondary），组件内无硬编码
  */
 import * as React from 'react'

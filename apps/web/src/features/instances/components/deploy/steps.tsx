@@ -1,7 +1,7 @@
 /**
  * DeployDialog 三步表单面板
  * - 步骤① 服务端类型 5 卡单选 + 版本 Select + fabric/forge loader Select
- * - 步骤② 实例名称 Input + 内存 Select 档位（只列装得下的档）
+ * - 步骤② 实例名称 Input + 内存 Slider（上限为可用量）
  * - 步骤③ 确认摘要 + EULA 同意勾选
  * 纯展示组件：表单状态与派生逻辑留在编排层（deploy-dialog.tsx），经 props 回调上行
  */
@@ -11,6 +11,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import { Slider } from '@/components/ui/slider'
 import {
   Select,
   SelectContent,
@@ -173,30 +174,33 @@ export function DeployStepServer({
 interface DeployStepConfigProps {
   form: DeployForm
   budget: MemoryBudget
-  /** 装得下的档位（'1G'/'2G'…）；一个都装不下时为最低档 */
-  memoryOptions: readonly string[]
-  /** 推荐档位（GB） */
+  /** 推荐值（GB） */
   recommendGB: number
   nameError: string
   onNameChange: (name: string) => void
   onMemoryChange: (memory: string) => void
 }
 
-/** 步骤② 实例名称 + 内存档位 */
+/** 步骤② 实例名称 + 内存分配 */
 export function DeployStepConfig({
   form,
   budget,
-  memoryOptions,
   recommendGB,
   nameError,
   onNameChange,
   onMemoryChange,
 }: DeployStepConfigProps) {
   const fits = hasRoomForInstance(budget.availableGB)
-  /* 档位比预期少时才需要这句交代是谁占的；有别的实例在时才渲染。
+  /* 只在有别的实例时渲染，交代余量被谁占走。
      说「分配了」不说「占了」：这是 -Xmx 之和，实测 -Xmx4G 空转服务器 RSS 只有几十 MB */
   const allocatedText =
     budget.otherCount > 0 ? `已有 ${budget.otherCount} 个实例分配了 ${budget.othersGB} GB` : null
+  /* 表单里 memory 是 '8G' 这种字符串（提交给服务端的 maxMemory 就是它），
+     滑块要数值：解析失败时回落到推荐值，不抛错——上限与推荐都由预算派生，两者同源 */
+  const memoryGB = Number.parseFloat(form.memory) || recommendGB
+  /* max 不低于 min：可用量为 0（内存已分完）时 max<min 会让滑块失效。
+     该情形由下方「内存已分完」提示交代 */
+  const sliderMax = Math.max(1, Math.floor(budget.availableGB * 2) / 2)
   return (
     <div className="flex flex-col gap-3">
       {/* 实例名称 */}
@@ -218,8 +222,8 @@ export function DeployStepConfig({
         )}
       </div>
 
-      {/* 内存档位：分母是本机「还能分配的量」而非整机内存——整机数字对多实例场景
-          是假的可行空间，用户会据此选中装不下的档 */}
+      {/* 分母取本机「还能分配的量」而非整机内存：整机数字对多实例场景是假的可行空间，
+          用户会据此配出一个装不下的量 */}
       <div className="flex flex-col gap-2">
         <Label>内存分配</Label>
         <div className="flex items-baseline gap-2">
@@ -230,18 +234,15 @@ export function DeployStepConfig({
             / 还能分配 {budget.availableGB.toFixed(1)} GB
           </span>
         </div>
-        <Select value={form.memory} onValueChange={onMemoryChange}>
-          <SelectTrigger className="w-full" aria-label="选择内存分配">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {memoryOptions.map((m) => (
-              <SelectItem key={m} value={m}>
-                {m}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {/* 上限为可用量：拖不到的地方就是不存在的余量。0.5 GB 步进够用户表达「比推荐值省一点」 */}
+        <Slider
+          aria-label="内存分配"
+          min={1}
+          max={sliderMax}
+          step={0.5}
+          value={[memoryGB]}
+          onValueChange={([v]) => onMemoryChange(`${v}`)}
+        />
         {allocatedText !== null && (
           <p className="text-mcs-xs text-mcs-text-muted">{allocatedText}</p>
         )}
