@@ -99,7 +99,10 @@ test.describe('onboarding', () => {
       page.getByText('脚本会自动安装 Java 17/21/25 和 Node.js 22+，无需手动准备环境'),
     ).toBeVisible()
     await expect(
-      page.getByText('部署完成后，记下终端输出的「API Key」，下一步连接时需要填写。'),
+      page.getByText('脚本结束时打印面板地址与一次性 SETUP_TOKEN，请妥善保存'),
+    ).toBeVisible()
+    await expect(
+      page.getByText('部署完成后终端会打印面板地址与 SETUP_TOKEN，打开它设密即可进面板。'),
     ).toBeVisible()
     // 部署命令与文档链接均指向现行 gitee 镜像（mc-commander / main 分支）
     await expect(page.getByText(/gitee\.com\/wyyfzb\/mc-commander\/raw\/main\//)).toBeVisible()

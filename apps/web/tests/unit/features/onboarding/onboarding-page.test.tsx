@@ -158,7 +158,8 @@ describe('OnboardingPage · 部署方式推进', () => {
     expect(screen.getByText('Linux 一键部署命令')).toBeInTheDocument()
     expect(screen.getByText(/deploy-mc-commander\.sh/)).toBeInTheDocument()
     expect(screen.getByText(/自动安装 Java 17\/21\/25/)).toBeInTheDocument()
-    expect(screen.getByText(/妥善保存/)).toBeInTheDocument()
+    expect(screen.getByText(/脚本结束时打印面板地址与一次性 SETUP_TOKEN/)).toBeInTheDocument()
+    expect(screen.queryByText(/API Key.*妥善保存/)).not.toBeInTheDocument()
     expect(screen.getByText(/25566 端口/)).toBeInTheDocument()
   })
 
