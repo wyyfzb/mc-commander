@@ -28,6 +28,9 @@ import {
 } from '../src/services/backup.service.js';
 import { ScheduledTaskModel } from '../src/db/scheduled_task.model.js';
 
+// 快照链路收实例目录（不再按 id 自行拼）；这些用例只验流程编排，目录不必真实存在
+const INSTANCE_DIR = path.join(config.serversDir, 's1');
+
 describe('BackupService.createBackup - 世界目录缺失', () => {
   /* 断言锁性质而不是字符串：文案会随措辞调整，而这条缺陷的实质是
      ① 抛的是可分类的 AppError（不是裸 Error 被全局处理器降级成 500）
@@ -122,14 +125,19 @@ describe('hasWorldData - 世界数据判据', () => {
     return dir;
   }
 
+  /** 实例桩：判据只读 serverPath 与 id，其余字段与判定无关 */
+  function inst(id, extra = {}) {
+    return { id, serverPath: path.join(root, id), ...extra };
+  }
+
   it('子目录直接层有 level.dat ⇒ true', () => {
     mkdirWithLevelDat('a', 'world', true);
-    expect(hasWorldData('a')).toBe(true);
+    expect(hasWorldData(inst('a'))).toBe(true);
   });
 
   it('子目录在但直接层没有 level.dat ⇒ false（首启中断的形态，不能算有世界）', () => {
     mkdirWithLevelDat('b', 'world', false);
-    expect(hasWorldData('b')).toBe(false);
+    expect(hasWorldData(inst('b'))).toBe(false);
   });
 
   /* 这条是判据「不按 level-name 定位」的理由所在：用户改过世界目录名、或把世界从
@@ -138,29 +146,40 @@ describe('hasWorldData - 世界数据判据', () => {
   it('世界目录名与 level-name 不一致 ⇒ 仍判 true（不按配置名定位）', () => {
     mkdirWithLevelDat('c', 'world', true);
     // 实例配置指向一个根本不存在的名字，判据不该受它影响
-    const inst = { properties: { 'level-name': 'old-world' } };
-    expect(hasWorldData('c', inst)).toBe(true);
+    expect(hasWorldData(inst('c', { properties: { 'level-name': 'old-world' } }))).toBe(true);
   });
 
   it('level-name 含越界段（../evil）⇒ 既不抛错也不影响判定', () => {
     mkdirWithLevelDat('d', 'world', true);
-    const inst = { properties: { 'level-name': '../evil' } };
-    expect(hasWorldData('d', inst)).toBe(true);
+    expect(hasWorldData(inst('d', { properties: { 'level-name': '../evil' } }))).toBe(true);
   });
 
   it('level.dat 在更深一层（world/sub/level.dat）不算有世界（只认直接层）', () => {
     mkdirWithLevelDat('e', 'world/sub', true);
-    expect(hasWorldData('e')).toBe(false);
+    expect(hasWorldData(inst('e'))).toBe(false);
   });
 
   it('实例目录不存在 ⇒ false（不抛错）', () => {
-    expect(hasWorldData('ghost-instance')).toBe(false);
+    expect(hasWorldData(inst('ghost-instance'))).toBe(false);
   });
 
   it('实例目录下只有文件、没有子目录 ⇒ false', () => {
     fs.mkdirSync(path.join(root, 'f'), { recursive: true });
     fs.writeFileSync(path.join(root, 'f', 'level.dat'), 'x'); // 根下直接放，不算
-    expect(hasWorldData('f')).toBe(false);
+    expect(hasWorldData(inst('f'))).toBe(false);
+  });
+
+  /* 实例目录的权威值是 serverPath（建实例时写入并入库），serversDir/id 只是兜底。
+     搬过目录的实例两者不一致，按 id 重拼会去看一个空目录。 */
+  it('serverPath 与 serversDir/id 不一致 ⇒ 以 serverPath 为准', () => {
+    const moved = path.join(root, 'moved-away');
+    fs.mkdirSync(path.join(moved, 'world'), { recursive: true });
+    fs.writeFileSync(path.join(moved, 'world', 'level.dat'), 'nbt');
+    expect(hasWorldData({ id: 'g', serverPath: moved })).toBe(true);
+  });
+
+  it('没有实例对象（路由已查不到该实例）⇒ false，不抛错', () => {
+    expect(hasWorldData(undefined)).toBe(false);
   });
 });
 
@@ -184,13 +203,13 @@ describe('BackupService.executeBackup - 定时任务结果回写', () => {
     const service = makeService();
     const snapshotDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-bu-exec-'));
     try {
-      vi.spyOn(service, '_createSnapshot').mockImplementation(async (_id, dir) => {
+      vi.spyOn(service, '_createSnapshot').mockImplementation(async (_id, _instanceDir, dir) => {
         fs.mkdirSync(dir, { recursive: true });
         fs.writeFileSync(path.join(dir, 'level.dat'), 'x');
       });
       vi.spyOn(service, '_verifySnapshot').mockResolvedValue();
 
-      await service.executeBackup('s1', 999, snapshotDir, { taskId: 42 });
+      await service.executeBackup('s1', INSTANCE_DIR, 999, snapshotDir, { taskId: 42 });
 
       expect(ScheduledTaskModel.updateLastRunStatus).toHaveBeenCalledWith(
         42,
@@ -208,7 +227,7 @@ describe('BackupService.executeBackup - 定时任务结果回写', () => {
     vi.spyOn(service, '_createSnapshot').mockRejectedValue(new Error('rsync failed'));
 
     await expect(
-      service.executeBackup('s1', 999, '/nonexistent-dir', { taskId: 42 }),
+      service.executeBackup('s1', INSTANCE_DIR, 999, '/nonexistent-dir', { taskId: 42 }),
     ).rejects.toThrow('rsync failed');
 
     expect(ScheduledTaskModel.updateLastRunStatus).toHaveBeenCalledWith(
@@ -223,7 +242,9 @@ describe('BackupService.executeBackup - 定时任务结果回写', () => {
     const service = makeService();
     vi.spyOn(service, '_createSnapshot').mockRejectedValue(new Error('boom'));
 
-    await expect(service.executeBackup('s1', 999, '/nonexistent-dir')).rejects.toThrow('boom');
+    await expect(
+      service.executeBackup('s1', INSTANCE_DIR, 999, '/nonexistent-dir'),
+    ).rejects.toThrow('boom');
 
     expect(ScheduledTaskModel.updateLastRunStatus).not.toHaveBeenCalled();
   });

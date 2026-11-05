@@ -111,6 +111,7 @@ describe('备份取消（executeBackup 取消分支）', () => {
   let service;
   let tmpRoot;
   let snapshotDir;
+  let instanceDir;
   let manager;
 
   beforeEach(() => {
@@ -126,6 +127,7 @@ describe('备份取消（executeBackup 取消分支）', () => {
     // executeRestore 的 pre_restore 目录取自 config.serversDir，仅覆盖 service 实例字段不够
     config.serversDir = path.join(tmpRoot, 'servers');
     config.backupsDir = path.join(tmpRoot, 'snapshots');
+    instanceDir = path.join(config.serversDir, 's1');
     service.serversDir = config.serversDir;
     service.backupsDir = config.backupsDir;
     spawnControlled();
@@ -141,7 +143,11 @@ describe('备份取消（executeBackup 取消分支）', () => {
     manager.on('instance:backupFailed', (d) => failedEvents.push(d));
 
     const done = service
-      .executeBackup('s1', 77, snapshotDir, { estimateBytes: 1024, jarFile: null, taskId: null })
+      .executeBackup('s1', instanceDir, 77, snapshotDir, {
+        estimateBytes: 1024,
+        jarFile: null,
+        taskId: null,
+      })
       .catch((e) => e);
 
     // executeBackup 启动即注册；取消 API 命中并 abort → spawn mock 收到 kill
@@ -172,7 +178,11 @@ describe('备份取消（executeBackup 取消分支）', () => {
   it('定时任务取消按失败回写（原因「已取消」）', async () => {
     manager.on('instance:backupCancelled', () => {});
     const done = service
-      .executeBackup('s1', 77, snapshotDir, { estimateBytes: 1024, jarFile: null, taskId: 5 })
+      .executeBackup('s1', instanceDir, 77, snapshotDir, {
+        estimateBytes: 1024,
+        jarFile: null,
+        taskId: 5,
+      })
       .catch((e) => e);
     await vi.waitFor(() => expect(mockSpawn).toHaveBeenCalled());
     requestCancelBackup('s1');

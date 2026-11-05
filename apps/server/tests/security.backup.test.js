@@ -325,8 +325,11 @@ describe('deleteBackup 对 file_path 校验（异步化）', () => {
 });
 
 describe('命令参数构造（目录快照：rsync --link-dest / robocopy /MIR）', () => {
+  // 实例目录可以不在 serversDir 下（旧版目录名与实例 id 不同），
+  // 参数构造只认传入的目录，不再自行按 id 拼
+  const instanceDir = path.join(config.serversDir, 's1');
   it('rsync 参数：排除日志/依赖目录与 jar/pid（快照不备份运行时产物）', () => {
-    const args = buildRsyncArgs('s1', 'C:/backups/s1/snap-1', {
+    const args = buildRsyncArgs(instanceDir, 'C:/backups/s1/snap-1', {
       linkDest: 'C:/backups/s1/snap-0',
       jarFile: 'server.jar',
     });
@@ -345,22 +348,22 @@ describe('命令参数构造（目录快照：rsync --link-dest / robocopy /MIR�
     expect(args).toContain('--exclude=*.pid');
     expect(args).toContain('--exclude=*.lock');
     expect(args).toContain('--exclude=hs_err_pid*.log');
-    // 源尾带 / 复制目录内容（目标直接成为实例镜像）
-    expect(args).toContain('s1/');
+    // 源是实例目录绝对路径、尾带 /（复制目录内容，目标直接成为实例镜像）
+    expect(args.at(-2)).toBe(`${instanceDir}/`);
     // 快照模式严禁 --delete（仅恢复覆盖场景使用）
     expect(args).not.toContain('--delete');
   });
 
   it('rsync 参数：未配置 linkDest（首次全量）时不含 --link-dest；未配置 jarFile 时不排除 jar', () => {
-    const args = buildRsyncArgs('s1', 'C:/backups/s1/snap-1');
+    const args = buildRsyncArgs(instanceDir, 'C:/backups/s1/snap-1');
     expect(args.some((a) => a.startsWith('--link-dest='))).toBe(false);
     expect(args.join(' ')).not.toContain('--exclude=server.jar');
   });
 
   it('robocopy 参数：/MIR 镜像 + 排除清单 + 收紧重试（降级路径）', () => {
-    const args = buildRobocopyArgs('s1', 'C:/backups/s1/snap-1', { jarFile: 'server.jar' });
+    const args = buildRobocopyArgs(instanceDir, 'C:/backups/s1/snap-1', { jarFile: 'server.jar' });
     // 源 = 实例目录绝对路径、目标 = 快照目录绝对路径
-    expect(args[0]).toBe(path.join(config.serversDir, 's1'));
+    expect(args[0]).toBe(instanceDir);
     expect(args[1]).toBe('C:/backups/s1/snap-1');
     expect(args).toContain('/MIR');
     expect(args).toContain('/E');
@@ -382,7 +385,7 @@ describe('命令参数构造（目录快照：rsync --link-dest / robocopy /MIR�
   });
 
   it('robocopy 参数：未配置 jarFile 时 /XF 仅 pid/lock/hs_err', () => {
-    const args = buildRobocopyArgs('s1', 'C:/backups/s1/snap-1');
+    const args = buildRobocopyArgs(instanceDir, 'C:/backups/s1/snap-1');
     const xfIdx = args.indexOf('/XF');
     expect(args.slice(xfIdx + 1)).toEqual(['*.pid', '*.lock', 'hs_err_pid*.log']);
   });

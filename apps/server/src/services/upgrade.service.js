@@ -730,7 +730,7 @@ export class UpgradeService {
       // 写入是新版本首启对世界数据的升级——而那个世界不存在。
       // 跳过必须明说：静默跳过会让用户以为还有一份安全网
       this._emitProgress(instanceId, UPGRADE_STAGES.BACKUP, 0, '正在创建备份...');
-      if (hasWorldData(instanceId)) {
+      if (hasWorldData(instance)) {
         backupId = await this._createBackupAndWait(instanceId, task.signal);
         this._emitProgress(instanceId, UPGRADE_STAGES.BACKUP, 100, '备份完成');
       } else {

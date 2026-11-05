@@ -69,6 +69,10 @@ function spawnEmits(emitFn) {
   });
 }
 
+// 快照链路收实例目录（不再按 id 自行拼）：这些用例只关心命令参数与平台分支，
+// 目录本身不必真实存在
+const INSTANCE_DIR = path.join(config.serversDir, 's1');
+
 const realPlatform = process.platform;
 function setPlatform(p) {
   Object.defineProperty(process, 'platform', { value: p, configurable: true });
@@ -130,14 +134,14 @@ describe('spawnProcess 封装：退出码白名单与 ENOENT 转译', () => {
   it('退出码不在 okCodes：reject Exit code N（rsync 快照命令失败）', async () => {
     spawnEmits((proc) => proc.emit('close', 1));
     await expect(
-      service._rsyncSnapshot('s1', path.join(config.backupsDir, 's1', 'snap'), {}),
+      service._rsyncSnapshot('s1', INSTANCE_DIR, path.join(config.backupsDir, 's1', 'snap'), {}),
     ).rejects.toThrow('Exit code 1');
   });
 
   it('rsync exit 24（源文件传输中消失）容忍为成功（okCodes [0,24] 语义）', async () => {
     spawnEmits((proc) => proc.emit('close', 24));
     await expect(
-      service._rsyncSnapshot('s1', path.join(config.backupsDir, 's1', 'snap'), {}),
+      service._rsyncSnapshot('s1', INSTANCE_DIR, path.join(config.backupsDir, 's1', 'snap'), {}),
     ).resolves.toBeUndefined();
   });
 
@@ -146,7 +150,7 @@ describe('spawnProcess 封装：退出码白名单与 ENOENT 转译', () => {
       proc.emit('error', Object.assign(new Error('spawn rsync ENOENT'), { code: 'ENOENT' })),
     );
     const err = await service
-      ._rsyncSnapshot('s1', path.join(config.backupsDir, 's1', 'snap'), {})
+      ._rsyncSnapshot('s1', INSTANCE_DIR, path.join(config.backupsDir, 's1', 'snap'), {})
       .catch((e) => e);
     expect(err.message).toContain('Command not found: rsync');
     expect(err.code).toBe('ENOENT');
@@ -166,7 +170,7 @@ describe('_createSnapshot 平台分支：win32 降级与 Linux 主路径', () =>
   it('win32：rsync 可用（MSYS2）直接使用，返回 rsync', async () => {
     setPlatform('win32');
     spawnEmits((proc) => proc.emit('close', 0));
-    const tool = await service._createSnapshot('s1', '/snap', {});
+    const tool = await service._createSnapshot('s1', INSTANCE_DIR, '/snap', {});
     expect(tool).toBe('rsync');
     expect(mockSpawn).toHaveBeenCalledTimes(1);
     expect(mockSpawn.mock.calls[0][0]).toBe('rsync');
@@ -185,7 +189,7 @@ describe('_createSnapshot 平台分支：win32 降级与 Linux 主路径', () =>
       }
       return proc;
     });
-    const tool = await service._createSnapshot('s1', '/snap', {});
+    const tool = await service._createSnapshot('s1', INSTANCE_DIR, '/snap', {});
     expect(tool).toBe('robocopy');
     const robocopyCall = mockSpawn.mock.calls.find((c) => c[0] === 'robocopy');
     expect(robocopyCall[1]).toContain('/MIR');
@@ -195,13 +199,15 @@ describe('_createSnapshot 平台分支：win32 降级与 Linux 主路径', () =>
   it('win32：rsync 命令执行失败（非 ENOENT）原样上抛，不降级', async () => {
     setPlatform('win32');
     spawnEmits((proc) => proc.emit('close', 23));
-    await expect(service._createSnapshot('s1', '/snap', {})).rejects.toThrow('Exit code 23');
+    await expect(service._createSnapshot('s1', INSTANCE_DIR, '/snap', {})).rejects.toThrow(
+      'Exit code 23',
+    );
     expect(mockSpawn.mock.calls.every((c) => c[0] === 'rsync')).toBe(true);
   });
 
   it('Linux：固定 rsync 主路径，不做降级探测', async () => {
     spawnEmits((proc) => proc.emit('close', 0));
-    const tool = await service._createSnapshot('s1', '/snap', {});
+    const tool = await service._createSnapshot('s1', INSTANCE_DIR, '/snap', {});
     expect(tool).toBe('rsync');
     expect(mockSpawn).toHaveBeenCalledTimes(1);
   });
@@ -326,10 +332,12 @@ describe('executeBackup：RCON 保存序列与对称恢复', () => {
 
   function snapshotWithWorld() {
     const snapshotDir = path.join(backupsDir, 's1', 'snap');
-    vi.spyOn(BackupService.prototype, '_createSnapshot').mockImplementation(async (_id, dir) => {
-      fs.mkdirSync(path.join(dir, 'world'), { recursive: true });
-      fs.writeFileSync(path.join(dir, 'world', 'level.dat'), 'x');
-    });
+    vi.spyOn(BackupService.prototype, '_createSnapshot').mockImplementation(
+      async (_id, _instanceDir, dir) => {
+        fs.mkdirSync(path.join(dir, 'world'), { recursive: true });
+        fs.writeFileSync(path.join(dir, 'world', 'level.dat'), 'x');
+      },
+    );
     return snapshotDir;
   }
 
@@ -348,7 +356,7 @@ describe('executeBackup：RCON 保存序列与对称恢复', () => {
     const service = new BackupService(manager);
 
     const done = waitForEvent(manager, 'instance:backupComplete');
-    await service.executeBackup('s1', 1, snapshotDir, {});
+    await service.executeBackup('s1', INSTANCE_DIR, 1, snapshotDir, {});
     await done;
 
     expect(send).toHaveBeenCalledWith('save-off', { timeout: 3000 });
@@ -377,7 +385,9 @@ describe('executeBackup：RCON 保存序列与对称恢复', () => {
     const service = new BackupService(manager);
 
     const done = waitForEvent(manager, 'instance:backupComplete');
-    await expect(service.executeBackup('s1', 1, snapshotDir, {})).resolves.toBeUndefined();
+    await expect(
+      service.executeBackup('s1', INSTANCE_DIR, 1, snapshotDir, {}),
+    ).resolves.toBeUndefined();
     await done;
 
     expect(MockBackupModel.update).toHaveBeenCalledWith(1, {
@@ -407,7 +417,7 @@ describe('executeBackup：RCON 保存序列与对称恢复', () => {
 
     const done = waitForEvent(manager, 'instance:backupComplete');
     const saveOnFailed = waitForEvent(manager, 'instance:backupFailed');
-    await service.executeBackup('s1', 1, snapshotDir, {});
+    await service.executeBackup('s1', INSTANCE_DIR, 1, snapshotDir, {});
     await done;
     const failed = await saveOnFailed;
 
@@ -486,6 +496,38 @@ describe('executeRestore 安全网：后台竞态放弃与中段失败回滚', (
   }
 
   const backup = { id: 1, instance_id: 's1', name: '恢复源' };
+
+  /* rename 不跨设备：实例目录不在 serversDir 下时（旧版目录名与 id 不同、
+     或迁移过位置），暂存目录必须建在实例目录自己的父级，否则 EXDEV 失败、
+     恢复根本走不下去 */
+  it('实例目录在 serversDir 之外：暂存目录建在实例目录父级，恢复仍能完成', async () => {
+    const elsewhere = path.join(tmpRoot, 'elsewhere');
+    const externalDir = path.join(elsewhere, 'legacy-folder');
+    fs.mkdirSync(path.join(externalDir, 'world'), { recursive: true });
+    fs.writeFileSync(path.join(externalDir, 'world', 'level.dat'), 'OLD');
+    const snapshotDir = goodSnapshot();
+    manager.getInstance = vi.fn(() => asInstance({ isRunning: false, isRconConnected: false }));
+    vi.spyOn(service, '_restoreFromSnapshot').mockImplementation(async (_snap, target) => {
+      fs.mkdirSync(path.join(target, 'world'), { recursive: true });
+      fs.writeFileSync(path.join(target, 'world', 'level.dat'), 'RESTORED');
+    });
+
+    const renameTargets = [];
+    const realRename = fs.renameSync.bind(fs);
+    const renameSpy = vi.spyOn(fs, 'renameSync').mockImplementation((from, to) => {
+      renameTargets.push(String(to));
+      return realRename(from, to);
+    });
+
+    await service.executeRestore(1, backup, externalDir, snapshotDir, {});
+    renameSpy.mockRestore();
+
+    const staging = renameTargets.find((to) => to.includes('_pre_restore_'));
+    expect(staging).toBeDefined();
+    expect(path.dirname(staging)).toBe(elsewhere);
+    expect(fs.readFileSync(path.join(externalDir, 'world', 'level.dat'), 'utf8')).toBe('RESTORED');
+    expect(fs.readdirSync(elsewhere).filter((n) => n.includes('_pre_restore_'))).toEqual([]);
+  });
 
   it('后台执行期间实例被启动：放弃恢复（pre_restore 未创建，原目录不受影响）', async () => {
     createTestInstance(serversDir);
@@ -668,19 +710,86 @@ describe('createBackup / restoreBackup / deleteBackup 入口校验缺口收口',
     expect(MockBackupModel.create).not.toHaveBeenCalled();
   });
 
+  /* 快照源必须是实例目录本身：按 id 重拼会指向另一个目录，
+     搬过位置的实例会备份到不存在的路径（或别的实例的旧数据） */
+  it('实例目录在 serversDir 之外：快照源就是该目录，不按 id 重拼', async () => {
+    const elsewhere = path.join(tmpRoot, 'elsewhere');
+    const externalDir = path.join(elsewhere, 'legacy-folder');
+    fs.mkdirSync(path.join(externalDir, 'world'), { recursive: true });
+    fs.writeFileSync(path.join(externalDir, 'world', 'level.dat'), 'EXTERNAL');
+    manager.getInstance = vi.fn(() =>
+      asInstance({
+        id: 's1',
+        serverPath: externalDir,
+        isRunning: false,
+        isRconConnected: false,
+        jarFile: 'server.jar',
+      }),
+    );
+    spawnSucceeds();
+    vi.spyOn(BackupService.prototype, '_verifySnapshot').mockResolvedValue();
+    const done = waitForEvent(manager, 'instance:backupComplete');
+
+    await service.createBackup('s1', {});
+    await done;
+
+    const rsyncCall = mockSpawn.mock.calls.find((c) => c[0] === 'rsync');
+    expect(rsyncCall).toBeDefined();
+    expect(rsyncCall[1].at(-2)).toBe(`${externalDir}/`);
+  });
+
   it('statfs 不可用（罕见平台）：跳过磁盘预检不阻断备份（非 AppError 被吞）', async () => {
     createTestInstance(serversDir);
+    manager.getInstance = vi.fn(() =>
+      asInstance({
+        id: 's1',
+        serverPath: path.join(serversDir, 's1'),
+        isRunning: false,
+        isRconConnected: false,
+        jarFile: 'server.jar',
+      }),
+    );
     const statfsSpy = vi.spyOn(fs, 'statfsSync').mockImplementation(() => {
       throw new Error('statfs unsupported on this platform');
     });
-    vi.spyOn(BackupService.prototype, '_createSnapshot').mockImplementation(async (_id, dir) => {
-      fs.mkdirSync(path.join(dir, 'world'), { recursive: true });
-      fs.writeFileSync(path.join(dir, 'world', 'level.dat'), 'x');
-    });
+    vi.spyOn(BackupService.prototype, '_createSnapshot').mockImplementation(
+      async (_id, _instanceDir, dir) => {
+        fs.mkdirSync(path.join(dir, 'world'), { recursive: true });
+        fs.writeFileSync(path.join(dir, 'world', 'level.dat'), 'x');
+      },
+    );
     const done = waitForEvent(manager, 'instance:backupComplete');
     try {
       await expect(service.createBackup('s1', {})).resolves.toBeTruthy();
       await done;
+    } finally {
+      statfsSpy.mockRestore();
+    }
+  });
+
+  /* 实例目录的权威值是 serverPath：搬过目录的实例，serversDir/id 是一个不存在的空路径，
+     拿它去预估大小恒得 0，磁盘预检就成了摆设。这里用一个只有 serverPath 才看得见的
+     大世界把差异暴露出来——目录取错时预检放行，备份照做。 */
+  it('磁盘预检按 serverPath 预估：serversDir/id 不存在时不能拿 0 当大小', async () => {
+    const movedDir = path.join(tmpRoot, 'moved-s1');
+    fs.mkdirSync(path.join(movedDir, 'world'), { recursive: true });
+    fs.writeFileSync(path.join(movedDir, 'world', 'level.dat'), 'moved-world');
+    fs.writeFileSync(path.join(movedDir, 'world', 'region.mca'), Buffer.alloc(2 * 1024 * 1024));
+    manager.getInstance = vi.fn(() =>
+      asInstance({
+        id: 's1',
+        serverPath: movedDir,
+        isRunning: false,
+        isRconConnected: false,
+        jarFile: 'server.jar',
+      }),
+    );
+    const statfsSpy = vi
+      .spyOn(fs, 'statfsSync')
+      .mockReturnValue({ bavail: 1, bsize: 1024 * 1024, blocks: 1, bfree: 1, files: 1, ffree: 1 });
+
+    try {
+      await expect(service.createBackup('s1', {})).rejects.toThrow('磁盘剩余空间不足');
     } finally {
       statfsSpy.mockRestore();
     }
@@ -1008,6 +1117,20 @@ describe('detectOrphanedPreRestoreDirs：崩溃残留检测', () => {
     fs.mkdirSync(path.join(serversDir, 's1_pre_restore_2026-09-05T10-00-00-000Z'));
     fs.mkdirSync(path.join(serversDir, 's1'));
     const service = new BackupService(null);
+    expect(service.detectOrphanedPreRestoreDirs()).toBe(1);
+  });
+
+  /* 暂存目录建在实例目录的父级，实例目录不一定在 serversDir 下
+     （旧版目录名与实例 id 不同、或迁移过位置），只扫 serversDir 会漏 */
+  it('实例目录在 serversDir 之外：暂存目录残留按实例目录父级检出', () => {
+    const movedParent = path.join(tmpRoot, 'elsewhere');
+    fs.mkdirSync(path.join(movedParent, 'legacy-folder'), { recursive: true });
+    fs.mkdirSync(path.join(movedParent, 'legacy-folder_pre_restore_2026-09-05T10-00-00-000Z'));
+    const manager = new EventEmitter();
+    manager.instances = new Map([
+      ['survival-1a2b3c4d', { serverPath: path.join(movedParent, 'legacy-folder') }],
+    ]);
+    const service = new BackupService(manager);
     expect(service.detectOrphanedPreRestoreDirs()).toBe(1);
   });
 

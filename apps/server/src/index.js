@@ -224,9 +224,10 @@ try {
   logger.error('Failed to reset stale backup records:', err.message);
 }
 
-// 启动检测：残留的 pre_restore 目录（进程在上次恢复中段崩溃）告警提示
+// 启动检测：残留的 pre_restore 目录（进程在恢复中段崩溃）告警提示。
+// 暂存目录与实例目录同父级，实例目录不一定在 serversDir 下
 try {
-  new BackupService().detectOrphanedPreRestoreDirs();
+  new BackupService(serverManager).detectOrphanedPreRestoreDirs();
 } catch (err) {
   logger.error('Failed to scan for orphaned pre-restore dirs:', err.message);
 }
