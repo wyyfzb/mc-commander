@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.0](https://github.com/wyyfzb/mc-commander/compare/v0.12.1...v0.13.0) (2026-11-06)
+
+
+### Features
+
+* 全局总览与性能诊断接入，实例升级与部署体验收口 ([#701](https://github.com/wyyfzb/mc-commander/issues/701)) ([4c9620e](https://github.com/wyyfzb/mc-commander/commit/4c9620e00df82245d7f08da39939d53c8e7d2679))
+
 ## [0.12.1](https://github.com/wyyfzb/mc-commander/compare/v0.12.0...v0.12.1) (2026-10-29)
 
 
