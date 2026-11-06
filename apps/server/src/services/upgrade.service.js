@@ -53,6 +53,10 @@ function typeLabel(type) {
 /// 避免两处正则口径分叉。
 export const MC_VERSION_REGEX = /^\d{1,3}(\.\d{1,3}){0,3}$/;
 
+/// fabric loader 版本白名单：上游实测只有三种形态——0.20.1 / 0.3.7.111 /
+/// 0.10.6+build.214（带 build 元数据，只出现在 0.10 及更早的 loader 上）。
+export const LOADER_VERSION_REGEX = /^\d{1,3}(\.\d{1,3}){1,3}(\+[0-9A-Za-z][0-9A-Za-z.-]{0,31})?$/;
+
 /// 升级 JAR 入库文件名白名单：固定 server-<mcVersion>.jar 形态。mcVersion
 /// 已过上方白名单，此层双保险防 jarFile 入库值被后续流程（回恢复/启动）
 /// 当作穿越向量（「jarFile 入库值同样校验」）。
@@ -193,7 +197,7 @@ export class UpgradeService {
       // PaperMC downloads API（v3；主机为 fill.papermc.io——api.papermc.io 是旧域，
       // 其 /v3 路径返回 403、/v2 已 sunset 返回 410，两者都不可用）
       const buildsData = await httpJson(
-        `https://fill.papermc.io/v3/projects/paper/versions/${mcVersion}/builds`,
+        `https://fill.papermc.io/v3/projects/paper/versions/${encodeURIComponent(mcVersion)}/builds`,
         {
           headers: { 'User-Agent': PAPER_USER_AGENT },
           timeoutMs: 15000,

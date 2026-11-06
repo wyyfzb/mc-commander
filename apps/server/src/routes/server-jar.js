@@ -19,7 +19,7 @@ import { ensureJavaRuntime } from '../services/java-runtime.service.js';
 import { readJarVersionInfo } from '../services/mc-server/jar-version.js';
 import { InstanceModel } from '../db/index.js';
 import { atomicWriteFile } from '../services/mc_server.js';
-import { MC_VERSION_REGEX } from '../services/upgrade.service.js';
+import { MC_VERSION_REGEX, LOADER_VERSION_REGEX } from '../services/upgrade.service.js';
 import { recordAudit, AuditActions } from '../utils/audit.js';
 import {
   allocateGamePort,
@@ -84,11 +84,14 @@ async function getPaperVersions() {
 }
 
 async function getPaperBuild(mcVersion) {
-  const data = await httpJson(`${PAPER_API_BASE}/projects/paper/versions/${mcVersion}/builds`, {
-    headers: { 'User-Agent': PAPER_USER_AGENT },
-    timeoutMs: 15000,
-    retryLimit: 2,
-  });
+  const data = await httpJson(
+    `${PAPER_API_BASE}/projects/paper/versions/${encodeURIComponent(mcVersion)}/builds`,
+    {
+      headers: { 'User-Agent': PAPER_USER_AGENT },
+      timeoutMs: 15000,
+      retryLimit: 2,
+    },
+  );
   // v3 响应直接是构建数组（非 {builds: [...]} 结构）
   const builds = Array.isArray(data) ? data : data.builds || [];
   const stable = builds.filter((b) => b.channel === 'STABLE' || b.channel === 'RECOMMENDED');
@@ -533,6 +536,18 @@ export function createServerJarRoutes(serverManager) {
             error(
               ErrorCodes.VALIDATION_ERROR,
               `Invalid mcVersion: ${mcVersion}. Expected dotted numeric version like 1.21.4`,
+            ),
+          );
+      }
+
+      // loaderVersion 会被插值进 fabric 上游 URL 路径并落进 instance.json
+      if (loaderVersion !== undefined && !LOADER_VERSION_REGEX.test(loaderVersion)) {
+        return res
+          .status(400)
+          .json(
+            error(
+              ErrorCodes.VALIDATION_ERROR,
+              `Invalid loaderVersion: ${loaderVersion}. Expected loader version like 0.16.14`,
             ),
           );
       }

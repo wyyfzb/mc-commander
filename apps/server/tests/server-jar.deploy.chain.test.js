@@ -446,6 +446,44 @@ describe('POST /instances/deploy · mcVersion 形态白名单', () => {
   });
 });
 
+describe('POST /instances/deploy · loaderVersion 形态白名单', () => {
+  it.each([
+    ['路径穿越', '../../evil'],
+    ['斜杠', '0.16.14/../../x'],
+    ['主机形态', 'evil.test'],
+    ['用户信息前缀', 'x@evil.test'],
+    ['查询串', '0.16.14?y=1'],
+    ['协议前缀', 'https://evil.test/0.16.14'],
+    ['空白', '0.16.14 '],
+  ])('%s 形态：400，且不创建实例目录、不查上游', async (_label, loaderVersion) => {
+    const { app, manager } = buildApp();
+    const res = await request(app).post('/api/instances/deploy').send({
+      type: 'fabric',
+      mcVersion: '1.21.4',
+      loaderVersion,
+      instanceName: 'Bad Loader Server',
+    });
+
+    expect(res.status).toBe(400);
+    expect(JSON.stringify(res.body)).toContain('Invalid loaderVersion');
+    const entries = fs.existsSync(testState.serversDir) ? fs.readdirSync(testState.serversDir) : [];
+    expect(entries).toEqual([]);
+    expect(manager.activeDeploys.size).toBe(0);
+    expect(manager.emit).not.toHaveBeenCalled();
+  });
+
+  it('上游三种真实形态照常放行（0.20.1 / 0.3.7.111 / 0.10.6+build.214）', async () => {
+    for (const loaderVersion of ['0.20.1', '0.3.7.111', '0.10.6+build.214']) {
+      const { app } = buildApp();
+      const res = await request(app)
+        .post('/api/instances/deploy')
+        .send({ type: 'fabric', mcVersion: '1.21.4', loaderVersion, instanceName: 'Good Loader' });
+      // 上游夹具未就绪时是 502，此处只断言「没有被白名单拦下」
+      expect(res.status).not.toBe(400);
+    }
+  });
+});
+
 describe('POST /instances/deploy · Paper 主链', () => {
   function setPaperChain({ builds = null, noDownloads = false, badSha = false } = {}) {
     let build;

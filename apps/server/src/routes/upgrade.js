@@ -1,7 +1,11 @@
 import { Router } from 'express';
 import { error, ErrorCodes } from '../utils/response.js';
 import { recordAudit, AuditActions } from '../utils/audit.js';
-import { UpgradeService, MC_VERSION_REGEX } from '../services/upgrade.service.js';
+import {
+  UpgradeService,
+  MC_VERSION_REGEX,
+  LOADER_VERSION_REGEX,
+} from '../services/upgrade.service.js';
 import {
   upgradeRequestSchema,
   upgradeStartResponseSchema,
@@ -46,6 +50,18 @@ export function createUpgradeRoutes(serverManager) {
             error(
               ErrorCodes.VALIDATION_ERROR,
               `Invalid mcVersion: ${mcVersion}. Expected dotted numeric version like 1.21.4`,
+            ),
+          );
+      }
+
+      // loaderVersion 会被插值进 fabric 上游 URL 路径
+      if (loaderVersion !== undefined && !LOADER_VERSION_REGEX.test(loaderVersion)) {
+        return res
+          .status(400)
+          .json(
+            error(
+              ErrorCodes.VALIDATION_ERROR,
+              `Invalid loaderVersion: ${loaderVersion}. Expected loader version like 0.16.14`,
             ),
           );
       }
