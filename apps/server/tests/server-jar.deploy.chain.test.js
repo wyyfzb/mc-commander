@@ -409,6 +409,43 @@ describe('POST /instances/deploy · 磁盘余量预检', () => {
   });
 });
 
+/* mcVersion 会被插值进上游 URL 路径（paper/purpur/forge 各自一种拼法），
+   schema 只管类型与必填，形态白名单在路由层——与升级路由同一正则。 */
+describe('POST /instances/deploy · mcVersion 形态白名单', () => {
+  it.each([
+    ['路径穿越', '../../etc'],
+    ['斜杠', '1.21.4/../../x'],
+    ['反斜杠', '1.21.4\\..'],
+    ['空白', '1.21.4 '],
+    ['URL 特殊字符', '1.21.4?x=1'],
+    ['协议前缀', 'https://evil.test/1.21.4'],
+  ])('%s 形态：400，且不创建实例目录、不查上游', async (_label, mcVersion) => {
+    const { app, manager } = buildApp();
+    const res = await request(app)
+      .post('/api/instances/deploy')
+      .send({ type: 'paper', mcVersion, instanceName: 'Bad Version Server' });
+
+    expect(res.status).toBe(400);
+    expect(JSON.stringify(res.body)).toContain('Invalid mcVersion');
+    // 拒绝发生在分配端口、登记部署、查上游之前：目录没建、注册表空、无进度事件
+    const entries = fs.existsSync(testState.serversDir) ? fs.readdirSync(testState.serversDir) : [];
+    expect(entries).toEqual([]);
+    expect(manager.activeDeploys.size).toBe(0);
+    expect(manager.emit).not.toHaveBeenCalled();
+  });
+
+  it('点分数字形态照常放行（1.21 / 1.21.4 / 265）', async () => {
+    for (const mcVersion of ['1.21', '1.21.4', '265']) {
+      const { app } = buildApp();
+      const res = await request(app)
+        .post('/api/instances/deploy')
+        .send({ type: 'paper', mcVersion, instanceName: 'Good Version Server' });
+      // 上游夹具未就绪时是 502，此处只断言「没有被白名单拦下」
+      expect(res.status).not.toBe(400);
+    }
+  });
+});
+
 describe('POST /instances/deploy · Paper 主链', () => {
   function setPaperChain({ builds = null, noDownloads = false, badSha = false } = {}) {
     let build;

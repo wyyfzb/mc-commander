@@ -19,6 +19,7 @@ import { ensureJavaRuntime } from '../services/java-runtime.service.js';
 import { readJarVersionInfo } from '../services/mc-server/jar-version.js';
 import { InstanceModel } from '../db/index.js';
 import { atomicWriteFile } from '../services/mc_server.js';
+import { MC_VERSION_REGEX } from '../services/upgrade.service.js';
 import { recordAudit, AuditActions } from '../utils/audit.js';
 import {
   allocateGamePort,
@@ -521,6 +522,20 @@ export function createServerJarRoutes(serverManager) {
     validateBody(deployRequestSchema),
     asyncHandler(async (req, res) => {
       const { type, mcVersion, instanceName, maxMemory, loaderVersion, eula } = req.body;
+
+      // mcVersion 会被插值进上游 URL 路径（paper 的 versions/<v>/builds、purpur 的
+      // purpur/<v>/latest、forge 的 <v>-<build> 路径）：schema 只做类型与必填，
+      // 形态白名单在这里，与升级路由同一正则。
+      if (!MC_VERSION_REGEX.test(mcVersion)) {
+        return res
+          .status(400)
+          .json(
+            error(
+              ErrorCodes.VALIDATION_ERROR,
+              `Invalid mcVersion: ${mcVersion}. Expected dotted numeric version like 1.21.4`,
+            ),
+          );
+      }
 
       // 重复部署门控（路由层纵深防御）：页面残留的「部署中」进度、重连补发或断线期间的
       // 兜底查询都可能让客户端误判服务端空闲；此处以服务端注册表为准拒绝并发部署
