@@ -56,18 +56,24 @@ import {
 import { toast } from 'sonner'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
 import { instanceLabel, serverTypeLabel } from '@/lib/instance-label'
+import { SERVER_TYPES, type ServerType } from '@mc-commander/schemas'
 
-const SERVER_TYPES = [
-  { value: 'vanilla', label: 'Vanilla' },
-  { value: 'paper', label: 'Paper' },
-  { value: 'purpur', label: 'Purpur' },
-] as const
+/** 升级可选的服务端类型＝契约包的完整枚举（与部署同口径，不另立一份） */
+const UPGRADE_TARGET_TYPES = SERVER_TYPES.map((value) => ({
+  value,
+  // 与实例卡/设置页的类型标签同源；这里只需要短名，故不经 SERVER_TYPE_LABELS
+  label: serverTypeLabel(value),
+}))
 
-type UpgradeTargetType = (typeof SERVER_TYPES)[number]['value']
-
-/** 升级入口能产出的服务端类型；Fabric/Forge 实例不在其中（升级会换成这里选中的类型） */
-function isUpgradableType(value: string | null | undefined): value is UpgradeTargetType {
-  return SERVER_TYPES.some((t) => t.value === (value ?? '').toLowerCase())
+/**
+ * 需要额外选 loader 版本的类型。
+ *
+ * 只有 fabric：forge 的版本由上游 promotions 的 recommended/latest 决定，
+ * 服务端没有「按指定 forge 版本取构建」的能力——给 forge 渲染一个按了没反应的
+ * 下拉，比不渲染更糟（用户会以为选中的版本生效了）。
+ */
+function needsLoader(type: string): boolean {
+  return type === 'fabric'
 }
 
 function StageIcon({ stage }: { stage: UpgradeStage }) {
@@ -90,10 +96,14 @@ export function UpgradeDialog({ instance, open, onOpenChange }: UpgradeDialogPro
   // 默认选中实例当前的类型：升级最常发生在同类型换版本，默认落到 Vanilla 会把
   // Paper 实例换成 Vanilla——用户只选了版本，却换了服务端
   const currentType = (instance.modLoader ?? '').toLowerCase()
-  const [type, setType] = useState<UpgradeTargetType>(
-    isUpgradableType(currentType) ? currentType : 'vanilla',
+  const [type, setType] = useState<ServerType>(
+    (SERVER_TYPES as readonly string[]).includes(currentType)
+      ? (currentType as ServerType)
+      : 'vanilla',
   )
   const [mcVersion, setMcVersion] = useState('')
+  /** fabric/forge 的 loader 版本（留空＝服务端取上游最新稳定版） */
+  const [loaderVersion, setLoaderVersion] = useState('')
   const [starting, setStarting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   /** 取消请求在途（服务端已受理但终态未到）：按钮转「正在取消…」并禁用 */
@@ -172,6 +182,9 @@ export function UpgradeDialog({ instance, open, onOpenChange }: UpgradeDialogPro
 
   const versionsQuery = useServerVersions(type)
   const versions: string[] = versionsQuery.isSuccess ? (versionsQuery.data?.versions ?? []) : []
+  // loader 列表只对 fabric/forge 有意义：服务端按类型返回同一响应里的 loaders，
+  // 缺省项是上游最新稳定版，留空交给服务端取即可
+  const loaders: string[] = versionsQuery.isSuccess ? (versionsQuery.data?.loaders ?? []) : []
 
   const isSuccess = progress?.stage === 'completed'
   const isRolledBack = progress?.stage === 'rolled_back'
@@ -195,16 +208,17 @@ export function UpgradeDialog({ instance, open, onOpenChange }: UpgradeDialogPro
   }
 
   /** 类型切换与版本重置合并为一次事件驱动更新（不走 useEffect） */
-  const handleTypeChange = (next: UpgradeTargetType) => {
+  const handleTypeChange = (next: ServerType) => {
     setType(next)
     setMcVersion('')
+    setLoaderVersion('')
   }
 
   // 服务端类型是单选组：语义与方向键由 hook 统一提供（切换仍走 handleTypeChange 以连带重置版本）
-  const typeGroup = useRadioGroup<UpgradeTargetType>({
+  const typeGroup = useRadioGroup<ServerType>({
     label: '服务端类型',
     value: type,
-    values: SERVER_TYPES.map((t) => t.value),
+    values: [...SERVER_TYPES],
     onChange: handleTypeChange,
   })
 
@@ -218,7 +232,12 @@ export function UpgradeDialog({ instance, open, onOpenChange }: UpgradeDialogPro
     // 新一轮升级不受上一轮取消标记影响（否则进度视图里的按钮一出现就是「正在取消…」）
     setCancelling(false)
     try {
-      await apiUpgradeInstance(config, instance.id, { mcVersion, type })
+      await apiUpgradeInstance(config, instance.id, {
+        mcVersion,
+        type,
+        // 留空即由服务端取上游最新稳定版：不传字段比传空串更准确
+        ...(needsLoader(type) && loaderVersion ? { loaderVersion } : {}),
+      })
       // 202 受理后由 WS upgradeProgress 驱动界面
     } catch (err) {
       setError(getFriendlyErrorText(err))
@@ -333,7 +352,7 @@ export function UpgradeDialog({ instance, open, onOpenChange }: UpgradeDialogPro
               <div className="space-y-2">
                 <label className="text-sm font-medium">服务端类型</label>
                 <div className="grid grid-cols-3 gap-2" {...typeGroup.groupProps}>
-                  {SERVER_TYPES.map((t, index) => (
+                  {UPGRADE_TARGET_TYPES.map((t, index) => (
                     <button
                       key={t.value}
                       type="button"
@@ -366,6 +385,32 @@ export function UpgradeDialog({ instance, open, onOpenChange }: UpgradeDialogPro
                   </SelectContent>
                 </Select>
               </div>
+              {/* loader 版本：fabric/forge 的入口 jar 由它决定。留空＝服务端取上游
+                  最新稳定版，故这里是可选项而不是必填项 */}
+              {needsLoader(type) && (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Loader 版本</label>
+                  <Select
+                    value={loaderVersion}
+                    onValueChange={setLoaderVersion}
+                    disabled={loaders.length === 0}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="最新稳定版" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {loaders.map((v) => (
+                        <SelectItem key={v} value={v}>
+                          {v}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-mcs-text-muted">
+                    留空则使用上游最新稳定版；模组按 loader 版本声明依赖，装完起不来时先核对这里。
+                  </p>
+                </div>
+              )}
             </div>
           )}
 

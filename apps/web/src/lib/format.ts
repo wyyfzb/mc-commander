@@ -174,3 +174,23 @@ export function formatDurationSecFull(sec: number): string {
   if (m > 0) return `${m} 分 ${s} 秒`
   return `${s} 秒`
 }
+
+/**
+ * 确认按钮里的对象名：按半角单位保留至多 26 个（CJK 记 2，其余记 1），超出者截断加「…」。
+ * 按钮基座是 `whitespace-nowrap` + `shrink-0`：名字超宽时文字溢出按钮而不换行。
+ * 14px 字号下 384px 对话框底栏给按钮留约 280px，「卸载「」」占 5 个全角字后只剩约 210px
+ * ≈ 15 个汉字，故上限取 26 个单位（两阶段里更长的「永久卸载「」」也一并留出余量）。
+ * 全名仍在同一对话框的 description 与列表行里，按钮只回答「点下去动的是哪一个」。
+ */
+const CONFIRM_LABEL_MAX_UNITS = 26
+
+export function confirmTargetLabel(name: string | null | undefined): string {
+  const chars = Array.from((name ?? '').trim())
+  let units = 0
+  for (let i = 0; i < chars.length; i += 1) {
+    // CJK 统一表意文字、假名、全角标点都在 U+1100 以上，按 2 个半角单位计
+    units += (chars[i] as string).codePointAt(0)! >= 0x1100 ? 2 : 1
+    if (units > CONFIRM_LABEL_MAX_UNITS) return `${chars.slice(0, i).join('')}…`
+  }
+  return chars.join('')
+}

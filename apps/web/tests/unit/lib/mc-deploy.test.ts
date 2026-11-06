@@ -46,7 +46,7 @@ describe('任务类型静态数据', () => {
   it('类型标签与选项文案', () => {
     expect(TASK_TYPES).toEqual(['restart', 'backup', 'command', 'stop', 'start'])
     expect(TASK_TYPE_LABELS.restart).toBe('重启')
-    expect(TASK_TYPE_LABELS.backup).toBe('备份')
+    expect(TASK_TYPE_LABELS.backup).toBe('自动备份')
     expect(TASK_TYPE_LABELS.command).toBe('命令')
     expect(TASK_TYPE_LABELS.stop).toBe('停止')
     expect(TASK_TYPE_LABELS.start).toBe('启动')

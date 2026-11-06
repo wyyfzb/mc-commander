@@ -1,5 +1,5 @@
 /**
- * NotificationsPanel —— 通知设置子页（站内单渠道）
+ * NotificationsPanel —— 通知子页（站内单渠道）
  * - 分组表格：事件 | 严重度 | 站内 toast（单渠道，无 Telegram/Webhook）
  * - 顶部描述 + 右上「修改即时保存」实时保存提示（无保存按钮，改动即落盘 localStorage）
  * - 每组：组头行（folder 图标 + 组名 + 组级批量 Switch，仅组内全部开启才 checked，

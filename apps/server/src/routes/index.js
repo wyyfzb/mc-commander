@@ -17,6 +17,7 @@ import { createWebhookRoutes } from './webhooks.js';
 import { createUpgradeRoutes } from './upgrade.js';
 import { createMsmpRoutes } from './msmp.js';
 import { createPluginRoutes } from './plugins.js';
+import { createPerfRoutes } from './perf.js';
 import { createAuthRoutes } from './auth.js';
 import { createHttpsRoutes } from './https.js';
 import { createPanelRoutes } from './panel.js';
@@ -74,6 +75,7 @@ export function createApiV1Router(serverManager, taskScheduler, tlsState) {
   v1Router.use('/', createUpgradeRoutes(serverManager));
   v1Router.use('/', createMsmpRoutes(serverManager));
   v1Router.use('/', createPluginRoutes(serverManager));
+  v1Router.use('/', createPerfRoutes(serverManager));
   v1Router.use('/', createAuthRoutes());
   v1Router.use('/', createHttpsRoutes(tlsState));
   v1Router.use('/', createPanelRoutes());

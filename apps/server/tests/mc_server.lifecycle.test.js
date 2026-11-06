@@ -5,10 +5,19 @@ import os from 'os';
 import path from 'path';
 
 // ── Mock 隔离：子进程 / RCON / SQLite 模型 ──
+// spawnSync 要给出**真实形状**的返回：java 探测用它跑 `java -version` 并读 stdout/stderr，
+// 返回 undefined 会让「枚举宿主 Java」直接抛 TypeError——那会掩盖自愈逻辑本身的行为，
+// 测试就变成在验证 mock 写错。
 vi.mock('child_process', () => {
   const spawn = vi.fn();
-  const spawnSync = vi.fn();
-  const exec = vi.fn();
+  const spawnSync = vi.fn((cmd) => {
+    // 只回报「这是一条 Java 命令」，版本号固定 21：自愈要能从中挑出可用路径
+    if (String(cmd).endsWith('java')) {
+      return { status: 0, stdout: '', stderr: 'openjdk version "21.0.1" 2023-10-17\n' };
+    }
+    return { status: 0, stdout: '', stderr: '' };
+  });
+  const exec = vi.fn(() => '');
   return { spawn, spawnSync, exec, default: { spawn, spawnSync, exec } };
 });
 
@@ -27,6 +36,7 @@ vi.mock('../src/db/index.js', () => ({
     migrateFromJson: vi.fn(),
     addUptime: vi.fn(),
     getTotalUptime: vi.fn(() => 0),
+    update: vi.fn(),
   },
 }));
 
@@ -232,6 +242,80 @@ describe('MCServerInstance lifecycle / RCON / stats timers', () => {
       vi.advanceTimersByTime(3000);
 
       expect(spawn).toHaveBeenCalledTimes(1); // 修复前：2
+    });
+
+    /* 实例存的是绝对路径 Java 时会随 JDK 一起消失（面板自供运行时换档、系统包升级删旧目录）。
+       不自愈的话，用户看到的是「非法 javaPath…（仅允许 java 可执行文件，拒绝 bash/python/sh 等）」
+       ——他从没填过 bash，那句话把他引向一个不存在的问题。 */
+    it('javaPath 指向已不存在的路径 ⇒ 启动前自愈到可用 Java，并写回库', () => {
+      const stale = path.join(tmpDir, 'gone-jre', '21', 'bin', 'java');
+      const instance = createInstance({ javaPath: stale, mcVersion: '1.20.4' });
+
+      instance.start();
+
+      expect(instance.javaPath).not.toBe(stale);
+      expect(path.basename(instance.javaPath)).toMatch(/^java$/);
+      // 写回库：不写则面板重启后又是坏路径，用户每次启动都要重新触发一次自愈
+      expect(InstanceModel.update).toHaveBeenCalledWith(
+        instance.id,
+        expect.objectContaining({ javaPath: instance.javaPath }),
+      );
+      // 真正被 spawn 的是新路径，不是旧路径
+      const spawnedCmd = spawn.mock.calls.at(-1)[0];
+      expect(spawnedCmd).toBe(instance.javaPath);
+    });
+
+    it('javaPath 是裸命令名 java 时不动它（走 PATH，存在性无法预检）', () => {
+      const instance = createInstance({ javaPath: 'java' });
+      instance.start();
+      // 判据是「有没有发生过自愈」：裸命令名一律不动，且**不许写库**
+      expect(instance.javaPath).toBe('java');
+      expect(InstanceModel.update).not.toHaveBeenCalled();
+      expect(spawn.mock.calls.at(-1)[0]).toBe('java');
+    });
+
+    it('javaPath 仍然有效时不自愈（不能把用户显式选的 Java 换掉）', () => {
+      // 真实存在且文件名合规的路径形态：临时目录里造一个名为 java 的文件
+      const bin = path.join(tmpDir, 'jre', 'bin');
+      fs.mkdirSync(bin, { recursive: true });
+      const good = path.join(bin, 'java');
+      fs.writeFileSync(good, '#!/bin/sh\n');
+      fs.chmodSync(good, 0o755);
+      const instance = createInstance({ javaPath: good });
+
+      instance.start();
+
+      expect(instance.javaPath).toBe(good);
+      expect(InstanceModel.update).not.toHaveBeenCalled();
+      expect(spawn.mock.calls.at(-1)[0]).toBe(good);
+    });
+
+    /* 「路径消失」与「填了别的可执行文件」是两回事：前者该悄悄修好，
+       后者是配置错误，报「仅允许 java 可执行文件，拒绝 bash」才是准确的那句话。 */
+    it('javaPath 填的是别的可执行命令名（bash）⇒ 不静默改写，照旧报非法 javaPath', () => {
+      const instance = createInstance({ javaPath: 'bash' });
+      expect(() => instance.start()).toThrow(/非法 javaPath: bash/);
+      expect(instance.javaPath).toBe('bash');
+      expect(InstanceModel.update).not.toHaveBeenCalled();
+      expect(spawn).not.toHaveBeenCalled();
+    });
+
+    /* 宿主没有任何满足要求的 Java 时**不能**退而求其次挑一个能跑的：低版本 JVM 加载
+       高版本 class 必抛 UnsupportedClassVersionError，用户看到的是看不懂的堆栈，
+       且会误判成「服务端坏了」而不是「缺 Java」。启动前就说清缺哪个才是有用的出口。 */
+    it('本机没有满足要求的 Java ⇒ 抛可操作错误（说清缺哪个），不猜一个必崩的版本', () => {
+      const stale = path.join(tmpDir, 'gone-jre', '25', 'bin', 'java');
+      // jar 声明要 25，而宿主 mock 只回报 21 ⇒ 无候选满足
+      const instance = createInstance({ javaPath: stale, mcVersion: '26.3' });
+
+      expect(() => instance.start()).toThrow(/需要 Java 25/);
+      // 文案必须给动作，且指出当前配置已失效（否则用户不知道为什么要动它）
+      expect(() => instance.start()).toThrow(/已失效/);
+      expect(() => instance.start()).toThrow(/请先安装 Java 25/);
+      // 不得静默改写成某个更低版本
+      expect(instance.javaPath).toBe(stale);
+      expect(InstanceModel.update).not.toHaveBeenCalled();
+      expect(spawn).not.toHaveBeenCalled();
     });
 
     it('spawn error（javaPath 不存在等）不崩溃且置实例错误态', () => {

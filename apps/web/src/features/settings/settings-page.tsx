@@ -1,35 +1,24 @@
 /**
  * SettingsPage —— 设置页布局
- * - 左子导航 200px（实底卡片）+ 右内容区 Outlet（子路由 /settings/connection|account|general|notifications|backup|data|about）
+ * - 左子导航 200px（实底卡片）+ 右内容区 Outlet（子路由 device|account|notifications|integration|data）
  * - 菜单激活态：accent-bg-subtle 底 + accent-border + accent 文字
+ * - 「关于」不在子导航里：它是纯静态信息，用弹窗承载（入口在导航底部）
  * - 设计纪律：设置页内容区实底（风格 A 玻璃禁区）；子侧栏同实底卡
  */
-import { Suspense, lazy } from 'react'
+import { Suspense, lazy, useState } from 'react'
 import { Link, Outlet, useLocation } from 'react-router'
-import {
-  BellRing,
-  DatabaseBackup,
-  HardDrive,
-  Info,
-  Link2,
-  ShieldCheck,
-  SlidersHorizontal,
-} from 'lucide-react'
+import { BellRing, HardDrive, Info, Laptop, ShieldCheck, Webhook } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { TONE_SELECTED_CLASSES } from '@/components/mcs/tone'
 import { PageHeader } from '@/components/mcs/page-header'
 import { ListSkeleton } from '@/components/mcs/data-states'
-import { useServerStore } from '@/stores/server'
-import { ConnectionForm } from './components/connection-form'
-import { GeneralPanel } from './components/general-panel'
+import { DevicePanel } from './components/device-panel'
+import { IntegrationPanel } from './components/integration-panel'
 import { NotificationsPanel } from './components/notifications-panel'
-import { BackupPanel } from './components/backup-panel'
-import { AboutPanel } from './components/about-panel'
-import { UpdateCheckSection } from './components/update-check-section'
-import { RuntimeStatusSection } from './components/runtime-status-section'
+import { AboutDialog } from './components/about-dialog'
 
-// 账号与安全、数据与卸载各自带着低频重面板（会话轮询 / 导出 / 删除命令预览），
+// 登录与密码、数据与卸载各自带着低频重面板（会话轮询 / 导出 / 删除命令预览），
 // 静态引入会把它们塞进入口 chunk，首访任意页面都要多下几十 KB
 const AccountPanel = lazy(() =>
   import('./components/account-panel').then((m) => ({ default: m.AccountPanel })),
@@ -47,19 +36,22 @@ function PanelFallback() {
   )
 }
 
-/** 子导航项（七项） */
+/**
+ * 子导航项（五项）。分组判据是**换设备跟不跟过来**：浏览器本地偏好（连接与外观）／
+ * 服务端账号（登录与密码）／服务端偏好（通知）／独立页面入口（推送与记录）／
+ * 面板自身去留（数据与卸载）。按到达频率分会把「换电脑后要重配的」拆散。
+ */
 const SUB_NAV: { to: string; label: string; icon: LucideIcon }[] = [
-  { to: '/settings/connection', label: '连接设置', icon: Link2 },
-  { to: '/settings/account', label: '账号与安全', icon: ShieldCheck },
-  { to: '/settings/general', label: '通用设置', icon: SlidersHorizontal },
-  { to: '/settings/notifications', label: '通知设置', icon: BellRing },
-  { to: '/settings/backup', label: '备份管理', icon: DatabaseBackup },
+  { to: '/settings/device', label: '连接与外观', icon: Laptop },
+  { to: '/settings/account', label: '登录与密码', icon: ShieldCheck },
+  { to: '/settings/notifications', label: '通知', icon: BellRing },
+  { to: '/settings/integration', label: '推送与记录', icon: Webhook },
   { to: '/settings/data', label: '数据与卸载', icon: HardDrive },
-  { to: '/settings/about', label: '关于', icon: Info },
 ]
 
 export function SettingsPage() {
   const { pathname } = useLocation()
+  const [aboutOpen, setAboutOpen] = useState(false)
   // 页面头标题随当前子路由（与其他列表页统一 22px 主标题层级）
   const current = SUB_NAV.find((item) => pathname.startsWith(item.to)) ?? SUB_NAV[0]
 
@@ -98,6 +90,18 @@ export function SettingsPage() {
             </Link>
           )
         })}
+        {/* 关于：不占子导航位（纯静态信息），但也不能没有入口——放在导航末尾，
+            与上面的路由项用一条分隔线区分「这不是一个子页」。
+            窄容器下只出图标，故可访问名由 aria-label 承担（title 只是鼠标提示） */}
+        <button
+          type="button"
+          onClick={() => setAboutOpen(true)}
+          aria-label="关于"
+          className="mt-1 flex items-center justify-center gap-2 rounded-mcs-sm border-t border-mcs-border-subtle px-2 py-2 pt-3 text-mcs-sm font-medium text-mcs-text-muted transition-colors hover:bg-mcs-state-hover hover:text-mcs-text-default @3xl:justify-start @3xl:px-2.5"
+        >
+          <Info className="size-4 shrink-0" aria-hidden />
+          <span className="hidden @3xl:inline">关于</span>
+        </button>
       </nav>
 
       {/* ── 右内容区（页面头 + 子路由 Outlet） ── */}
@@ -107,18 +111,25 @@ export function SettingsPage() {
           <Outlet />
         </div>
       </div>
+
+      <AboutDialog open={aboutOpen} onOpenChange={setAboutOpen} />
     </div>
   )
 }
 
-// ── 七个子页薄封装（子路由组件；实例数据从 server store 注入 backup/general 面板） ──
+// ── 子页薄封装（子路由组件） ──
 
-/** 连接设置子页 */
-export function ConnectionSettingsPage() {
-  return <ConnectionForm variant="settings" />
+/** 连接与外观子页（面板连接 + 界面偏好，两项都只落浏览器 localStorage） */
+export function DeviceSettingsPage() {
+  return <DevicePanel />
 }
 
-/** 账号与安全子页（管理员密码 / 会话管理 / 登出） */
+/** 推送与记录子页（webhooks / audit 两个独立页面的入口卡） */
+export function IntegrationSettingsPage() {
+  return <IntegrationPanel />
+}
+
+/** 登录与密码子页（管理员密码 / 会话管理 / 登出 / 两步验证 / 传输加密） */
 export function AccountSettingsPage() {
   return (
     <Suspense fallback={<PanelFallback />}>
@@ -127,20 +138,9 @@ export function AccountSettingsPage() {
   )
 }
 
-/** 通用设置子页 */
-export function GeneralSettingsPage() {
-  return <GeneralPanel />
-}
-
-/** 通知设置子页 */
+/** 通知子页（事件类型开关矩阵，偏好存服务端） */
 export function NotificationsSettingsPage() {
   return <NotificationsPanel />
-}
-
-/** 备份管理子页（实例切换经 server store 自动重载） */
-export function BackupSettingsPage() {
-  const instanceId = useServerStore((s) => s.instanceId)
-  return <BackupPanel instanceId={instanceId} />
 }
 
 /** 数据与卸载子页（面板自身去留） */
@@ -149,20 +149,5 @@ export function DataSettingsPage() {
     <Suspense fallback={<PanelFallback />}>
       <DataPanel />
     </Suspense>
-  )
-}
-
-/** 关于子页（静态面板 + 更新检查） */
-export function AboutSettingsPage() {
-  return (
-    <>
-      <AboutPanel />
-      <div className="mt-3">
-        <UpdateCheckSection />
-      </div>
-      <div className="mt-3">
-        <RuntimeStatusSection />
-      </div>
-    </>
   )
 }

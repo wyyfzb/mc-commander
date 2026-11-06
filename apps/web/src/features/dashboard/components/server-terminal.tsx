@@ -184,7 +184,7 @@ export function ServerTerminal({
     const term = new Terminal({
       convertEol: true,
       fontSize: 12,
-      fontFamily: "'JetBrains Mono', ui-monospace, Consolas, monospace",
+      fontFamily: cssVar('--mcs-font-mono') || 'monospace',
       lineHeight: 1.4,
       theme: buildXtermTheme(),
       scrollback: 2000,
@@ -542,7 +542,12 @@ export function ServerTerminal({
             aria-label="终端加载中"
           >
             {Array.from({ length: 8 }, (_, i) => (
-              <Skeleton key={i} className="h-3.5" style={{ width: `${38 + ((i * 17) % 55)}%` }} />
+              <Skeleton
+                key={i}
+                tone="terminal"
+                className="h-3.5"
+                style={{ width: `${38 + ((i * 17) % 55)}%` }}
+              />
             ))}
           </div>
         ) : buffer.length === 0 ? (

@@ -12,6 +12,7 @@ import { useConnectionStore } from '@/stores/connection'
 import { useCommandBus } from '@/stores/command-bus'
 import { useTerminalStore } from '@/stores/terminal'
 import { usePanelPreferencesStore } from '@/stores/panel-preferences'
+import { DEFAULT_COMMAND_PRESETS } from '@/lib/mc-command-presets'
 
 /**
  * 命令输入组件测试：补全 / 发送（MSW 拦截）/ 快捷 chips
@@ -67,37 +68,81 @@ describe('CommandInput', () => {
     await waitFor(() => expect(input).toHaveValue(''))
   })
 
-  it('快捷 chips：默认 5 条渲染（图标+播放+删除）', () => {
+  it('快捷 chips：默认值逐条渲染', () => {
     renderInput()
     // chip 主体按钮的名称即命令全文（文本内容），tooltip 全文由 Radix Tooltip 提供
-    expect(screen.getByRole('button', { name: 'give @p diamond 64' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'gamemode creative' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'time set day' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'tp @p 0 100 0' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'kill @e[type=!player]' })).toBeInTheDocument()
+    for (const preset of DEFAULT_COMMAND_PRESETS) {
+      const short = preset.length > 26 ? `${preset.slice(0, 24)}...` : preset
+      expect(screen.getByRole('button', { name: short })).toBeInTheDocument()
+    }
   })
 
   it('删除快捷指令：经二次确认后移除并写入面板偏好', async () => {
     renderInput()
-    fireEvent.click(screen.getByRole('button', { name: '删除 give @p diamond 64' }))
+    const target = DEFAULT_COMMAND_PRESETS[0]!
+    const short = target.length > 26 ? `${target.slice(0, 24)}...` : target
+    fireEvent.click(screen.getByRole('button', { name: '编辑快捷指令' }))
+    fireEvent.click(screen.getByRole('button', { name: `删除 ${target}` }))
     // 确认前不删除（Dialog modal 置背景 aria-hidden，role 查询不可用，用文本断言）
-    expect(screen.getByText('give @p diamond 64')).toBeInTheDocument()
+    expect(screen.getByText(short)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /^删除$/ }))
-    expect(screen.queryByText('give @p diamond 64')).not.toBeInTheDocument()
+    expect(screen.queryByText(short)).not.toBeInTheDocument()
     // 落点是服务端偏好（换设备一致），不是本机 localStorage
     await waitFor(() =>
-      expect(usePanelPreferencesStore.getState().remote?.commandPresets).not.toContain(
-        'give @p diamond 64',
-      ),
+      expect(usePanelPreferencesStore.getState().remote?.commandPresets).not.toContain(target),
     )
   })
 
   it('点击 chip 主体仅填充不发送；播放按钮立即发送', async () => {
     renderInput()
-    fireEvent.click(screen.getByRole('button', { name: 'time set day' }))
-    expect(screen.getByLabelText('服务器命令输入')).toHaveValue('time set day')
-    fireEvent.click(screen.getByRole('button', { name: /发送 time set day/ }))
+    const preset = DEFAULT_COMMAND_PRESETS[0]!
+    const short = preset.length > 26 ? `${preset.slice(0, 24)}...` : preset
+    fireEvent.click(screen.getByRole('button', { name: short }))
+    expect(screen.getByLabelText('服务器命令输入')).toHaveValue(preset)
+    fireEvent.click(screen.getByRole('button', { name: `发送 ${preset}` }))
     await waitFor(() => expect(screen.getByLabelText('服务器命令输入')).toHaveValue(''))
+  })
+
+  it('编辑模式：常态只有播放键，进入后换成编辑与删除', () => {
+    renderInput()
+    const preset = DEFAULT_COMMAND_PRESETS[0]!
+    expect(screen.getByRole('button', { name: `发送 ${preset}` })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: `编辑 ${preset}` })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '编辑快捷指令' }))
+    expect(screen.getByRole('button', { name: `编辑 ${preset}` })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: `删除 ${preset}` })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: `发送 ${preset}` })).not.toBeInTheDocument()
+  })
+
+  it('行内改写：点铅笔出输入框，回车保存并写入面板偏好', async () => {
+    renderInput()
+    const preset = DEFAULT_COMMAND_PRESETS[0]!
+    fireEvent.click(screen.getByRole('button', { name: '编辑快捷指令' }))
+    fireEvent.click(screen.getByRole('button', { name: `编辑 ${preset}` }))
+
+    const editor = screen.getByLabelText(`编辑快捷指令 ${preset}`)
+    fireEvent.change(editor, { target: { value: 'tp @a 0 64 0' } })
+    fireEvent.keyDown(editor, { key: 'Enter' })
+
+    await waitFor(() =>
+      expect(usePanelPreferencesStore.getState().remote?.commandPresets?.[0]).toBe('tp @a 0 64 0'),
+    )
+    expect(screen.queryByLabelText(`编辑快捷指令 ${preset}`)).not.toBeInTheDocument()
+  })
+
+  it('行内改写：Esc 取消不写入', () => {
+    renderInput()
+    const preset = DEFAULT_COMMAND_PRESETS[0]!
+    fireEvent.click(screen.getByRole('button', { name: '编辑快捷指令' }))
+    fireEvent.click(screen.getByRole('button', { name: `编辑 ${preset}` }))
+
+    const editor = screen.getByLabelText(`编辑快捷指令 ${preset}`)
+    fireEvent.change(editor, { target: { value: '不该保存' } })
+    fireEvent.keyDown(editor, { key: 'Escape' })
+
+    expect(screen.queryByLabelText(`编辑快捷指令 ${preset}`)).not.toBeInTheDocument()
+    expect(usePanelPreferencesStore.getState().remote?.commandPresets).toBeUndefined()
   })
 
   it('注册命令总线 runner（Cmd+K 命令域桥）', () => {

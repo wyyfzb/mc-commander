@@ -7,12 +7,10 @@ import {
   floorToHalfGB,
   formatMemoryForJvm,
   hasRoomForInstance,
-  MEMORY_TIERS_GB,
   memoryBudget,
   parseMemoryGB,
   recommendNewInstanceGB,
   remainingMemoryHint,
-  selectableTiersGB,
   sumAllocatedGB,
   systemReserveGB,
 } from '@/lib/instance-memory'
@@ -77,15 +75,6 @@ describe('instance-memory', () => {
 
   it('memoryBudget：超卖时不返回负数（两个 4G 实例已占满 7.4 GB 的机器）', () => {
     expect(memoryBudget(7.4, ['4G', '4G']).availableGB).toBe(0)
-  })
-
-  it('selectableTiersGB：只留装得下的档，一个都装不下仍留最低档', () => {
-    expect(selectableTiersGB(14)).toEqual([1, 2, 4, 8])
-    // 大内存机器要能一次选到位（否则只能先建 8G 再进设置里拖）
-    expect(selectableTiersGB(60)).toEqual([1, 2, 4, 8, 16, 32])
-    expect(selectableTiersGB(64)).toEqual([...MEMORY_TIERS_GB])
-    expect(selectableTiersGB(3)).toEqual([1, 2])
-    expect(selectableTiersGB(0)).toEqual([1])
   })
 
   it('hasRoomForInstance：余量低于最低档即为装不下', () => {

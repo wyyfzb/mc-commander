@@ -16,12 +16,14 @@ import { FALLBACK_POLL_INTERVAL_MS, queryKeys, useInstances, useOverview } from 
 import { ErrorCode, getFriendlyErrorText } from '@/api/errors'
 import { queryFailed, queryPhase } from '@/lib/query-phase'
 import { instanceLabel } from '@/lib/instance-label'
+import { confirmTargetLabel } from '@/lib/format'
 import { memoryBudget, remainingMemoryHint } from '@/lib/instance-memory'
 import { EmptyState } from '@/components/mcs/empty-state'
 import { StaleQueryNotice } from '@/components/mcs/data-states'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
 import { PageHeader } from '@/components/mcs/page-header'
 import { InfoHint } from '@/components/mcs/info-hint'
+import { NoTranslate } from '@/components/mcs/no-translate'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -36,7 +38,7 @@ import { DeployDialog } from './components/deploy-dialog'
 import { InstanceSettingsDialog } from './components/instance-settings-dialog'
 import { UpgradeDialog } from './components/upgrade-dialog'
 import { clearUpgradeProgress } from '@/stores/upgrade'
-import { useUninstallInstance } from './queries'
+import { useUninstallInstance, useUpdateInstance } from './queries'
 import { useDeployStatusFallback } from './hooks/use-deploy-status-fallback'
 import { useStartInstanceWithEula } from '@/hooks/use-start-instance-with-eula'
 import { useStopInstance } from '@/hooks/use-instance-stop'
@@ -240,6 +242,20 @@ export function InstancesPage() {
     reachabilityMutation.mutate(instanceId)
   }
 
+  /* 熔断复位：PUT autoRestart=true 由服务端一并清崩溃计数、解除熔断；读侧不自行推断，
+     详情刷新后熔断态自然消失。复用 useUpdateInstance 的失效口径（详情 + 列表），
+     局部只加回执文案 */
+  const reenableMutation = useUpdateInstance()
+  const handleReenableAutoRestart = (instanceId: string) => {
+    reenableMutation.mutate(
+      { instanceId, payload: { autoRestart: true } },
+      {
+        onSuccess: () => toast.success('自动重启已重新启用，崩溃计数已清零'),
+        onError: (e) => toast.error(`重新启用自动重启失败：${getFriendlyErrorText(e)}`),
+      },
+    )
+  }
+
   const handleRetryDetail = (instanceId: string) => {
     const idx = detailIndexById.get(instanceId)
     if (idx != null) void detailsQueries[idx]?.refetch()
@@ -429,6 +445,10 @@ export function InstancesPage() {
             checkingReachabilityId={
               reachabilityMutation.isPending ? (reachabilityMutation.variables ?? null) : null
             }
+            onReenableAutoRestart={handleReenableAutoRestart}
+            reenablingId={
+              reenableMutation.isPending ? (reenableMutation.variables?.instanceId ?? null) : null
+            }
             busyId={
               (startPending ? pendingStartId : null) ??
               (stopMutation.isPending ? (stopMutation.variables ?? null) : null)
@@ -509,7 +529,9 @@ export function InstancesPage() {
       {eulaDialog}
 
       {/* ── 卸载确认（破坏力最大操作：输入实例名强确认，与备份恢复同级门槛；
-             实例名确认与备份清单校验都由服务端强制，无备份时转入第二阶段） ── */}
+             实例名确认与备份清单校验都由服务端强制，无备份时转入第二阶段）。
+             按钮点名对象：通用动词在弹窗里读不出动的是哪一台；名称走 instanceLabel，
+             空名实例回退 id，故按钮不会出现「卸载「」」 ── */}
       <ConfirmDialog
         open={uninstallTarget !== null}
         onOpenChange={(open) => {
@@ -517,7 +539,9 @@ export function InstancesPage() {
         }}
         title="卸载实例"
         description={`确定要卸载实例 "${uninstallTarget ? instanceLabel(uninstallTarget) : ''}" 吗？`}
-        confirmText={uninstallAckReason !== null ? '确认不可恢复删除' : '确认卸载'}
+        confirmText={`${uninstallAckReason !== null ? '永久卸载' : '卸载'}「${
+          uninstallTarget ? confirmTargetLabel(instanceLabel(uninstallTarget)) : ''
+        }」`}
         danger
         loading={uninstallMutation.isPending}
         warning={
@@ -535,7 +559,7 @@ export function InstancesPage() {
               : '该实例没有名称，实例名确认不构成有效确认：删除后世界数据与配置不可恢复'}
           </NoticeBanner>
         ) : (
-          <div className="flex flex-col gap-1.5">
+          <NoTranslate className="flex flex-col gap-1.5">
             {/* 确认块刻意**不用** instanceLabel：只有名称为空/纯空白时展示名会变成 id，
                 而服务端（routes/status.js：confirmName.trim() === name.trim()）只认原值，
                 那时用户照显示名输入会被判不匹配，故这里保持显示与比对同源的原值 */}
@@ -553,7 +577,7 @@ export function InstancesPage() {
               placeholder={uninstallTarget?.name ?? ''}
               className="font-mono focus-visible:border-mcs-error-fg focus-visible:ring-mcs-error-fg"
             />
-          </div>
+          </NoTranslate>
         )}
       </ConfirmDialog>
     </div>

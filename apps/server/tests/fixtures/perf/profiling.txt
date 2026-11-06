@@ -1,0 +1,17 @@
+---- Minecraft Profiler Results ----
+// Do you feel the need for... optimization?
+
+Version: 26.3
+Time span: 10013 ms
+Tick span: 201 ticks
+// This is approximately 20.07 ticks per second. It should be 20 ticks per second
+
+--- BEGIN PROFILE DUMP ---
+
+[00] nextTickWait(201/1) - 99.85%/99.85%
+[00] unspecified(201/1) - 0.09%/0.09%
+[00] tick(201/1) - 0.05%/0.05%
+[01] |   unspecified(201/1) - 93.66%/0.05%
+[01] |   scheduledPacketProcessing(201/1) - 6.34%/0.00%
+--- END PROFILE DUMP ---
+

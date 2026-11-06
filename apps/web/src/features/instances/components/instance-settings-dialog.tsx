@@ -4,9 +4,13 @@
  *   （生成 G1GC 优化参数同步进 jvmArgs 多行输入）+ javaPath 可选输入 + jvmArgs 多行
  * - 预填（新旧兼容）：优先解析实例旧 startCommand；无则回退结构化字段
  *   （detail.maxMemory / detail.jvmArgs / detail.javaPath，服务端持久化主路径）
- * - 保存调 PUT /instances/:id（白名单 maxMemory/minMemory/jvmArgs/javaPath），成功后 toast +
+ * - 保存调 PUT /instances/:id（白名单 maxMemory/minMemory/jvmArgs/javaPath/autoRestart），成功后 toast +
  *   失效实例详情查询 + 关闭；遗留 startCommand 实例保存时一并传 startCommand:null 清除
  *   （否则 jvmArgs 空数组时 start() 回退旧命令，新配置被静默覆盖）
+ * - 意外停止自动重启（autoRestart）：本实例的配置，不是面板偏好；草稿随「保存配置」一起
+ *   提交，取消退得回来。服务端 `PUT` 立即改内存态，故它不像内存/JVM 那样要重启才生效
+ *   - 说明里必须写出「默认开启」：开关躺着就是开的，用户不知道自己从没设置过它，
+ *   也就不会想到这件事是可以关掉的
  * - 实时推送（MSMP）：走自己的 GET/POST /push-channel，但与启动配置同属一次事务——拨动只改
  *   草稿、落库在点保存时；推送失败另行交代且不关弹窗（结局不同，不能混成一句）
  *   读状态三态分明：读失败给重试与可自查位置、在途给占位、只有真读到才渲染开关
@@ -25,6 +29,7 @@ import {
   Loader2,
   Radio,
   RefreshCw,
+  RotateCcw,
   Save,
   Settings,
 } from 'lucide-react'
@@ -190,14 +195,34 @@ function syncAikar(lines: string[], useAikar: boolean, allocMem: number): string
 /**
  * 保存结果文案：按**实际改了哪一类**分说。
  *
- * 两类改动都只有重启实例才生效，但来源不同（启动配置落实例记录、实时推送走 /push-channel），
- * 混成一句「设置已保存」会让用户不知道该去哪一项上核对。逐字未变时不宣称「已修改」——
- * 那会诱导一次无必要重启（保存按钮不判 dirty，原样保存也会走到这里）。
+ * 三类改动来源不同（启动配置落实例记录、实时推送走 /push-channel、自动重启改的是
+ * 服务端内存态），混成一句「设置已保存」会让用户不知道该去哪一项上核对。
+ * 生效时机也不同：自动重启保存即生效，另两类要重启实例，故不能说成同一句。
+ * 逐字未变时不宣称「已修改」——那会诱导一次无必要重启（保存按钮不判 dirty，原样保存也会走到这里）。
  */
-function savedToastText(configDirty: boolean, pushDirty: boolean, pushNext: boolean): string {
+function savedToastText(
+  configDirty: boolean,
+  pushDirty: boolean,
+  pushNext: boolean,
+  autoRestartDirty: boolean,
+  autoRestartNext: boolean,
+): string {
+  const autoRestartText = autoRestartDirty
+    ? `自动重启已${autoRestartNext ? '开启' : '关闭'}，立即生效`
+    : null
+  /* 两句都不点名主语，只能挂在「自动重启」后面：单独出现时各自补上主语 */
+  const configRestartText = configDirty ? '启动配置重启实例后生效' : null
+  const pushRestartText = pushDirty
+    ? `实时推送已${pushNext ? '开启' : '关闭'}，重启实例后生效`
+    : null
+
+  if (autoRestartText) {
+    const rests = [configRestartText, pushRestartText].filter((t) => t !== null)
+    return rests.length > 0 ? `${autoRestartText}；${rests.join('；')}` : autoRestartText
+  }
   if (configDirty && pushDirty) return '设置已保存，重启实例后生效'
-  if (pushDirty) return `实时推送已${pushNext ? '开启' : '关闭'}，重启实例后生效`
-  if (configDirty) return '启动配置已保存，重启实例后生效'
+  if (pushRestartText) return pushRestartText
+  if (configRestartText) return '启动配置已保存，重启实例后生效'
   return '设置已保存（与之前一致，无需重启）'
 }
 
@@ -240,6 +265,14 @@ export function InstanceSettingsDialog({
 }: InstanceSettingsDialogProps) {
   const updateMutation = useUpdateInstance()
   const markPending = useRestartPendingStore((s) => s.markPending)
+
+  // ── 意外停止自动重启：本实例的配置，草稿随「保存配置」落库（与推送开关同一套提交语义，
+  //    拨了就落库会让「取消」退不回来）。detail 缺失时不当成默认 true——读不到 ≠ 已开启 ──
+  const [autoRestartDraft, setAutoRestartDraft] = useState<boolean | null>(null)
+  const autoRestartKnown = detail !== undefined
+  const autoRestart = autoRestartDraft ?? detail?.autoRestart
+  /** 脏 = 草稿与服务端现值不等；detail 缺失时无现值可比，恒 false（不提交） */
+  const autoRestartDirty = autoRestartDraft !== null && autoRestartDraft !== detail?.autoRestart
 
   // ── 实时推送（MSMP）：与上面那份启动配置**同一次事务**——拨动只改本地草稿，
   //    落库发生在点「保存配置」时，故「取消」退得回来（它走自己的 /push-channel 接口，
@@ -287,16 +320,16 @@ export function InstanceSettingsDialog({
   const [isSaving, setIsSaving] = useState(false)
   const [closeConfirmOpen, setCloseConfirmOpen] = useState(false)
 
-  /** 启动配置四条是否偏离初始值（不含推送开关——两者要分开说，见 savedToastText） */
+  /** 启动配置四条是否偏离初始值（不含推送与自动重启——三者的生效时机不同，见 savedToastText） */
   const configDirty =
     allocatedMemory !== initial.memory ||
     useAikarFlags !== initial.useAikar ||
     jvmArgsText !== initial.jvmArgsText ||
     javaPath !== initial.javaPath
 
-  // 脏状态：弹窗里**任何**一项偏离服务端现值（启动配置 + 实时推送开关）。
-  // 推送若不算进来，「拨了开关直接关闭」既不提示、也没人提醒它还没生效——两套提交语义的根源
-  const dirty = configDirty || pushDirty
+  // 脏状态：弹窗里**任何**一项偏离服务端现值（启动配置 + 实时推送 + 自动重启）。
+  // 任何一项若不算进来，「拨了开关直接关闭」既不提示、也没人提醒它还没落库
+  const dirty = configDirty || pushDirty || autoRestartDirty
 
   /* totalMemory 缺失（<=1）按 16 兜底，与部署向导同一默认值。
      用整机内存当滑块上限会显示出一个给不出来的数：两个 4G 实例并存时仍能拖到 16 */
@@ -346,6 +379,11 @@ export function InstanceSettingsDialog({
     if (javaPathTrimmed !== '' && javaPathTrimmed !== 'java') {
       payload.javaPath = javaPathTrimmed
     }
+    /* 自动重启随整包提交：服务端 PUT 立即改内存态，不像内存/JVM 那样要重启才生效。
+       只在真的偏离现值时才带上——读不到现值时 autoRestartDirty 恒 false，不会把「不知道」写成 false */
+    if (autoRestartDirty && autoRestart !== undefined) {
+      payload.autoRestart = autoRestart
+    }
     setIsSaving(true)
     try {
       await updateMutation.mutateAsync({ instanceId: instance.id, payload })
@@ -365,7 +403,15 @@ export function InstanceSettingsDialog({
           return
         }
       }
-      toast.success(savedToastText(configDirty, pushDirty, pushDraft === true))
+      toast.success(
+        savedToastText(
+          configDirty,
+          pushDirty,
+          pushDraft === true,
+          autoRestartDirty,
+          autoRestart === true,
+        ),
+      )
       onOpenChange(false)
     } catch (e) {
       toast.error(`保存失败：${getFriendlyErrorText(e)}`)
@@ -454,6 +500,30 @@ export function InstanceSettingsDialog({
                 onCheckedChange={handleToggleAikar}
                 aria-label="JVM 优化 (Aikar's Flags)"
               />
+            }
+          />
+
+          {/* ── 意外停止后自动重启：紧接 JVM 优化，因为改完内存/参数之后紧接着要决定
+                「崩了要不要自己起来」——调优与自愈是同一轮「让它稳定跑」的动作。
+                说明里必须写出「默认开启」：开关躺着就是开的，用户不知道自己从没设过它，
+                也就不会想到这件事可以关（调试期正是要关掉它，否则崩溃被自动掩盖） ── */}
+          <SettingsRow
+            icon={RotateCcw}
+            iconClassName={autoRestart ? 'text-mcs-accent-fg' : 'text-mcs-text-muted'}
+            title="意外停止后自动重启"
+            description="服务器崩溃或意外退出后自动拉起，新建实例默认开启（手动停止不触发）；连续崩溃会先熔断暂停"
+            control={
+              /* 读不到详情时给「状态未知」而不是开关：`?? true` 会把「读不到」显示成
+                 「已开启」，用户会以为崩溃后真会自动重启——那是肯定式假信息 */
+              autoRestartKnown && autoRestart !== undefined ? (
+                <Switch
+                  checked={autoRestart}
+                  onCheckedChange={setAutoRestartDraft}
+                  aria-label="意外停止后自动重启"
+                />
+              ) : (
+                <span className="shrink-0 text-mcs-xs text-mcs-text-muted">状态未知</span>
+              )
             }
           />
 

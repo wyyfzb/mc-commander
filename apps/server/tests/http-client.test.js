@@ -232,6 +232,46 @@ describe('httpStream', () => {
   });
 });
 
+describe('重定向：一律不跟随（防线在调用点，第二跳会绕过它）', () => {
+  // 跟随后请求会落到上游指定的任意地址，而下载域白名单与 webhook 公网校验
+  // 都只校验第一跳的 host。这里的断言锁的是「第二跳根本不会发生」。
+  const redirectTo = () => ({ status: 302, headers: { Location: 'http://127.0.0.1:1/secret' } });
+
+  it('httpJson 抛 HttpError，带跳转码与 Location，且没有向目标发过请求', async () => {
+    handler = redirectTo;
+    const err = await httpJson(`${base}/redirect`).catch((e) => e);
+    expect(err).toBeInstanceOf(HttpError);
+    expect(err.statusCode).toBe(302);
+    expect(err.location).toBe('http://127.0.0.1:1/secret');
+    expect(hits).toHaveLength(1);
+  });
+
+  it('httpPost 同样抛（投递链路靠它把跳转记成失败而不是跟过去）', async () => {
+    handler = redirectTo;
+    const err = await httpPost(`${base}/redirect`, { json: {} }).catch((e) => e);
+    expect(err).toBeInstanceOf(HttpError);
+    expect(err.statusCode).toBe(302);
+  });
+
+  it('httpStream 经 error 事件抛出', async () => {
+    handler = redirectTo;
+    const stream = httpStream(`${base}/redirect`);
+    const err = await new Promise((resolve) => {
+      stream.on('data', () => {});
+      stream.on('end', () => resolve(null));
+      stream.on('error', resolve);
+    });
+    expect(err).toBeInstanceOf(HttpError);
+    expect(err.statusCode).toBe(302);
+  });
+
+  it('3xx 不重试（跳转是确定性结果，重试只会让上游多收几次请求）', async () => {
+    handler = redirectTo;
+    await expect(httpJson(`${base}/redirect`, { retryLimit: 3 })).rejects.toThrow(HttpError);
+    expect(hits).toHaveLength(1);
+  });
+});
+
 describe('生产调用点的选项透传（守卫：单测全量 mock 掉 http-client，此处补穿）', () => {
   // mock 掉 http-client 的测试证明不了「生产代码传的选项真的生效」——
   // 它们只证明「我调用了我以为的函数」。本组让真实模块接一个本地假上游，

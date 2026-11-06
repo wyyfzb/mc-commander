@@ -18,6 +18,8 @@ import {
 } from '@/api/panel'
 import { DangerZonePanel, RemovalProgress } from './danger-zone-panel'
 import { MigrateDataSection } from './migrate-data-section'
+import { UpdateCheckSection } from './update-check-section'
+import { RuntimeStatusSection } from './runtime-status-section'
 
 export function DataPanel() {
   const config = useConnectionStore()
@@ -115,6 +117,10 @@ export function DataPanel() {
         removeError={removeError}
         onRemove={(payload) => removeMutation.mutate(payload)}
       />
+      {/* 面板自身的版本与运行环境：与上面几项同属「这台面板自身」，不是「关于」的
+          静态介绍——用户来这里是为了判断「要不要更新 / 环境有没有问题」 */}
+      <UpdateCheckSection />
+      <RuntimeStatusSection />
     </div>
   )
 }

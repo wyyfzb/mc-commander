@@ -1,5 +1,9 @@
 import { z } from 'zod'
 
+/** 面板可安装/升级的服务端类型（唯一声明源：部署与升级共用同一枚举） */
+export const SERVER_TYPES = ['vanilla', 'paper', 'fabric', 'forge', 'purpur'] as const
+export type ServerType = (typeof SERVER_TYPES)[number]
+
 export const versionsResponseSchema = z.object({
   type: z.string(),
   versions: z.array(z.string()),
@@ -7,7 +11,7 @@ export const versionsResponseSchema = z.object({
 })
 
 export const deployRequestSchema = z.object({
-  type: z.enum(['vanilla', 'paper', 'fabric', 'forge', 'purpur']),
+  type: z.enum(SERVER_TYPES),
   mcVersion: z.string(),
   // 实例名的另一条写入路径（部署）：与 PUT /instances/:id 同口径归一化首尾空白，
   // 避免把带空格的名字落库后让卸载/恢复的实例名确认永久对不上
@@ -102,6 +106,9 @@ export const upgradeStageSchema = z.enum([
   // 补齐目标版本要求的 Java：面板自己下载并落地 JRE，期间没有服务端 jar 的传输，
   // 故与 download 分档（进度条的含义是「准备 Java」而非「下载核心」）
   'prepare_java',
+  // Forge 安装器在跑：下载 libraries 并打补丁，实测单次 3~5 分钟，
+  // 混进 download 会让进度条读起来像卡死
+  'forge_install',
   'replace',
   'verify',
   'completed',
@@ -132,10 +139,16 @@ export const upgradeRequestSchema = z.object({
     error: (iss) => (iss.input === undefined ? 'mcVersion is required' : undefined),
   }),
   type: z
-    .enum(['vanilla', 'paper', 'purpur'], {
-      error: () => ({ message: 'Invalid type. Must be one of: vanilla, paper, purpur' }),
+    .enum(SERVER_TYPES, {
+      error: () => ({ message: `Invalid type. Must be one of: ${SERVER_TYPES.join(', ')}` }),
     })
     .default('vanilla'),
+  /**
+   * fabric 升级时的 loader 版本；留空由服务端取上游最新稳定版。
+   * 仅 fabric：forge 的版本由上游 promotions 的 recommended/latest 决定，
+   * 不是用户可选项，服务端也没有按 loader 版本取 forge 构建的能力。
+   */
+  loaderVersion: z.string().optional(),
 })
 
 export const upgradeStartResponseSchema = z.object({

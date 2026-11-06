@@ -96,9 +96,9 @@ export function WorldPage() {
     <div className="@container flex h-full min-h-0 flex-col gap-4 p-4">
       <PageHeader
         title="世界"
-        description="服务器属性 · 游戏规则 · 存档"
+        description="服务器属性 · 游戏规则 · 数据包"
         actions={
-          <Button variant="outline" size="sm" onClick={() => navigate('/settings/backup')}>
+          <Button variant="outline" size="sm" onClick={() => navigate('/backups')}>
             <Archive aria-hidden />
             备份管理
           </Button>

@@ -20,6 +20,11 @@ interface UiState {
   mobileNavOpen: boolean
   /** 末尾日志弹窗（崩溃/熔断 toast「查看末尾日志」入口；存实例 id，null=关） */
   lastOutputInstanceId: string | null
+  /**
+   * 性能诊断 Sheet（告警条 / 崩溃卡 / 实例卡三个入口；存**目标实例 id**，null=关）。
+   * 存 id 而非布尔：入口可能来自别的实例的上下文，读当前选中实例会静默查错服务器。
+   */
+  perfSheetInstanceId: string | null
   /** 终端自动滚动（B5：新日志自动滚动到底部；关闭后不跟随） */
   terminalAutoScroll: boolean
   /** 命令执行二次确认（B5：危险命令执行前弹确认；终端专家通道除外） */
@@ -30,6 +35,7 @@ interface UiState {
   setCommandPaletteOpen: (open: boolean) => void
   setNotificationsOpen: (open: boolean) => void
   setLastOutputInstanceId: (id: string | null) => void
+  setPerfSheetInstanceId: (id: string | null) => void
   toggleMobileNav: () => void
   setMobileNavOpen: (open: boolean) => void
   setTerminalAutoScroll: (enabled: boolean) => void
@@ -55,6 +61,7 @@ export const useUiStore = create<UiState>()(
       notificationsOpen: false,
       mobileNavOpen: false,
       lastOutputInstanceId: null,
+      perfSheetInstanceId: null,
       terminalAutoScroll: true,
       confirmCommands: false,
       setTheme: (theme) => set({ theme }),
@@ -63,6 +70,7 @@ export const useUiStore = create<UiState>()(
       setCommandPaletteOpen: (open) => set({ commandPaletteOpen: open }),
       setNotificationsOpen: (open) => set({ notificationsOpen: open }),
       setLastOutputInstanceId: (id) => set({ lastOutputInstanceId: id }),
+      setPerfSheetInstanceId: (id) => set({ perfSheetInstanceId: id }),
       toggleMobileNav: () => set((s) => ({ mobileNavOpen: !s.mobileNavOpen })),
       setMobileNavOpen: (open) => set({ mobileNavOpen: open }),
       setTerminalAutoScroll: (enabled) => set({ terminalAutoScroll: enabled }),

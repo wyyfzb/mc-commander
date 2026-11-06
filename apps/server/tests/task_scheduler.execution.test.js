@@ -22,6 +22,8 @@ vi.mock('../src/db/backup.model.js', () => ({
   },
 }));
 vi.mock('../src/services/backup.service.js', () => ({
+  // 判据导出：upgrade.service 用它决定要不要跑前置备份。既有用例都走「有世界」路径
+  hasWorldData: vi.fn(() => true),
   BackupService: class {
     createBackup = vi.fn(() => Promise.resolve({}));
   },

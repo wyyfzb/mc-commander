@@ -45,6 +45,8 @@ vi.mock('../src/db/webhook.model.js', () => ({
   WebhookModel: { pruneDeliveries: vi.fn(() => 0) },
 }));
 vi.mock('../src/services/backup.service.js', () => ({
+  // 判据导出：upgrade.service 用它决定要不要跑前置备份。既有用例都走「有世界」路径
+  hasWorldData: vi.fn(() => true),
   BackupService: class {
     constructor() {}
     createBackup = vi.fn(() => Promise.resolve({}));

@@ -1,7 +1,11 @@
 import { Router } from 'express';
 import { error, ErrorCodes } from '../utils/response.js';
 import { recordAudit, AuditActions } from '../utils/audit.js';
-import { UpgradeService, MC_VERSION_REGEX } from '../services/upgrade.service.js';
+import {
+  UpgradeService,
+  MC_VERSION_REGEX,
+  LOADER_VERSION_REGEX,
+} from '../services/upgrade.service.js';
 import {
   upgradeRequestSchema,
   upgradeStartResponseSchema,
@@ -18,8 +22,10 @@ import { cancelTask, TASK_KINDS } from '../utils/cancellable-task.js';
  * POST /instances/:id/upgrade —— 202 异步，WS 推送进度
  * GET /instances/:id/upgrade/status —— 查询当前升级状态
  *
- * 请求体契约：mcVersion 必填 + type 枚举（vanilla/paper/purpur，
- * 缺省归一 vanilla）由 upgradeRequestSchema 统一校验（非法 400 VALIDATION_ERROR
+ * 请求体契约：mcVersion 必填 + type 枚举（SERVER_TYPES 五种，
+ * 缺省归一 vanilla）+ loaderVersion 可选（仅 fabric 有意义；forge 的构建由上游
+ * promotions 的 recommended/latest 决定，不是用户可选项），
+ * 由 upgradeRequestSchema 统一校验（非法 400 VALIDATION_ERROR
  * + 结构化 details）；点分版本白名单属服务层纵深防御口径，保留在路由内。
  */
 export function createUpgradeRoutes(serverManager) {
@@ -32,7 +38,7 @@ export function createUpgradeRoutes(serverManager) {
     validateBody(upgradeRequestSchema),
     asyncHandler(async (req, res) => {
       const { id } = req.params;
-      const { mcVersion, type } = req.body;
+      const { mcVersion, type, loaderVersion } = req.body;
 
       // 白名单校验：仅允许点分数字版本形态，
       // 杜绝 '../../'、绝对路径、URL 特殊字符等 payload 进入文件名与上游 URL。
@@ -44,6 +50,18 @@ export function createUpgradeRoutes(serverManager) {
             error(
               ErrorCodes.VALIDATION_ERROR,
               `Invalid mcVersion: ${mcVersion}. Expected dotted numeric version like 1.21.4`,
+            ),
+          );
+      }
+
+      // loaderVersion 会被插值进 fabric 上游 URL 路径
+      if (loaderVersion !== undefined && !LOADER_VERSION_REGEX.test(loaderVersion)) {
+        return res
+          .status(400)
+          .json(
+            error(
+              ErrorCodes.VALIDATION_ERROR,
+              `Invalid loaderVersion: ${loaderVersion}. Expected loader version like 0.16.14`,
             ),
           );
       }
@@ -93,7 +111,9 @@ export function createUpgradeRoutes(serverManager) {
       });
 
       // 异步启动升级（不 await）
-      upgradeService.upgrade(id, mcVersion, type).catch((err) => {
+      // loaderVersion 只对 fabric 有意义：forge 的版本由上游 promotions 决定，
+      // 服务层不接受按 loader 版本取 forge 构建，传下去也只会被忽略
+      upgradeService.upgrade(id, mcVersion, type, loaderVersion).catch((err) => {
         logger.error(`[UpgradeRoute] Upgrade failed for ${id}:`, err.message);
       });
 

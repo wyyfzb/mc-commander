@@ -80,6 +80,7 @@ import {
   getAllJavaVersions,
   findJavaPath,
   findJavaPathStrict,
+  selectJavaPath,
 } from '../src/utils/java-detector.js';
 
 /** 把一条绝对路径的各级祖先目录都注册进内存树（expandGlob 逐段校验中间目录） */
@@ -588,5 +589,52 @@ describe('全机没有一档可用 Java', () => {
 
     expect(getAllJavaVersions()).toEqual([]);
     expect(findJavaPathStrict('21')).toBeNull();
+  });
+});
+
+/* 自愈选路：实例已存 javaPath 失效后要重新挑一个。优先级不是「越新越好」，
+   而是「最能保证跑起来」——类版本严格匹配 > 高于要求的最小版本 > 尽力取最高。 */
+describe('selectJavaPath（失效 javaPath 的重新选路）', () => {
+  const cands = [
+    { version: '17', path: '/jvm/17/bin/java' },
+    { version: '21', path: '/jvm/21/bin/java' },
+    { version: '25', path: '/jvm/25/bin/java' },
+  ];
+
+  it('主版本恰好匹配优先（即使装得更高也不越级）', () => {
+    expect(selectJavaPath(cands, '21')).toBe('/jvm/21/bin/java');
+    expect(selectJavaPath(cands, 17)).toBe('/jvm/17/bin/java');
+  });
+
+  it('没有精确匹配时取「高于要求里的最小版本」（21 能跑就不要 25）', () => {
+    expect(selectJavaPath(cands, '19')).toBe('/jvm/21/bin/java');
+  });
+
+  it('候选全都低于要求时返回 null（不猜一个跑不起来的版本）', () => {
+    // 实例要 25、机器只有 17/21：低版本 JVM 加载高版本 class 必抛
+    // UnsupportedClassVersionError，用户看到的是看不懂的堆栈、且会误判成服务端坏了。
+    // 返回 null 让上层在启动前就说清「缺 25」，而不是猜一个必崩的路径
+    expect(selectJavaPath(cands.slice(0, 2), '25')).toBeNull();
+    expect(selectJavaPath([{ version: '17', path: '/jvm/17/bin/java' }], '21')).toBeNull();
+  });
+
+  it('恰好等于要求时不被「更高版本」挤掉（类版本严格匹配优先）', () => {
+    expect(selectJavaPath(cands, '17')).toBe('/jvm/17/bin/java');
+  });
+
+  it('要求未知（null/非数字）时不猜：取最高版本', () => {
+    expect(selectJavaPath(cands, null)).toBe('/jvm/25/bin/java');
+    expect(selectJavaPath(cands, '')).toBe('/jvm/25/bin/java');
+    expect(selectJavaPath(cands, 'abc')).toBe('/jvm/25/bin/java');
+  });
+
+  it('accept 过滤生效（文件名不像 java 的候选不参与选路）', () => {
+    expect(selectJavaPath(cands, '21', (p) => !p.includes('/21/'))).toBe('/jvm/25/bin/java');
+    expect(selectJavaPath(cands, '21', () => false)).toBeNull();
+  });
+
+  it('候选为空 ⇒ null（调用方据此报「没找到可用 Java」）', () => {
+    expect(selectJavaPath([], '21')).toBeNull();
+    expect(selectJavaPath(null, '21')).toBeNull();
   });
 });

@@ -9,7 +9,7 @@
  * - 正常状态 → 不渲染
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { act, render, screen } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router'
 import { useServerStore } from '@/stores/server'
@@ -136,6 +136,36 @@ describe('DegradationBanners', () => {
     expect(screen.getByText(/重启实例/)).toBeInTheDocument()
     // enable-rcon 在属性页是只读占位符（敏感键），故不得再挂「前往启用」类链接
     expect(screen.queryByRole('link')).not.toBeInTheDocument()
+  })
+
+  it('部署在途：常驻进度条带实例名、阶段与百分比，并给回看入口', async () => {
+    // 兜底快照也须报在途：它会按服务端真值复位本地 store，否则注入的进度被覆盖
+    deployStatusImpl = () => Promise.resolve(IN_FLIGHT)
+    useDeployStore.setState({
+      deploying: true,
+      progress: {
+        stage: 'download',
+        percent: 0.45,
+        transferred: 0,
+        total: 0,
+        instanceName: '生存服',
+      } as never,
+    })
+    renderBanners()
+    await waitFor(() => expect(screen.getByText(/正在部署/)).toBeInTheDocument())
+    // 关掉向导后进度不能跟着消失：否则「我关掉后它还在跑吗」无从确认
+    // 文案被 <b> 与阶段 span 拆开，按片段断言（整句匹配会落空）
+    expect(screen.getByText(/正在部署「生存服」/)).toBeInTheDocument()
+    expect(screen.getByText(/正在下载服务端核心…/)).toBeInTheDocument()
+    expect(screen.getByText(/45%/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '查看进度' })).toBeInTheDocument()
+    useDeployStore.setState({ deploying: false, progress: null })
+  })
+
+  it('部署结束：常驻条消失', () => {
+    useDeployStore.setState({ deploying: false, progress: null })
+    renderBanners()
+    expect(screen.queryByText(/正在部署/)).not.toBeInTheDocument()
   })
 
   it('连接未配置：不渲染（onboarding 场景）', () => {

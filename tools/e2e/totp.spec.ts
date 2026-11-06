@@ -266,9 +266,9 @@ test.describe('设置页两步验证挂靠向导', () => {
 
     // 路径一：设置页子导航往返。`<Outlet/>` 会卸载本面板，而应用级 QueryClient 跨子页存活
     // ——这是「明文被塞进 query 缓存」这类回归唯一能在应用内复现的路径（reload 会销毁缓存，测不到）
-    await page.getByRole('link', { name: '通用设置' }).click()
-    await expect(page).toHaveURL(/\/settings\/general/)
-    await page.getByRole('link', { name: '账号与安全' }).click()
+    await page.getByRole('link', { name: '连接与外观' }).click()
+    await expect(page).toHaveURL(/\/settings\/device/)
+    await page.getByRole('link', { name: '登录与密码' }).click()
     await expect(page).toHaveURL(/\/settings\/account/)
     await expect(page.getByText(/剩余恢复码/)).toBeVisible()
     await expect(page.getByRole('list', { name: '两步验证恢复码' })).toBeHidden()

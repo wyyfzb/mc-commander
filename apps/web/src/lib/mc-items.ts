@@ -130,6 +130,12 @@ export const MINECRAFT_ITEMS: MinecraftItem[] = [
   { id: 'cinnabar_wall', name: '朱砂墙', category: '建筑材料', stackSize: 64 },
 
   // ── 武器装备 ──────────────────────────────────────────────
+  { id: 'wooden_sword', name: '木剑', category: '武器装备', stackSize: 1 },
+  { id: 'wooden_pickaxe', name: '木镐', category: '武器装备', stackSize: 1 },
+  { id: 'wooden_axe', name: '木斧', category: '武器装备', stackSize: 1 },
+  { id: 'stone_sword', name: '石剑', category: '武器装备', stackSize: 1 },
+  { id: 'stone_pickaxe', name: '石镐', category: '武器装备', stackSize: 1 },
+  { id: 'stone_axe', name: '石斧', category: '武器装备', stackSize: 1 },
   { id: 'diamond_sword', name: '钻石剑', category: '武器装备', stackSize: 1 },
   { id: 'diamond_pickaxe', name: '钻石镐', category: '武器装备', stackSize: 1 },
   { id: 'diamond_axe', name: '钻石斧', category: '武器装备', stackSize: 1 },

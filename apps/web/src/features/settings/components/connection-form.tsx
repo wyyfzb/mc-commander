@@ -34,7 +34,7 @@ import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
 import { Card } from '@/components/mcs/card'
 import { InfoHint } from '@/components/mcs/info-hint'
-import { SettingsSectionCard as SectionCard } from './settings-section-card'
+import { SettingsSectionCard as SectionCard, SettingsSectionHeader } from './settings-section-card'
 import { cn } from '@/lib/utils'
 import { ApiError, apiPost, apiRequest } from '@/api/client'
 import type { OverviewData } from '@/api/types'
@@ -73,6 +73,7 @@ const API_KEY_MODEL_HINT =
 
 export function ConnectionForm({
   variant = 'settings',
+  bare = false,
   headingAs = 'h1',
   onSaved,
 }: ConnectionFormProps) {
@@ -157,6 +158,13 @@ export function ConnectionForm({
     typeof window === 'undefined'
       ? null
       : panelShareAddress({ origin: window.location.origin, hostname: window.location.hostname })
+
+  /* 「从其他设备访问」段的标题说明：bare 与自带卡片两种形态共用同一份，
+     差别只在外面套不套卡片面 */
+  const shareDescription =
+    shareAddress === null
+      ? '当前地址只有这台机器能打开，其他设备需要一个服务器地址'
+      : '在手机、另一台电脑的浏览器里打开下面这个地址，即可管理同一个面板'
 
   /**
    * 空值校验（测试/保存前置）——行内提示，对齐 deploy-dialog 范式。
@@ -280,6 +288,29 @@ export function ConnectionForm({
     if (ok) toast.success('地址已复制')
     else toast.error('复制失败，请手动选中复制')
   }
+
+  /** 该段内容（两种形态共用）：地址缺省时指路，有地址时给可复制的值 */
+  const shareBody =
+    shareAddress === null ? (
+      <NoticeBanner variant="info" icon={Info}>
+        本机地址只有这台机器能打开。用服务器的公网或内网 IP 重新打开面板后，这里会显示可分享的地址。
+      </NoticeBanner>
+    ) : (
+      <div className="flex flex-wrap items-center gap-2">
+        <code className="min-w-0 flex-1 truncate rounded-mcs-sm bg-mcs-bg-muted px-2.5 py-2 font-mono text-mcs-sm text-mcs-text-default">
+          {shareAddress}
+        </code>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => void handleCopyPanelAddress()}
+        >
+          <Copy className="size-3.5" aria-hidden />
+          复制地址
+        </Button>
+      </div>
+    )
 
   /** 粘贴导入：填入表单但**不自动保存**——走既有的「测试连接 → 保存」链路，用户仍有确认机会 */
   function handleImport() {
@@ -593,43 +624,38 @@ export function ConnectionForm({
         </div>
       )}
 
-      <Card as="div" className={cn('flex flex-col gap-5 p-6', variant === 'settings' && 'mt-4')}>
-        {formFields}
-      </Card>
+      {bare ? (
+        // 调用方已有区块卡：这里只输出字段，不再套一层同款卡片面
+        <div className={cn('flex flex-col gap-5', variant === 'settings' && 'mt-4')}>
+          {formFields}
+        </div>
+      ) : (
+        <Card as="div" className={cn('flex flex-col gap-5 p-6', variant === 'settings' && 'mt-4')}>
+          {formFields}
+        </Card>
+      )}
 
       {variant === 'settings' && (
         <div className="mt-4">
-          <SectionCard
-            icon={MonitorSmartphone}
-            title="从其他设备访问"
-            description={
-              shareAddress === null
-                ? '当前地址只有这台机器能打开，其他设备需要一个服务器地址'
-                : '在手机、另一台电脑的浏览器里打开下面这个地址，即可管理同一个面板'
-            }
-          >
-            {shareAddress === null ? (
-              <NoticeBanner variant="info" icon={Info}>
-                本机地址只有这台机器能打开。用服务器的公网或内网 IP
-                重新打开面板后，这里会显示可分享的地址。
-              </NoticeBanner>
-            ) : (
-              <div className="flex flex-wrap items-center gap-2">
-                <code className="min-w-0 flex-1 truncate rounded-mcs-sm bg-mcs-bg-muted px-2.5 py-2 font-mono text-mcs-sm text-mcs-text-default">
-                  {shareAddress}
-                </code>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => void handleCopyPanelAddress()}
-                >
-                  <Copy className="size-3.5" aria-hidden />
-                  复制地址
-                </Button>
-              </div>
-            )}
-          </SectionCard>
+          {/* bare：调用方已是区块卡，本段只出区块头 + 内容，不再套第二层卡片面 */}
+          {bare ? (
+            <>
+              <SettingsSectionHeader
+                icon={MonitorSmartphone}
+                title="从其他设备访问"
+                description={shareDescription}
+              />
+              {shareBody}
+            </>
+          ) : (
+            <SectionCard
+              icon={MonitorSmartphone}
+              title="从其他设备访问"
+              description={shareDescription}
+            >
+              {shareBody}
+            </SectionCard>
+          )}
         </div>
       )}
 

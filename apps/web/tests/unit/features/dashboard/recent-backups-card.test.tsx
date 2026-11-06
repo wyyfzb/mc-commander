@@ -2,7 +2,7 @@
  * RecentBackupsCard 测试：
  * - 骨架加载态 / 空态引导 / 失败态重试 / 正常渲染（名称 + 时间·大小 + 状态徽章）
  * - 立即备份按钮（成功 toast / 有在途备份时禁用）
- * - 「全部」与空态入口**真实跳转**到设置页备份子路由（/settings/backup）——防入口路由漂移回归
+ * - 「全部」与空态入口**真实跳转**到侧栏一级备份页（/backups）——防入口路由漂移回归
  * mock 数据为虚构内容（mockBackups），严禁真实服务器信息
  */
 import { describe, it, expect, beforeEach, beforeAll, afterAll } from 'vitest'
@@ -41,7 +41,7 @@ function renderCard() {
           </QueryClientProvider>
         ),
       },
-      { path: '/settings/backup', element: <div>备份管理页</div> },
+      { path: '/backups', element: <div>备份页</div> },
     ],
     { initialEntries: ['/'] },
   )
@@ -77,14 +77,14 @@ describe('RecentBackupsCard', () => {
     expect(screen.getByRole('status')).toBeInTheDocument()
   })
 
-  it('空态：显示引导文案，入口跳转备份管理页', async () => {
+  it('空态：显示引导文案，入口跳转备份页', async () => {
     const user = userEvent.setup()
     server.use(http.get(BACKUPS_URL, () => HttpResponse.json({ status: 'ok', data: [] })))
     renderCard()
     await waitFor(() => expect(screen.getByText('暂无备份记录')).toBeInTheDocument())
 
     await user.click(screen.getByRole('button', { name: '前往备份管理' }))
-    expect(await screen.findByText('备份管理页')).toBeInTheDocument()
+    expect(await screen.findByText('备份页')).toBeInTheDocument()
   })
 
   it('失败态：展示原因并可重试（重试成功后渲染列表）', async () => {
@@ -198,11 +198,11 @@ describe('RecentBackupsCard', () => {
     await waitFor(() => expect(screen.getByText(/操作失败/)).toBeInTheDocument())
   })
 
-  it('「全部」跳转到设置页备份子路由（/settings/backup）', async () => {
+  it('「全部」跳转到侧栏备份页（/backups）', async () => {
     const user = userEvent.setup()
     await renderReady()
 
     await user.click(screen.getByRole('button', { name: '查看全部备份' }))
-    expect(await screen.findByText('备份管理页')).toBeInTheDocument()
+    expect(await screen.findByText('备份页')).toBeInTheDocument()
   })
 })

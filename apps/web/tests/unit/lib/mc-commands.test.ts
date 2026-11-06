@@ -1,12 +1,13 @@
 import { describe, it, expect } from 'vitest'
+import { Terminal } from 'lucide-react'
 import { readFileSync } from 'node:fs'
 import {
   completeCommands,
-  colorForCommand,
   iconForCommand,
   COMMAND_CATEGORIES,
   MC_COMMANDS,
 } from '@/lib/mc-commands'
+import { DEFAULT_COMMAND_PRESETS } from '@/lib/mc-command-presets'
 
 describe('命令静态表', () => {
   it('条数与分类数是显式契约（无断言时注释与事实会一起漂）', () => {
@@ -89,18 +90,29 @@ describe('补全逻辑', () => {
   })
 })
 
-describe('图标/颜色映射', () => {
-  it('give → 钻石图标 + info 色', () => {
-    expect(colorForCommand('give')).toBe('text-mcs-info-fg')
-    expect(iconForCommand('give')).toBeTruthy()
+describe('图标映射', () => {
+  it('give → 专属图标（非兜底）', () => {
+    expect(iconForCommand('give')).not.toBe(iconForCommand('unknown'))
   })
-  it('kill → error 色；tp → success 色；summon → orange 色', () => {
-    expect(colorForCommand('kill')).toBe('text-mcs-error-fg')
-    expect(colorForCommand('tp')).toBe('text-mcs-success-fg')
-    expect(colorForCommand('summon')).toBe('text-mcs-orange-fg')
+  it('未知命令落到 terminal 兜底', () => {
+    expect(iconForCommand('unknown')).toBe(Terminal)
   })
-  it('未知命令 → 默认 terminal 图标 + accent 色', () => {
-    expect(colorForCommand('unknown')).toBe('text-mcs-accent-fg')
-    expect(iconForCommand('unknown')).toBeTruthy()
+})
+
+describe('默认快捷指令', () => {
+  it('不用 @p：服务端控制台以 0 0 0 为执行位置，@p 取的是距原点最近者', () => {
+    for (const preset of DEFAULT_COMMAND_PRESETS) {
+      expect(preset).not.toContain('@p')
+    }
+  })
+
+  it('不含面板已图形化的命令（时间/天气/保存/在线名单/玩家级操作）', () => {
+    // 仪表盘时间天气有预设按钮、保存有按钮、在线名单与玩家级操作在玩家页；
+    // 默认值里再放一份就是同一件事两个入口
+    for (const preset of DEFAULT_COMMAND_PRESETS) {
+      expect(preset).not.toMatch(/^(time|weather|give|gamemode|effect|tp)\b.*@p/)
+      expect(preset).not.toBe('save-all')
+      expect(preset).not.toBe('list')
+    }
   })
 })

@@ -10,7 +10,9 @@
  * 需用户反复可见，故不能用 toast（几秒即散）。
  */
 import { AlertTriangle } from 'lucide-react'
-import { NoticeBanner } from '@/components/mcs/notice-banner'
+import { NoticeBanner, NoticeBannerAction } from '@/components/mcs/notice-banner'
+import { useUiStore } from '@/stores/ui'
+import { useServerStore } from '@/stores/server'
 import type { AlertType } from '@/lib/notifications'
 
 /**
@@ -32,15 +34,45 @@ const ALERT_LABELS: Record<AlertType, string> = {
 /** 展示顺序固定为上面 Record 的键序 */
 const ALERT_ORDER = Object.keys(ALERT_LABELS) as AlertType[]
 
+/**
+ * 哪些告警值得给「查是否性能导致」的入口。
+ *
+ * 磁盘两类**刻意不给**：磁盘占用与 TPS/CPU/内存是两回事，性能快照里没有任何磁盘指标，
+ * 点进去只会得到「没发现瓶颈」，把一次明确处置（清备份 / 扩盘）引到错误的排查方向。
+ */
+const PERF_RELEVANT: ReadonlySet<AlertType> = new Set<AlertType>([
+  'lowTps',
+  'highCpu',
+  'highMemory',
+])
+
 export function AlertBanner({ alerts }: { alerts: ReadonlySet<AlertType> }) {
+  const setPerfSheetInstanceId = useUiStore((s) => s.setPerfSheetInstanceId)
+  // 告警由当前实例的性能读数驱动，故诊断目标就是当前实例；不用 lastOutputInstanceId
+  // （那是末尾日志弹窗自己的开关，两者同时打开时会被一起改掉）
+  const instanceId = useServerStore((s) => s.instanceId)
+
   const active = ALERT_ORDER.filter((t) => alerts.has(t))
   if (active.length === 0) return null
+
+  const perfRelevant = active.some((t) => PERF_RELEVANT.has(t))
 
   /* 文案到「服务器正在异常」为止，不复述阈值与读数：读数在统计卡上是活的（30s 轮询 +
      WS 推送），横幅里抄一份就会与卡上不一致（横幅只在跃迁时更新）。 */
   return (
     <NoticeBanner variant="warning" icon={AlertTriangle}>
-      {`服务器状态异常：${active.map((t) => ALERT_LABELS[t]).join('、')}（指标恢复正常后本条自动消失）`}
+      {/* 按钮靠右且不参与文本流：窄容器下文案折行时按钮独占一行，而不是挤在最后一个词
+          右侧、把整句压成两三个字一行 */}
+      <span className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+        <span className="min-w-0">
+          {`服务器状态异常：${active.map((t) => ALERT_LABELS[t]).join('、')}（指标恢复正常后本条自动消失）`}
+        </span>
+        {perfRelevant && (
+          <NoticeBannerAction onClick={() => setPerfSheetInstanceId(instanceId)}>
+            查是否性能导致
+          </NoticeBannerAction>
+        )}
+      </span>
     </NoticeBanner>
   )
 }

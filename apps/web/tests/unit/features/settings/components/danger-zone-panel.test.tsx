@@ -190,6 +190,24 @@ describe('危险区面板', () => {
       )
     })
 
+    // 浏览器自动翻译会改写 label 与 placeholder：译后的字面和服务端比对的确认串不匹配，
+    // 删除按钮永远 disabled，而用户看不出原因
+    it('确认串所在子树整体不可翻译（translate="no" + notranslate 覆盖 label 与输入框）', () => {
+      render(<DangerZonePanel {...baseProps()} />)
+      const input = screen.getByLabelText(/输入「彻底删除」以确认/)
+      const label = screen.getByText('输入「彻底删除」以确认')
+      for (const node of [input, label]) {
+        const guard = node.closest('[translate="no"]')
+        expect(guard).not.toBeNull()
+        expect(guard).toHaveClass('notranslate')
+      }
+      expect(input.closest('[translate="no"]')).toBe(label.closest('[translate="no"]'))
+      // 不得用 lang="zxx" 冒充：那会把中文标成「无语言内容」，屏幕阅读器丢掉中文发音规则
+      expect(input.closest('[lang]')).toBeNull()
+      // placeholder 本身也要落在禁译范围内（浏览器会改写 placeholder，不只是文本节点）
+      expect(input.getAttribute('placeholder')).toBe('彻底删除')
+    })
+
     it('配了 2FA 才出现验证码输入框', () => {
       const { rerender } = render(<DangerZonePanel {...baseProps()} />)
       expect(screen.queryByLabelText('两步验证码')).not.toBeInTheDocument()

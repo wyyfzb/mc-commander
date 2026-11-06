@@ -95,15 +95,6 @@ export function memoryBudget(
   }
 }
 
-/**
- * 新实例可选档位：只留装得下的。一个都装不下时仍保留最低档——
- * 把部署彻底堵死会让「内存吃紧」变成「面板用不了」，后果交给页面上的警告交代。
- */
-export function selectableTiersGB(availableGB: number): number[] {
-  const fits = MEMORY_TIERS_GB.filter((gb) => gb <= availableGB)
-  return fits.length > 0 ? [...fits] : [MEMORY_TIERS_GB[0]]
-}
-
 /** 这台机器还装得下一个最低档实例吗 */
 export function hasRoomForInstance(availableGB: number): boolean {
   return availableGB >= MEMORY_TIERS_GB[0]

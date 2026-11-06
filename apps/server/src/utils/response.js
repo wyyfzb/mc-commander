@@ -35,6 +35,14 @@ export const ErrorCodes = {
   },
   // 用户取消导致长任务未完成（部署 POST 的响应；终态事件会另行推送 cancelled 阶段）
   TASK_CANCELLED: { code: 40915, message: 'Task cancelled by user', status: 409 },
+  // 实例需要的 Java 主版本在宿主上没有可用的。单独一个码是因为这句必须**原样到达用户**：
+  // 它会随实例版本变化（要 17 还是要 25），前端无法预先本地化；而通用码
+  // （50000/40000）的通用文案会把具体版本号与补救动作一并吞掉。
+  INSTANCE_JAVA_UNAVAILABLE: {
+    code: 40918,
+    message: '本机没有该实例所需的 Java 版本',
+    status: 409,
+  },
   // 卸载实例的实例名确认（服务端强制）：前端弹窗的输入只存在于客户端，
   // 不带确认的直连 API 调用不受客户端弹窗约束，故确认必须由服务端裁决
   INSTANCE_DELETE_CONFIRM_REQUIRED: {
@@ -63,6 +71,15 @@ export const ErrorCodes = {
   BACKUP_IN_PROGRESS: { code: 40901, message: 'Backup already in progress', status: 409 },
   BACKUP_NOT_ACTIVE: { code: 40904, message: 'No active backup operation', status: 409 },
   BACKUP_FAILED: { code: 50002, message: 'Backup failed', status: 500 },
+  // 「没有世界」是领域前置条件不满足，不是服务端故障：从未启动过的实例没有
+  // `<level-name>/level.dat`，没有存档可丢。按 409 而非 500 呈现——后者会把
+  // 一个用户可自解的情形说成面板坏了，且 500 的通用文案会吞掉原因
+  BACKUP_WORLD_NOT_FOUND: {
+    code: 40917,
+    message:
+      '该实例还没有可备份的世界数据（世界目录里没有 level.dat）。请先启动一次服务器生成世界，或直接升级——升级不需要这份备份',
+    status: 409,
+  },
   // 部署或备份的落点所在文件系统余量不足；服务端在动手前拒绝，不留半成品
   DISK_INSUFFICIENT: { code: 50007, message: 'Insufficient disk space', status: 500 },
   // 运行中实例无法在线备份（RCON 不可用）：在线备份依赖 save-off/save-all/save-on
@@ -126,6 +143,11 @@ export const ErrorCodes = {
   },
   WEBHOOK_INVALID_EVENTS: { code: 40011, message: 'Invalid webhook event types', status: 400 },
   WEBHOOK_TEST_FAILED: { code: 50010, message: 'Webhook test delivery failed', status: 500 },
+
+  // 该服务端版本没有这条命令（/perf、/jfr 一类）：不是入参错，是能力缺失。
+  // 用户唯一的出路是升级服务端，故与通用入参错误分开——前端据此隐藏重试入口，
+  // 靠文案匹配做不到（展示层会按码覆盖 message，语义就丢了）
+  PERF_UNSUPPORTED: { code: 40018, status: 400 },
 
   // 升级错误
   UPGRADE_IN_PROGRESS: { code: 40907, message: 'Upgrade already in progress', status: 409 },

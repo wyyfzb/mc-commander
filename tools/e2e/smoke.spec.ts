@@ -32,7 +32,23 @@ test.describe('冒烟', () => {
     // index 路由重定向到 /dashboard
     await expect(page).toHaveURL(/\/dashboard/)
     await expect(page.getByText('MC Commander').first()).toBeVisible()
-    for (const label of ['仪表盘', '玩家', '世界', '文件', '任务', '实例', '设置']) {
+    /* 侧栏主序列全部要可达：只断言其中几项时，其余项被删掉照样绿，
+       而用户看不到入口就不会知道那个页面还在 */
+    for (const label of [
+      '仪表盘',
+      '玩家',
+      '世界',
+      '文件',
+      '任务',
+      '备份',
+      '插件',
+      '实例',
+      '全局总览',
+    ]) {
+      await expect(page.getByRole('link', { name: new RegExp(label) })).toBeVisible()
+    }
+    // 底部辅助区两项（帮助 / 设置）与主序列分开
+    for (const label of ['帮助', '设置']) {
       await expect(page.getByRole('link', { name: new RegExp(label) })).toBeVisible()
     }
     await expect(page.getByRole('button', { name: /搜索或执行命令/ })).toBeVisible()

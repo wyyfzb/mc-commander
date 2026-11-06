@@ -1,0 +1,87 @@
+{
+  "startedEpoch": 1793515430807,
+  "endedEpoch": 1793515431259,
+  "durationMs": 452,
+  "heap": {
+    "allocationRateBytesPerSecond": NaN,
+    "gcCount": 2,
+    "gcOverHeadPercent": 0.69911504,
+    "gcTotalDurationMs": 316
+  },
+  "cpuPercent": {
+    "jvm": {
+      "min": Infinity,
+      "average": 0.0,
+      "max": -Infinity
+    },
+    "userJvm": {
+      "min": Infinity,
+      "average": 0.0,
+      "max": -Infinity
+    },
+    "system": {
+      "min": Infinity,
+      "average": 0.0,
+      "max": -Infinity
+    }
+  },
+  "network": {
+    "sent": {
+      "totalBytes": 0,
+      "count": 0,
+      "bytesPerSecond": NaN,
+      "countPerSecond": NaN,
+      "topContributors": []
+    },
+    "received": {
+      "totalBytes": 0,
+      "count": 0,
+      "bytesPerSecond": NaN,
+      "countPerSecond": NaN,
+      "topContributors": []
+    }
+  },
+  "fileIO": {
+    "write": {
+      "totalBytes": 366,
+      "count": 2,
+      "bytesPerSecond": Infinity,
+      "countPerSecond": Infinity,
+      "topContributors": [
+        {
+          "path": "logs/latest.log",
+          "totalBytes": 183
+        }
+      ]
+    },
+    "read": {
+      "totalBytes": 3983,
+      "count": 6,
+      "bytesPerSecond": Infinity,
+      "countPerSecond": Infinity,
+      "topContributors": [
+        {
+          "path": "/srv/mc-test/versions/26.3/server-26.3.jar",
+          "totalBytes": 3983
+        }
+      ]
+    },
+    "chunksRead": {
+      "totalBytes": 0,
+      "count": 0,
+      "bytesPerSecond": NaN,
+      "countPerSecond": NaN,
+      "topContributors": []
+    },
+    "chunksWritten": {
+      "totalBytes": 0,
+      "count": 0,
+      "bytesPerSecond": NaN,
+      "countPerSecond": NaN,
+      "topContributors": []
+    }
+  },
+  "threadAllocation": [],
+  "chunkGen": {},
+  "structureGen": {}
+}

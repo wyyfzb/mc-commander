@@ -55,7 +55,7 @@ const WINDOWS_STEPS = [
 
 const LINUX_POINTS = [
   '脚本会自动安装 Java 17/21/25 和 Node.js 22+，无需手动准备环境',
-  '脚本结束时打印服务器地址、端口与「API Key」，请妥善保存',
+  '脚本结束时打印面板地址与一次性 SETUP_TOKEN，请妥善保存',
   '服务端默认运行在 25566 端口，安装目录为 /opt/mc-commander',
 ]
 
@@ -284,7 +284,7 @@ export function OnboardingPage() {
                         ))}
                       </ul>
                       <NoticeBanner variant="success" icon={Lightbulb}>
-                        部署完成后，记下终端输出的「API Key」，下一步连接时需要填写。
+                        部署完成后终端会打印面板地址与 SETUP_TOKEN，打开它设密即可进面板。
                       </NoticeBanner>
                     </>
                   )}

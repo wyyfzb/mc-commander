@@ -166,6 +166,13 @@ export function TaskDialog({ task, onClose, onSave, saving }: TaskDialogProps) {
                   ))}
                 </SelectContent>
               </Select>
+              {/* 备份任务只产生「备份」页里的条目，配置留在这里：两件事分属不同容器，
+                  不在选类型的当口说清，用户会以为建完就在备份页里能看到配置 */}
+              {type === 'backup' && (
+                <p className="text-mcs-xs text-mcs-text-muted">
+                  自动备份产生的条目在侧栏「备份」里查看与恢复。
+                </p>
+              )}
             </div>
 
             {/* Cron 表达式 + 实时描述 + 可视化编辑器 + 预置 */}

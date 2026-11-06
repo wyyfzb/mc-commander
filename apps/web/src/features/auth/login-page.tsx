@@ -560,7 +560,7 @@ export function LoginPage() {
           </Link>
         </p>
         <p className="text-mcs-xs text-mcs-text-muted">
-          会话可在「设置 → 账号与安全」中随时下线或踢出其他设备
+          会话可在「设置 → 登录与密码」中随时下线或踢出其他设备
         </p>
       </footer>
     </div>

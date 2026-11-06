@@ -78,6 +78,8 @@ vi.mock('../src/utils/http-client.js', () => ({
 
 /** 备份服务桩：createBackup 触发完成事件（除非处于 backup-hang 模式）；restore 记录调用 */
 vi.mock('../src/services/backup.service.js', () => ({
+  // 判据导出：upgrade.service 用它决定要不要跑前置备份。既有用例都走「有世界」路径
+  hasWorldData: vi.fn(() => true),
   BackupService: class {
     constructor(serverManager) {
       this.serverManager = serverManager;

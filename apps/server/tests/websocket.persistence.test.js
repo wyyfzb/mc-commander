@@ -76,7 +76,9 @@ describe('WebSocket 通知持久化与断线补齐', () => {
                   id: lastEventId + 2,
                   instance_id: instanceId,
                   type: WSEvents.BACKUP_FAILED,
-                  data: JSON.stringify({ error: 'World directory not found' }),
+                  data: JSON.stringify({
+                    error: '该实例还没有可备份的世界数据（世界目录里没有 level.dat）',
+                  }),
                   created_at: '2026-08-11T00:00:01.000Z',
                 },
               ];

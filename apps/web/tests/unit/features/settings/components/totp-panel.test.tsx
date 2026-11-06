@@ -230,7 +230,7 @@ describe('TotpPanel 未启用 → 挂靠', () => {
     )
     expect(screen.queryByText(RECOVERY_CODES[0]!)).not.toBeInTheDocument()
 
-    // 卸载重挂（= 设置页子导航「通用设置 → 账号与安全」往返）：同一 QueryClient 仍在，
+    // 卸载重挂（= 设置页子导航「连接与外观 → 登录与密码」往返）：同一 QueryClient 仍在，
     // 明文若能经它存活，这里必然复现
     view.unmount()
     mockStatus(true, 10)

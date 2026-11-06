@@ -1023,10 +1023,24 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
       expect(banner).toContain('在浏览器里打开');
     });
 
-    it('明确交代游戏服务器地址不在这里', () => {
-      // 横幅里两个端口并排出现时，用户会拿 25566 去连 MC
-      expect(banner).toContain('游戏服务器地址不在这里');
-      expect(banner).toContain('默认端口 25565');
+    // 面板里还没有实例，游戏端口要到建实例时才分配，横幅给出的任何具体端口值都是错的
+    it('横幅不交代游戏端口，也不出现任何具体端口号', () => {
+      expect(banner).not.toContain('25565');
+      expect(banner).not.toContain('25567');
+      expect(banner).not.toContain('游戏服务器地址');
+    });
+
+    // SUB_NAV_LABELS 是设置页子导航的副本：改导航标签要同步这里
+    it('横幅里的设置入口名与侧栏子导航一致', () => {
+      const SUB_NAV_LABELS = ['连接与外观', '登录与密码', '通知', '推送与记录', '数据与卸载'];
+      for (const m of banner.matchAll(/「([^」]+)」/g)) {
+        const [navLabel] = m[1].split(' → ');
+        if (!m[1].includes(' → ')) continue;
+        expect(SUB_NAV_LABELS, `横幅里的「${m[1]}」入口不在设置页子导航里`).toContain(navLabel);
+      }
+      expect(banner).toContain('「登录与密码 → 传输加密」');
+      expect(banner).toContain('「连接与外观」');
+      expect(banner).toContain('「面板连接」');
     });
 
     it('横幅每一行的显示宽度一致（中文字符按 2 列算）', () => {
@@ -1103,7 +1117,7 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
     });
 
     it('API Key 不在终端出现，改为指路面板内生成', () => {
-      // 浏览器走会话鉴权用不到它；面板内「设置 → 连接设置」可随时重新生成
+      // 浏览器走会话鉴权用不到它；面板内「连接与外观 → 面板连接」可随时重新生成
       expect(banner).toContain('想接自动化工具');
       expect(banner).toContain('浏览器用不到它');
       expect(script).not.toContain('echo "    $API_KEY"');

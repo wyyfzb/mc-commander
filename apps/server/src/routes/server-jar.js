@@ -19,6 +19,7 @@ import { ensureJavaRuntime } from '../services/java-runtime.service.js';
 import { readJarVersionInfo } from '../services/mc-server/jar-version.js';
 import { InstanceModel } from '../db/index.js';
 import { atomicWriteFile } from '../services/mc_server.js';
+import { MC_VERSION_REGEX, LOADER_VERSION_REGEX } from '../services/upgrade.service.js';
 import { recordAudit, AuditActions } from '../utils/audit.js';
 import {
   allocateGamePort,
@@ -83,11 +84,14 @@ async function getPaperVersions() {
 }
 
 async function getPaperBuild(mcVersion) {
-  const data = await httpJson(`${PAPER_API_BASE}/projects/paper/versions/${mcVersion}/builds`, {
-    headers: { 'User-Agent': PAPER_USER_AGENT },
-    timeoutMs: 15000,
-    retryLimit: 2,
-  });
+  const data = await httpJson(
+    `${PAPER_API_BASE}/projects/paper/versions/${encodeURIComponent(mcVersion)}/builds`,
+    {
+      headers: { 'User-Agent': PAPER_USER_AGENT },
+      timeoutMs: 15000,
+      retryLimit: 2,
+    },
+  );
   // v3 响应直接是构建数组（非 {builds: [...]} 结构）
   const builds = Array.isArray(data) ? data : data.builds || [];
   const stable = builds.filter((b) => b.channel === 'STABLE' || b.channel === 'RECOMMENDED');
@@ -265,7 +269,7 @@ async function downloadWithProgress(
   });
 }
 
-function generateServerProperties(instanceId, _mcVersion, gamePort) {
+export function generateServerProperties(instanceId, _mcVersion, gamePort) {
   // 生成随机 RCON 密码（16 位十六进制），确保 RCON 默认可用
   // RCON 是 MC Commander 获取玩家坐标/血量、世界时间等数据的核心通道
   const rconPassword = crypto.randomBytes(8).toString('hex');
@@ -287,7 +291,7 @@ generator-settings=
 enforce-secure-profile=true
 level-name=world
 motd=A Minecraft Server managed by MC_Commander
-query.port=25565
+query.port=${gamePort}
 pvp=true
 generate-structures=true
 max-chained-neighbor-updates=1000000
@@ -461,7 +465,9 @@ export function createServerJarRoutes(serverManager) {
               ),
             ),
           ]
-            .filter((v) => v.startsWith('1.'))
+            // 只保留版本号形态：promotions 的键里除版本号还有 `1.20.1-recommended`
+            // 这类带后缀的键与少量非版本键。按主版本前缀筛会漏掉 MC 26.x（主版本不再是 1）
+            .filter((v) => /^\d+(\.\d+)*$/.test(v))
             .reverse()
             .slice(0, 30);
           return res.json(success({ type: 'forge', versions }));
@@ -519,6 +525,32 @@ export function createServerJarRoutes(serverManager) {
     validateBody(deployRequestSchema),
     asyncHandler(async (req, res) => {
       const { type, mcVersion, instanceName, maxMemory, loaderVersion, eula } = req.body;
+
+      // mcVersion 会被插值进上游 URL 路径（paper 的 versions/<v>/builds、purpur 的
+      // purpur/<v>/latest、forge 的 <v>-<build> 路径）：schema 只做类型与必填，
+      // 形态白名单在这里，与升级路由同一正则。
+      if (!MC_VERSION_REGEX.test(mcVersion)) {
+        return res
+          .status(400)
+          .json(
+            error(
+              ErrorCodes.VALIDATION_ERROR,
+              `Invalid mcVersion: ${mcVersion}. Expected dotted numeric version like 1.21.4`,
+            ),
+          );
+      }
+
+      // loaderVersion 会被插值进 fabric 上游 URL 路径并落进 instance.json
+      if (loaderVersion !== undefined && !LOADER_VERSION_REGEX.test(loaderVersion)) {
+        return res
+          .status(400)
+          .json(
+            error(
+              ErrorCodes.VALIDATION_ERROR,
+              `Invalid loaderVersion: ${loaderVersion}. Expected loader version like 0.16.14`,
+            ),
+          );
+      }
 
       // 重复部署门控（路由层纵深防御）：页面残留的「部署中」进度、重连补发或断线期间的
       // 兜底查询都可能让客户端误判服务端空闲；此处以服务端注册表为准拒绝并发部署
@@ -686,10 +718,13 @@ export function createServerJarRoutes(serverManager) {
               if (err) reject(err);
               else resolve();
             }
+            // 15 分钟：安装器要下载 100MB+ 的 libraries，实测 1.21.4-54.1.22 约 5 分钟、
+            // 1.20.1-47.4.28 约 2 分钟（同版本重装因 libraries 已在本地只要 6 秒）。
+            // 耗时几乎全在下行带宽上，慢线路会成倍放大，按实测最慢值留 3 倍余量
             const timer = setTimeout(() => {
               killProcessTree(extractProc);
-              settle(new Error('Forge installer timed out (120s)'));
-            }, 120000);
+              settle(new Error('Forge installer timed out (900s)'));
+            }, 900000);
             // Forge 安装器是单进程 java 程序（未 detached），故不做进程组终止
             const onCancel = () => {
               killProcessTree(extractProc);
@@ -712,7 +747,14 @@ export function createServerJarRoutes(serverManager) {
           if (forgeJar) {
             jarFile = forgeJar;
           } else {
-            throw new Error('Forge server jar not found after install');
+            // 部分游戏版本的安装器只产出 libraries/ 与 argfile、根目录没有 jar，
+            // 面板按 `-jar <入口 jar>` 启动，承载不了这种形态。不点名具体版本：
+            // 已知 1.20.1 如此，更高版本是否一律恢复没有实测支撑
+            throw new AppError(
+              ErrorCodes.VALIDATION_ERROR,
+              `${mcVersion} 的 Forge 安装器没有产出可启动的入口 jar；` +
+                '该版本的安装器产物形态面板暂不支持，请改用较新的游戏版本重试',
+            );
           }
           fs.unlinkSync(jarPath);
         }

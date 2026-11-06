@@ -14,17 +14,22 @@
  *
  * 非 2xx 的失败统一抛 HttpError，并保留 `response.statusCode` 形状，
  * 使既有的「按响应码分支」调用方（如市场 404 → 条目不存在）无需改写。
+ *
+ * 跳转一律不跟随：调用点校验的是原始 URL 的 host（下载域白名单、webhook 的公网校验），
+ * 跟随后第二跳能落到任何地址，那道校验就只剩第一跳有效。所有上游当前都直接返回 200。
  */
 import { PassThrough, Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 
 /** 非 2xx 时抛出；`response.statusCode` 是调用方唯一需要读取的字段 */
 export class HttpError extends Error {
-  constructor(message, { statusCode, url, method = 'GET', body = null } = {}) {
+  constructor(message, { statusCode, url, method = 'GET', body = null, location = null } = {}) {
     super(message);
     this.name = 'HttpError';
     this.method = method;
     this.url = url;
+    // 拒绝跟随的跳转：Location 是排障所需的唯一线索（上游改成重定向时能直接看到跳去哪）
+    this.location = location;
     // 上游错误分支按 err.response.statusCode 判 404（市场据此区分「条目不存在」与网络故障），
     // 故该嵌套形状是契约的一部分，不是冗余包装
     this.response = { statusCode, body };
@@ -95,8 +100,9 @@ async function fetchOnce(url, { method, headers, body, timeoutMs, signal }) {
   const timeoutSignal = AbortSignal.timeout(timeoutMs);
   // 调用方信号（用户取消）与超时信号任一触发都应中止：AbortSignal.any 在 Node 20+ 可用
   const combined = signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal;
+  let response;
   try {
-    return await fetch(url, { method, headers, body, signal: combined, redirect: 'follow' });
+    response = await fetch(url, { method, headers, body, signal: combined, redirect: 'manual' });
   } catch (err) {
     // AbortSignal.timeout 触发时 fetch 抛的是 TimeoutError/AbortError，转成可识别的 code
     if (err?.name === 'TimeoutError' || timeoutSignal.aborted) {
@@ -106,6 +112,18 @@ async function fetchOnce(url, { method, headers, body, timeoutMs, signal }) {
     }
     throw err;
   }
+  // 3xx 不跟随：调用点校验的是原始 URL 的 host（下载域白名单、webhook 公网校验），
+  // 跟随跳转等于让上游把请求引到它指定的任意地址，那道校验对第二跳不再成立。
+  if (response.status >= 300 && response.status < 400) {
+    await response.body?.cancel().catch(() => {});
+    throw new HttpError(`Refusing to follow redirect (${response.status})`, {
+      statusCode: response.status,
+      url,
+      method,
+      location: response.headers.get('location'),
+    });
+  }
+  return response;
 }
 
 /**
@@ -176,6 +194,7 @@ export async function httpJson(url, options = {}) {
 /**
  * POST JSON，返回 `{ statusCode, body }`（body 为字符串）。
  * **不因非 2xx 抛错**——webhook 投递需要按响应码决定是否重试，由调用方判定。
+ * 3xx 是例外：不跟随跳转（见 fetchOnce），以 HttpError 抛出，`statusCode` 仍是跳转码。
  * @returns {Promise<{statusCode: number, body: string}>}
  */
 export async function httpPost(url, options = {}) {

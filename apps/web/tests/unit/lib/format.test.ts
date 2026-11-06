@@ -12,6 +12,7 @@ import {
   formatRelativeTime,
   formatStartTime,
   formatUptime,
+  confirmTargetLabel,
   formatWorldSize,
   worldSizeParts,
   worldTimePhase,
@@ -212,5 +213,33 @@ describe('formatDurationSecFull', () => {
   })
   it('负值按 0 处理', () => {
     expect(formatDurationSecFull(-3)).toBe('0 秒')
+  })
+})
+
+describe('confirmTargetLabel（确认按钮里的对象名）', () => {
+  it('短名原样返回，两侧空白裁掉', () => {
+    expect(confirmTargetLabel('生存服')).toBe('生存服')
+    expect(confirmTargetLabel('  生存服  ')).toBe('生存服')
+  })
+
+  it('空 / null / 纯空白 → 空串（调用点据此退到 id，避免渲染出「」）', () => {
+    expect(confirmTargetLabel('')).toBe('')
+    expect(confirmTargetLabel(null)).toBe('')
+    expect(confirmTargetLabel(undefined)).toBe('')
+    expect(confirmTargetLabel('   ')).toBe('')
+  })
+
+  it('按半角单位计宽：汉字记 2 个单位，26 个单位的额度满额不截', () => {
+    // 按钮基座 whitespace-nowrap + shrink-0：超宽只会溢出，故阈值必须按显示宽度而非字符数
+    const thirteen = '服'.repeat(13) // 26 个单位，刚好用满
+    expect(confirmTargetLabel(thirteen)).toBe(thirteen)
+    expect(confirmTargetLabel('服'.repeat(14))).toBe(`${'服'.repeat(13)}…`)
+    // 半角字符一个算一个：26 个不截，第 27 个才截
+    expect(confirmTargetLabel('a'.repeat(26))).toBe('a'.repeat(26))
+    expect(confirmTargetLabel('a'.repeat(27))).toBe(`${'a'.repeat(26)}…`)
+  })
+
+  it('emoji（代理对）不被切成半个字符', () => {
+    expect(confirmTargetLabel('🌟'.repeat(14))).toBe(`${'🌟'.repeat(13)}…`)
   })
 })

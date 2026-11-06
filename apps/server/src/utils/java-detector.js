@@ -416,6 +416,40 @@ export function findJavaPathStrict(requiredVersion) {
 }
 
 /**
+ * 从候选里选一个可用的 javaPath（纯函数：不碰文件系统，候选由调用方给）。
+ *
+ * 选择顺序按**「能不能跑起来」的确定性**排，不是按版本新：
+ * 1. 主版本恰好等于要求的——类版本严格匹配，绝不会因版本过低报 UnsupportedClassVersionError；
+ * 2. 高于要求的最小版本——能跑，但运行时行为会跟目标版本有差（官方允许的宽容档）；
+ * 3. 候选全都**低于**要求 ⇒ 返回 null，调用方据此报「缺哪个版本」。
+ *    低版本 JVM 加载高版本 class 必然抛 `UnsupportedClassVersionError`
+ *    （class file version 69.0 … up to 61.0），故第 3 档不选任何候选。
+ *
+ * 要求未知（null/非数字）时取最高版本：没有目标就无从判「够不够」，
+ * 挑最新的至少覆盖最多情形。
+ *
+ * @param {Array<{version: string, path: string}>} candidates
+ * @param {string|number|null} requiredVersion 需要的 Java 主版本
+ * @param {(path: string) => boolean} [accept] 额外过滤（如「文件名得是 java」）
+ * @returns {string|null} 无任何候选满足（或候选为空）时返回 null
+ */
+export function selectJavaPath(candidates, requiredVersion, accept = () => true) {
+  const usable = (candidates || []).filter((c) => c && c.path && accept(c.path));
+  if (usable.length === 0) return null;
+  const required = parseInt(requiredVersion, 10);
+  if (!Number.isInteger(required)) {
+    // 要求未知：不猜，取最高版本（最能跑起来的那一档）
+    return usable.slice().sort((a, b) => parseInt(b.version, 10) - parseInt(a.version, 10))[0].path;
+  }
+  const exact = usable.find((c) => parseInt(c.version, 10) === required);
+  if (exact) return exact.path;
+  const newer = usable
+    .filter((c) => parseInt(c.version, 10) > required)
+    .sort((a, b) => parseInt(a.version, 10) - parseInt(b.version, 10));
+  return newer.length > 0 ? newer[0].path : null;
+}
+
+/**
  * 判断给定 javaPath 是否满足目标 Java 主版本要求。
  *
  * `javaPath` 可能是裸命令 `java`（部署的回落值），此时先解析成真实绝对路径再比对，

@@ -3,8 +3,9 @@ import path from 'node:path'
 import { test, expect, type Page } from '@playwright/test'
 
 /**
- * 设置页 E2E（数据源：同目录 mock-server.mjs，备份/实例数据为结构占位虚构内容）
- * 验收：子导航五页 / 连接表单保存 / 通用 autoRestart+主题 / 通知两组开关 / 备份列表+恢复确认 / 关于
+ * 设置页 E2E（数据源：同目录 mock-server.mjs，实例数据为结构占位虚构内容）
+ * 验收：子导航五页 / 连接表单保存 / 界面偏好 / 通知两组开关 / 推送与记录入口 / 关于弹窗
+ * 备份是侧栏一级页面，其 e2e 在 backups.spec.ts
  */
 
 // 可选截图（调试用）：设 E2E_SHOT=1 时输出到 tools/e2e/test-results/shots/，默认关闭
@@ -44,27 +45,21 @@ async function mockApiKeyChannel(page: Page, enabled: boolean) {
 }
 
 test.describe('设置页', () => {
-  test('子导航：七子页 + 默认重定向连接设置', async ({ page }) => {
+  test('子导航：五子页 + 默认重定向连接与外观', async ({ page }) => {
     await setupConnection(page)
     await page.goto('/settings')
-    // /settings → 重定向 /settings/connection
-    await expect(page).toHaveURL(/\/settings\/connection/)
-    // 子导航七项（含安全主线的账号与安全、面板自身去留的数据与卸载）
-    for (const label of [
-      '连接设置',
-      '账号与安全',
-      '通用设置',
-      '通知设置',
-      '备份管理',
-      '数据与卸载',
-      '关于',
-    ]) {
+    // /settings → 重定向 /settings/device
+    await expect(page).toHaveURL(/\/settings\/device/)
+    // 五项：分组判据是「换设备跟不跟过来」，不是到达频率
+    for (const label of ['连接与外观', '登录与密码', '通知', '推送与记录', '数据与卸载']) {
       await expect(page.getByRole('link', { name: label })).toBeVisible()
     }
-    await expect(page.getByRole('link', { name: '连接设置' })).toHaveAttribute(
+    await expect(page.getByRole('link', { name: '连接与外观' })).toHaveAttribute(
       'aria-current',
       'page',
     )
+    // 关于不在子导航里（纯静态信息，走弹窗），但入口仍在：导航末尾的按钮
+    await expect(page.getByRole('button', { name: '关于' })).toBeVisible()
   })
 
   /**
@@ -93,7 +88,7 @@ test.describe('设置页', () => {
     // 768 展开侧栏：内容 528 < 768 ⇒ 图标态，表单 464px（改前 312px）
     await page.setViewportSize({ width: 768, height: 900 })
     await page.goto('/settings/account')
-    await expect(page.getByRole('heading', { name: '账号与安全', level: 2 })).toBeVisible()
+    await expect(page.getByRole('heading', { name: '登录与密码', level: 2 })).toBeVisible()
     const narrow = await geom()
     expect(narrow.expanded).toBe(false)
     expect(narrow.navW).toBe(48)
@@ -101,7 +96,7 @@ test.describe('设置页', () => {
 
     // 1024 展开侧栏：内容 784 ≥ 768 ⇒ 文字态，表单仍有余量
     await page.setViewportSize({ width: 1024, height: 900 })
-    await expect(page.getByRole('link', { name: '账号与安全' })).toBeVisible()
+    await expect(page.getByRole('link', { name: '登录与密码' })).toBeVisible()
     const wide = await geom()
     expect(wide.expanded).toBe(true)
     expect(wide.navW).toBe(200)
@@ -114,9 +109,9 @@ test.describe('设置页', () => {
     expect(overflow).toBe(0)
   })
 
-  test('连接设置：表单 + 测试连接 + 保存', async ({ page }) => {
+  test('连接与外观：表单 + 测试连接 + 保存', async ({ page }) => {
     await setupConnection(page)
-    await page.goto('/settings/connection')
+    await page.goto('/settings/device')
     // 表单字段（面板地址 + API Key）
     await expect(page.getByRole('textbox', { name: '面板地址' })).toBeVisible()
     await expect(page.getByRole('textbox', { name: 'API Key' })).toBeVisible()
@@ -133,16 +128,16 @@ test.describe('设置页', () => {
     await maybeShot(page, 'settings-connection-dark.png')
   })
 
-  test('连接设置：从其他设备访问——本机地址打开时指路，不给可复制地址', async ({ page }) => {
+  test('连接与外观：从其他设备访问——本机地址打开时指路，不给可复制地址', async ({ page }) => {
     await setupConnection(page)
     // e2e 的 dev server 在 localhost：环回地址换到别的设备上打不开，卡片改为指路
-    await page.goto('/settings/connection')
+    await page.goto('/settings/device')
     await expect(page.getByText('从其他设备访问')).toBeVisible()
     await expect(page.getByText(/本机地址/)).toBeVisible()
     await expect(page.getByRole('button', { name: '复制地址' })).toHaveCount(0)
   })
 
-  test('连接设置：登录会话属于别的面板 → 提示改用 API Key，且不把人踢下线', async ({ page }) => {
+  test('连接与外观：登录会话属于别的面板 → 提示改用 API Key，且不把人踢下线', async ({ page }) => {
     await page.addInitScript(() => {
       localStorage.setItem(
         'mcs-connection',
@@ -159,7 +154,7 @@ test.describe('设置页', () => {
         }),
       )
     })
-    await page.goto('/settings/connection')
+    await page.goto('/settings/device')
     await expect(page.getByText(/当前登录会话属于/)).toBeVisible()
 
     // 换成本面板地址 + 本面板 Key → 走 API Key 通道测试成功。
@@ -183,10 +178,10 @@ test.describe('设置页', () => {
     )
   })
 
-  test('连接设置：API Key 通道开启 → 轮换入口可见可点', async ({ page }) => {
+  test('连接与外观：API Key 通道开启 → 轮换入口可见可点', async ({ page }) => {
     await setupConnection(page)
     await mockApiKeyChannel(page, true)
-    await page.goto('/settings/connection')
+    await page.goto('/settings/device')
 
     // 能力探测只认「已落定的面板地址」（空地址是同源默认值，刻意不探测，见 useApiKeyCapabilities），
     // 故先指明面板地址；地址取当前页 origin（端口随 MOCK_PORT/DEV_PORT 泳道变化）
@@ -207,12 +202,12 @@ test.describe('设置页', () => {
     await maybeShot(page, 'settings-connection-api-key-enabled-light.png')
   })
 
-  test('连接设置：API Key 通道关闭（API_KEY_ENABLED=false）→ 轮换入口不可见并说明原因', async ({
+  test('连接与外观：API Key 通道关闭（API_KEY_ENABLED=false）→ 轮换入口不可见并说明原因', async ({
     page,
   }) => {
     await setupConnection(page)
     await mockApiKeyChannel(page, false)
-    await page.goto('/settings/connection')
+    await page.goto('/settings/device')
     await page.getByRole('textbox', { name: '面板地址' }).fill(new URL(page.url()).origin)
 
     // 关闭态：入口消失 + 关闭原因可见；凭据输入框保留（已有 Key 仍可粘贴保存）。
@@ -312,17 +307,37 @@ test.describe('设置页', () => {
     await expect(panel.getByRole('button', { name: '重新生成只读凭据' })).toBeDisabled()
   })
 
-  test('通用设置：自动重启开关 + 主题切换', async ({ page }) => {
+  /* 自动重启是实例级配置，写入口是 PUT /instances/:id，住实例设置弹窗（instances.spec 覆盖）。
+     这里断言的正是「它不在这张卡上」——界面外观只剩本机偏好（主题/终端滚动/命令确认），
+     三项都不落服务端。若哪天它又出现在这里，说明 scope 又漂了，这条会先红 */
+  test('界面外观：只有本机偏好，自动重启不在此处', async ({ page }) => {
     await setupConnection(page)
-    await page.goto('/settings/general')
-    await expect(page.getByText('意外停止自动重启')).toBeVisible()
-    await expect(page.getByText('服务器意外崩溃/退出后自动重启（手动停止不触发）')).toBeVisible()
-    // 切换 → 成功 toast
-    await page.getByRole('switch', { name: '意外停止自动重启' }).click()
-    await expect(page.getByText('自动重启设置已保存')).toBeVisible()
-    // 主题切换
+    await page.goto('/settings/device')
     await expect(page.getByText('界面主题')).toBeVisible()
-    await maybeShot(page, 'settings-general-dark.png')
+    await expect(page.getByText('终端自动滚动')).toBeVisible()
+    await expect(page.getByText('命令执行二次确认')).toBeVisible()
+    // 实例级配置不在这张卡上：既没有标题也没有开关（开关在实例设置弹窗里）
+    await expect(page.getByText('意外停止后自动重启')).toHaveCount(0)
+    await expect(page.getByRole('switch', { name: '意外停止后自动重启' })).toHaveCount(0)
+    await maybeShot(page, 'settings-device-dark.png')
+  })
+
+  /* 推送与记录：只放入口卡，两个目标都是顶层路由的完整页面（各自带 PageHeader）。
+     嵌进设置子路由会两个页头 + 三层滚动，故这里断言「点过去确实换了页」 */
+  test('推送与记录：两张入口卡分别跳到 webhooks / audit', async ({ page }) => {
+    await setupConnection(page)
+    await page.goto('/settings/integration')
+    await expect(page.getByRole('heading', { name: '推送通知到外部' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: '谁做了什么' })).toBeVisible()
+    // 离开设置前先交代，避免用户以为跳走是出错
+    await expect(page.getByText('这是独立页面，点开会离开设置')).toHaveCount(2)
+
+    await page.getByRole('link', { name: '去配置推送' }).click()
+    await expect(page).toHaveURL(/\/webhooks/)
+
+    await page.goBack()
+    await page.getByRole('link', { name: '查看操作记录' }).click()
+    await expect(page).toHaveURL(/\/audit/)
   })
 
   test('通知设置：两组开关 + 修改即时保存', async ({ page }) => {
@@ -339,96 +354,25 @@ test.describe('设置页', () => {
     await maybeShot(page, 'settings-notifications-dark.png')
   })
 
-  test('备份管理：列表 + 立即备份 + 恢复确认取消', async ({ page }) => {
+  test('关于：从设置子导航打开弹窗（版本与链接）', async ({ page }) => {
     await setupConnection(page)
-    await page.goto('/settings/backup')
-    // 面板标题（h3 面板内标题；页面级 h2 与其同名，按层级区分）
-    await expect(page.getByRole('heading', { name: '备份管理', level: 3 })).toBeVisible()
-    // 快照机制说明收进信息入口：正文不常驻，点开才读到
-    await expect(
-      page.getByText('快照备份：未修改文件零拷贝增量传输，超出保留策略自动清理'),
-    ).toHaveCount(0)
-    await page.getByRole('button', { name: '快照备份说明' }).click()
-    await expect(page.getByRole('dialog', { name: '快照备份说明' })).toContainText(
-      '快照备份：未修改文件零拷贝增量传输，超出保留策略自动清理',
-    )
-    await page.keyboard.press('Escape')
-    // 列表行（mock 2 条：completed / failed）。名称都用精确匹配：
-    // 子串匹配下夹具名重新内嵌日期也照样命中，等于没有防线
-    await expect(page.getByText('手动备份', { exact: true })).toBeVisible()
-    await expect(page.getByText('失败的备份', { exact: true })).toBeVisible()
-    // 立即备份 → creating 行 + toast
-    await page.getByRole('button', { name: '立即备份' }).click()
-    await expect(page.getByText('备份任务已启动')).toBeVisible()
-    // 恢复确认（B3 危险弹窗：红色警示 + 输入实例名确认）
-    await page.getByRole('button', { name: '手动备份 恢复' }).click()
-    await expect(page.getByRole('heading', { name: '恢复备份（危险操作）' })).toBeVisible()
-    await expect(page.getByText(/覆盖当前世界数据，且不可撤销/)).toBeVisible()
-
-    // 取消路径：不输入名字时确认按钮禁用（实例名确认是服务端强制的同一道闸门）
-    await expect(page.getByRole('button', { name: '确认恢复' })).toBeDisabled()
-    await page.getByRole('button', { name: '取消' }).click()
-    await expect(page.getByRole('heading', { name: '恢复备份（危险操作）' })).toHaveCount(0)
-
-    // 确认路径：输入实例名 → 请求体必须带 confirmName（服务端按实例名强制校验；
-    // mock 与真实服务端同语义，缺名会回 400 40017）
-    await page.getByRole('button', { name: '手动备份 恢复' }).click()
-    const restoreReq = page.waitForRequest(
-      (r) => /\/api\/v1\/backups\/\d+\/restore$/.test(r.url()) && r.method() === 'POST',
-    )
-    await page.getByLabel(/输入实例名/).fill('E2E 演示实例')
-    await page.getByRole('button', { name: '确认恢复' }).click()
-    const req = await restoreReq
-    expect(req.postDataJSON()).toEqual({ confirmName: 'E2E 演示实例' })
-    await expect(page.getByText('恢复已开始，完成后请启动服务器生效')).toBeVisible()
-    await expect(page.getByRole('heading', { name: '恢复备份（危险操作）' })).toBeHidden()
-    await maybeShot(page, 'settings-backup-dark.png')
-  })
-
-  test('备份管理：归档快照（来自已卸载实例）可见且可挂载到本实例', async ({ page }) => {
-    await setupConnection(page)
-    // 按域复位 mock 的归档台账（同轮 webServer 共享一个 mock 进程；不传 only 的全量复位
-    // 会清掉并行升级用例的在途升级态）
-    await page.request.post('/api/v1/mock/reset', { data: { only: 'archive' } })
-    await page.goto('/settings/backup')
-
-    const archive = 'paper-1a2b3c4d'
-    await expect(page.getByText('归档快照（未建立索引）')).toBeVisible()
-    await expect(page.getByText(archive)).toBeVisible()
-    await expect(page.getByText(/来自已卸载实例/)).toBeVisible()
-    await expect(page.getByText(/可挂载 2\/3 份/)).toBeVisible()
-
-    // 挂载：二次确认讲清后果（不动磁盘 + 无第二份副本 + 计入配额受保留策略约束），
-    // 确认后 toast 报挂载与跳过份数
-    await page.getByRole('button', { name: /挂载到本实例/ }).click()
-    const dialog = page.getByRole('dialog')
-    await expect(dialog).toContainText(archive)
-    await expect(dialog).toContainText('原归档目录不会被复制或移动')
-    await expect(dialog).toContainText('删除这些条目会删除磁盘上的原归档快照')
-    await expect(dialog).toContainText('计入本实例的备份配额')
-    await dialog.getByRole('button', { name: '挂载' }).click()
-
-    await expect(page.getByText(/已挂载 2 份归档快照/)).toBeVisible()
-    // 挂载后清点收敛：区块消失（已无未索引项）
-    await expect(page.getByText('归档快照（未建立索引）')).toHaveCount(0)
-  })
-
-  test('关于：版本与链接', async ({ page }) => {
-    await setupConnection(page)
-    await page.goto('/settings/about')
-    await expect(page.getByRole('heading', { name: 'MC Commander' })).toBeVisible()
+    await page.goto('/settings/device')
+    await page.getByRole('button', { name: '关于' }).click()
+    // 弹窗以标题承担可访问名
+    const dialog = page.getByRole('dialog', { name: 'MC Commander' })
+    await expect(dialog).toBeVisible()
     // 精确匹配版本徽章：更新检查卡也有「当前 v…」，模糊匹配会命中两个
-    await expect(page.getByText(`v${APP_VERSION}`, { exact: true })).toBeVisible()
-    await expect(page.getByText('开源项目', { exact: true })).toBeVisible()
-    await expect(page.getByText('基于 AGPL-3.0 协议开源')).toBeVisible()
+    await expect(dialog.getByText(`v${APP_VERSION}`, { exact: true })).toBeVisible()
+    await expect(dialog.getByText('开源项目', { exact: true })).toBeVisible()
+    await expect(dialog.getByText('基于 AGPL-3.0 协议开源')).toBeVisible()
     // 外链（GitHub 主仓与 Gitee 镜像）
-    const repoLink = page.getByRole('link', { name: /GitHub 仓库/ })
+    const repoLink = dialog.getByRole('link', { name: /GitHub 仓库/ })
     await expect(repoLink).toHaveAttribute('href', /github\.com\/wyyfzb\/mc-commander/)
     await expect(repoLink).toHaveAttribute('target', '_blank')
-    const giteeLink = page.getByRole('link', { name: /Gitee 镜像仓库/ })
+    const giteeLink = dialog.getByRole('link', { name: /Gitee 镜像仓库/ })
     await expect(giteeLink).toHaveAttribute('href', /gitee\.com\/wyyfzb\/mc-commander/)
     await expect(giteeLink).toHaveAttribute('target', '_blank')
-    await expect(page.getByText('© 2026 MC_Commander · 社区开源项目')).toBeVisible()
-    await maybeShot(page, 'settings-about-dark.png')
+    await expect(dialog.getByText('© 2026 MC_Commander · 社区开源项目')).toBeVisible()
+    await maybeShot(page, 'settings-about-dialog-dark.png')
   })
 })

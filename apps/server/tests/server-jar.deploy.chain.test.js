@@ -332,14 +332,17 @@ describe('GET /versions 多核心版本分发', () => {
     expect(res.body.data.loaders).toEqual([]);
   });
 
-  it('forge：promotions 去重 + 1.x 过滤 + 倒序截断 30', async () => {
+  it('forge：promotions 去重 + 保留 26.x + 倒序截断 30', async () => {
     httpState.jsonTable = {
       promotions_slim: {
         promos: {
           '1.21.4-latest': '51.0.0',
           '1.21.4-recommended': '51.0.0', // 与 latest 同版本 → 去重
           '1.20.1-recommended': '47.2.0',
-          '2.0-latest': '99.0.0', // 非 1. 前缀 → 过滤
+          // MC 26.x 起主版本号不再是 1：按 1.x 前缀过滤会把这些整批丢掉，
+          // 用户在 Forge 下拉里选不到 26.3（部署与升级同走本端点）
+          '26.3-recommended': '66.1.0',
+          '26.2-latest': '65.0.1',
         },
       },
     };
@@ -349,8 +352,29 @@ describe('GET /versions 多核心版本分发', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.data.type).toBe('forge');
-    // 源码语义：promos 键名倒序（字典序）输出，新版本组在后
-    expect(res.body.data.versions).toEqual(['1.20.1', '1.21.4']);
+    // 源码语义：promos 键名倒序（字典序）输出。上游把版本按升序写在前面、
+    // 26.x 追加在末尾（实测真实响应最后 8 个键即 26.1…26.3），故反向后 26.x 在前
+    expect(res.body.data.versions).toEqual(['26.2', '26.3', '1.20.1', '1.21.4']);
+    // 断言意图而不只是全量相等：26.x 必须在列，否则「能在 26.3 上用 Forge」不可达
+    expect(res.body.data.versions).toContain('26.3');
+  });
+
+  it('forge：非版本号形态的 promos 键被丢弃（不把脏键塞进版本下拉）', async () => {
+    httpState.jsonTable = {
+      promotions_slim: {
+        promos: {
+          '1.21.4-latest': '51.0.0',
+          'not-a-version-latest': '1.0',
+          '26.3-recommended': '66.1.0',
+        },
+      },
+    };
+    const { app } = buildApp();
+
+    const res = await request(app).get('/api/versions?type=forge');
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.versions).toEqual(['26.3', '1.21.4']);
   });
 
   it('未知 type：如实 400（不再透传给库「什么都能答」）', async () => {
@@ -381,6 +405,81 @@ describe('POST /instances/deploy · 磁盘余量预检', () => {
       expect(entries).toEqual([]);
     } finally {
       statfsSpy.mockRestore();
+    }
+  });
+});
+
+/* mcVersion 会被插值进上游 URL 路径（paper/purpur/forge 各自一种拼法），
+   schema 只管类型与必填，形态白名单在路由层——与升级路由同一正则。 */
+describe('POST /instances/deploy · mcVersion 形态白名单', () => {
+  it.each([
+    ['路径穿越', '../../etc'],
+    ['斜杠', '1.21.4/../../x'],
+    ['反斜杠', '1.21.4\\..'],
+    ['空白', '1.21.4 '],
+    ['URL 特殊字符', '1.21.4?x=1'],
+    ['协议前缀', 'https://evil.test/1.21.4'],
+  ])('%s 形态：400，且不创建实例目录、不查上游', async (_label, mcVersion) => {
+    const { app, manager } = buildApp();
+    const res = await request(app)
+      .post('/api/instances/deploy')
+      .send({ type: 'paper', mcVersion, instanceName: 'Bad Version Server' });
+
+    expect(res.status).toBe(400);
+    expect(JSON.stringify(res.body)).toContain('Invalid mcVersion');
+    // 拒绝发生在分配端口、登记部署、查上游之前：目录没建、注册表空、无进度事件
+    const entries = fs.existsSync(testState.serversDir) ? fs.readdirSync(testState.serversDir) : [];
+    expect(entries).toEqual([]);
+    expect(manager.activeDeploys.size).toBe(0);
+    expect(manager.emit).not.toHaveBeenCalled();
+  });
+
+  it('点分数字形态照常放行（1.21 / 1.21.4 / 265）', async () => {
+    for (const mcVersion of ['1.21', '1.21.4', '265']) {
+      const { app } = buildApp();
+      const res = await request(app)
+        .post('/api/instances/deploy')
+        .send({ type: 'paper', mcVersion, instanceName: 'Good Version Server' });
+      // 上游夹具未就绪时是 502，此处只断言「没有被白名单拦下」
+      expect(res.status).not.toBe(400);
+    }
+  });
+});
+
+describe('POST /instances/deploy · loaderVersion 形态白名单', () => {
+  it.each([
+    ['路径穿越', '../../evil'],
+    ['斜杠', '0.16.14/../../x'],
+    ['主机形态', 'evil.test'],
+    ['用户信息前缀', 'x@evil.test'],
+    ['查询串', '0.16.14?y=1'],
+    ['协议前缀', 'https://evil.test/0.16.14'],
+    ['空白', '0.16.14 '],
+  ])('%s 形态：400，且不创建实例目录、不查上游', async (_label, loaderVersion) => {
+    const { app, manager } = buildApp();
+    const res = await request(app).post('/api/instances/deploy').send({
+      type: 'fabric',
+      mcVersion: '1.21.4',
+      loaderVersion,
+      instanceName: 'Bad Loader Server',
+    });
+
+    expect(res.status).toBe(400);
+    expect(JSON.stringify(res.body)).toContain('Invalid loaderVersion');
+    const entries = fs.existsSync(testState.serversDir) ? fs.readdirSync(testState.serversDir) : [];
+    expect(entries).toEqual([]);
+    expect(manager.activeDeploys.size).toBe(0);
+    expect(manager.emit).not.toHaveBeenCalled();
+  });
+
+  it('上游三种真实形态照常放行（0.20.1 / 0.3.7.111 / 0.10.6+build.214）', async () => {
+    for (const loaderVersion of ['0.20.1', '0.3.7.111', '0.10.6+build.214']) {
+      const { app } = buildApp();
+      const res = await request(app)
+        .post('/api/instances/deploy')
+        .send({ type: 'fabric', mcVersion: '1.21.4', loaderVersion, instanceName: 'Good Loader' });
+      // 上游夹具未就绪时是 502，此处只断言「没有被白名单拦下」
+      expect(res.status).not.toBe(400);
     }
   });
 });
@@ -893,7 +992,7 @@ describe('POST /instances/deploy · 下载异常与核心回退', () => {
     );
   });
 
-  it('forge：安装器退出后未产出 server jar → 502 Forge server jar not found', async () => {
+  it('forge：安装器退出后未产出入口 jar → 报可换版本的错误，不猜一个 jar', async () => {
     // forge-installer.jar 下载后 spawn --installServer 假进程 exit0，
     // 目录中除 installer 外无 forge-*.jar → 查找失败抛错
     testState.latestBuild = {
@@ -908,7 +1007,9 @@ describe('POST /instances/deploy · 下载异常与核心回退', () => {
       .send({ type: 'forge', mcVersion: '1.21.4', instanceName: 'Forge Missing Jar Server' });
 
     expect(res.status).toBe(502);
-    expect(res.body.message).toContain('Forge server jar not found after install');
+    // 断言的是「给出路」而不是某句字面：用户必须能读到该换哪个版本，
+    // 而不是「产物形态与预期不符」这种面板内部说法
+    expect(res.body.message).toMatch(/较新的游戏版本/);
     const instanceId = lastDeployInstanceId();
     expect(fs.existsSync(`${testState.serversDir}/${instanceId}`)).toBe(false);
   });

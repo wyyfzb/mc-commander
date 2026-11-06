@@ -90,6 +90,9 @@ test.describe('实例页', () => {
     await expect(page.getByText('/ 最多 14.0 GB')).toBeVisible()
     // 默认不开 JVM 调优：现代 JVM 先不加 flag，卡顿或有 GC 问题再开
     await expect(page.getByRole('switch', { name: "JVM 优化 (Aikar's Flags)" })).not.toBeChecked()
+    // 自动重启是本实例的配置，住这里（mock 默认 autoRestart=true）；说明里写明「默认开启」
+    await expect(page.getByRole('switch', { name: '意外停止后自动重启' })).toBeChecked()
+    await expect(page.getByText(/新建实例默认开启/)).toBeVisible()
     // 高级参数默认收起：先把「不动也能用」的结论摆出来，命令与参数藏进折叠区
     await expect(page.getByText('不动这里也能正常用', { exact: false })).toBeVisible()
     // exact：引导句里也含「实际启动命令」这四个字，子串匹配会命中引导句本身
@@ -134,6 +137,28 @@ test.describe('实例页', () => {
     await expect(card.getByRole('button', { name: '停止 E2E 演示实例' })).toBeVisible()
   })
 
+  test('实例设置：自动重启随保存提交，回执说「立即生效」（不需要重启实例）', async ({ page }) => {
+    await setupConnection(page)
+    await page.goto('/instances')
+    await page.getByRole('button', { name: 'E2E 演示实例 操作菜单' }).click()
+    await page.getByRole('menuitem', { name: '实例设置' }).click()
+
+    // 拨到关：只改草稿，弹窗保持打开
+    await page.getByRole('switch', { name: '意外停止后自动重启' }).click()
+    await expect(page.getByRole('heading', { name: '实例设置' })).toBeVisible()
+    // 未保存就关：必须问一句（否则用户以为已经关掉了）
+    await page.getByRole('button', { name: '取消' }).click()
+    await expect(page.getByText('上面有未保存的更改，关闭后这些改动将丢失。')).toBeVisible()
+    await page.getByRole('button', { name: '继续编辑' }).click()
+
+    await page.getByRole('button', { name: '保存配置' }).click()
+    // 自动重启改的是服务端内存态 ⇒ 回执不能跟着启动配置说「重启实例后生效」
+    await expect(page.getByText('自动重启已关闭，立即生效')).toBeVisible()
+    await expect(page.getByRole('heading', { name: '实例设置' })).toBeHidden()
+    // 只改自动重启 ⇒ 不该出现「待重启」（启动配置逐字未变）
+    await expect(page.getByText('待重启')).toHaveCount(0)
+  })
+
   test('卸载确认：对话框 + 取消', async ({ page }) => {
     await setupConnection(page)
     await page.goto('/instances')
@@ -158,7 +183,7 @@ test.describe('实例页', () => {
     await page.getByRole('menuitem', { name: '卸载实例' }).click()
 
     // 服务端强制实例名确认：名字未输入前确认按钮不可用（UI 前置态）
-    const confirmButton = page.getByRole('button', { name: '确认卸载' })
+    const confirmButton = page.getByRole('button', { name: '卸载「E2E 演示实例」' })
     await expect(confirmButton).toBeDisabled()
     await page.getByLabel(/输入实例名/).fill('E2E 演示实例')
     await expect(confirmButton).toBeEnabled()
@@ -168,6 +193,50 @@ test.describe('实例页', () => {
     await expect(page.getByText('实例 "E2E 演示实例" 已卸载，已保留 2 份备份')).toBeVisible()
     await expect(page.getByRole('heading', { name: '卸载实例' })).toBeHidden()
   })
+
+  // 按钮文案带上实例名后比通用动词长，窄屏必须仍是一整块可点区域：
+  // 基座是 whitespace-nowrap + shrink-0，超出只会溢出、不会换行，故量几何而不是看类名。
+  // 用超长实例名（部署表单允许 50 字）压这一刻度：名字走 confirmTargetLabel 截断到
+  // 26 个半角单位，不截断的话按钮会撑出对话框（列表接口在此用例内覆写）
+  const LONG_NAME = '超长的中文实例名称用于压测按钮宽度'.repeat(3)
+  for (const width of [375, 480]) {
+    test(`窄屏 ${width}：点名实例的卸载按钮不溢出对话框也不被裁切`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 812 })
+      await setupConnection(page)
+      // 覆写列表：只改名称，其余字段复用真实 mock 的实例视图
+      await page.route('**/api/v1/instances', async (route) => {
+        const response = await route.fetch()
+        const body = await response.json()
+        body.data = body.data.map((row: { id: string }) =>
+          row.id === 'e2e-demo' ? { ...row, name: LONG_NAME } : row,
+        )
+        await route.fulfill({ response, json: body })
+      })
+      await page.goto('/instances')
+      await page.getByRole('button', { name: `${LONG_NAME} 操作菜单` }).click()
+      await page.getByRole('menuitem', { name: '卸载实例' }).click()
+
+      const button = page.getByRole('button', { name: /^卸载「.*」$/ })
+      await expect(button).toBeVisible()
+      // 截断真的生效：按钮名里带省略号，且不含完整超长名
+      await expect(button).toHaveAccessibleName(/…」$/)
+      const dialog = page.getByRole('dialog')
+      const buttonBox = await button.boundingBox()
+      const dialogBox = await dialog.boundingBox()
+      expect(buttonBox).not.toBeNull()
+      expect(dialogBox).not.toBeNull()
+      // 按钮完整落在对话框内（左右各留 1px 容差给亚像素舍入）
+      expect(buttonBox!.x).toBeGreaterThanOrEqual(dialogBox!.x - 1)
+      expect(buttonBox!.x + buttonBox!.width).toBeLessThanOrEqual(
+        dialogBox!.x + dialogBox!.width + 1,
+      )
+      // 文案不被裁：内容宽不超过按钮自身宽（溢出时 scrollWidth > clientWidth）
+      const overflow = await button.evaluate((el) => el.scrollWidth - el.clientWidth)
+      expect(overflow).toBeLessThanOrEqual(1)
+      // 单行：高度仍在基座档位（h-10 = 40px），未被挤成两行
+      expect(buttonBox!.height).toBeLessThanOrEqual(44)
+    })
+  }
 
   test('深链接：?tab=deploy 自动打开部署向导', async ({ page }) => {
     await setupConnection(page)

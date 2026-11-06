@@ -24,6 +24,8 @@ vi.mock('../src/db/backup.model.js', () => ({
   },
 }));
 vi.mock('../src/services/backup.service.js', () => ({
+  // 判据导出：upgrade.service 用它决定要不要跑前置备份。既有用例都走「有世界」路径
+  hasWorldData: vi.fn(() => true),
   BackupService: class {
     constructor() {}
     createBackup = vi.fn(() => Promise.resolve({}));
@@ -124,25 +126,29 @@ describe('TaskScheduler - backup 任务分支（互斥跳过 + 失败可见性�
   });
 
   it('创建失败：补发 backupFailed（phase=scheduled + content 携带原因，用户可见）+ 结果落 failed', async () => {
-    scheduler.backupService.createBackup.mockRejectedValue(new Error('World directory not found'));
+    // 假数据是服务层真实会抛的中文领域错误（不是自造串）：这条用例要证明的正是
+    // 「服务层给的原因能一字不差地到达事件与任务状态」，拿别的串测不到这条通路
+    const reason =
+      '该实例还没有可备份的世界数据（世界目录里没有 level.dat）。请先启动一次服务器生成世界，或直接升级';
+    scheduler.backupService.createBackup.mockRejectedValue(new Error(reason));
     scheduler.executeTask(baseTask);
     // 失败事件与状态回填在 .catch 中异步补发
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    // 修复前：仅记日志，setup 阶段失败无任何通知（唯一灾备手段失效时用户无感知）
+    // 仅记日志时，setup 阶段失败无任何通知（唯一灾备手段失效时用户无感知）
     expect(mockManager.emit).toHaveBeenCalledWith(
       'instance:backupFailed',
       expect.objectContaining({
         instanceId: 's1',
         phase: 'scheduled',
-        error: 'World directory not found',
+        error: reason,
         content: expect.stringContaining('备份失败'),
       }),
     );
     expect(ScheduledTaskModel.updateLastRunStatus).toHaveBeenCalledWith(
       10,
       'failed',
-      'World directory not found',
+      reason,
       expect.any(Number),
     );
   });

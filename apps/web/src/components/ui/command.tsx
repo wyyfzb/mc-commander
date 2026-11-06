@@ -89,8 +89,9 @@ function CommandInput({
   ...props
 }: React.ComponentProps<typeof CommandPrimitive.Input>) {
   return (
-    /* mx-1 与 command 的 p-1 合起来给出 8px 左内距，与下方列表项左缘对齐 */
-    <InputGroup className="mx-1 mt-1 bg-input">
+    /* 左右缘与列表项对齐：Command 根 p-1（4px）+ 这里 mx-1 共 8px。
+       w-auto 让宽度按含外距的盒子算，右缘才与左缘同得内距 */
+    <InputGroup className="mx-1 mt-1 w-auto bg-input">
       {/* 必须挂 InputGroup 的控制槽位（input-group-control）：基座的焦点配方
           `has-[[data-slot=input-group-control]:focus-visible]:border-ring ring-3`
           与 border/bg 归一都按该 slot 生效。挂别的 slot 名匹配不到，就得在此手写

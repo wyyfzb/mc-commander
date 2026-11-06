@@ -4,12 +4,10 @@ import { AppShell } from '@/layouts/app-shell'
 import { hasUsableCredentials } from '@/stores/connection'
 import { installSessionExpiryHandler } from '@/lib/session-expiry'
 import {
-  AboutSettingsPage,
   DataSettingsPage,
   AccountSettingsPage,
-  BackupSettingsPage,
-  ConnectionSettingsPage,
-  GeneralSettingsPage,
+  DeviceSettingsPage,
+  IntegrationSettingsPage,
   NotificationsSettingsPage,
   SettingsPage,
 } from '@/features/settings/settings-page'
@@ -42,8 +40,14 @@ const TasksPage = lazy(() =>
 const InstancesPage = lazy(() =>
   import('@/features/instances/instances-page').then((m) => ({ default: m.InstancesPage })),
 )
+const FleetPage = lazy(() =>
+  import('@/features/instances/fleet-page').then((m) => ({ default: m.FleetPage })),
+)
 const WebhookPage = lazy(() =>
   import('@/features/webhooks/webhook-page').then((m) => ({ default: m.default })),
+)
+const BackupsPageLazy = lazy(() =>
+  import('@/features/backup/backups-page').then((m) => ({ default: m.BackupsPage })),
 )
 const OnboardingPageLazy = lazy(() =>
   import('@/features/onboarding/onboarding-page').then((m) => ({ default: m.OnboardingPage })),
@@ -88,6 +92,8 @@ export const router = createBrowserRouter([
       { path: 'tasks', Component: TasksPage },
       { path: 'plugins', Component: PluginsPage },
       { path: 'instances', Component: InstancesPage },
+      { path: 'fleet', Component: FleetPage },
+      { path: 'backups', Component: BackupsPageLazy },
       { path: 'webhooks', Component: WebhookPage },
       { path: 'audit', Component: AuditPageLazy },
       { path: 'help', Component: HelpPageLazy },
@@ -95,13 +101,11 @@ export const router = createBrowserRouter([
         path: 'settings',
         Component: SettingsPage,
         children: [
-          { index: true, loader: () => redirect('/settings/connection') },
-          { path: 'connection', Component: ConnectionSettingsPage },
+          { index: true, loader: () => redirect('/settings/device') },
+          { path: 'device', Component: DeviceSettingsPage },
           { path: 'account', Component: AccountSettingsPage },
-          { path: 'general', Component: GeneralSettingsPage },
           { path: 'notifications', Component: NotificationsSettingsPage },
-          { path: 'backup', Component: BackupSettingsPage },
-          { path: 'about', Component: AboutSettingsPage },
+          { path: 'integration', Component: IntegrationSettingsPage },
           { path: 'data', Component: DataSettingsPage },
         ],
       },

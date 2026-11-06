@@ -7,7 +7,9 @@ import {
   CloudUpload,
   FolderOpen,
   Globe,
+  History,
   LayoutDashboard,
+  LayoutGrid,
   Moon,
   Puzzle,
   RefreshCw,
@@ -41,7 +43,7 @@ import { useServerStore } from '@/stores/server'
 import { useConnectionStore } from '@/stores/connection'
 import { usePlayers } from '@/features/players/queries'
 import { usePlayersUiStore } from '@/features/players/store'
-import { useCreateBackup } from '@/features/settings/queries'
+import { useCreateBackup } from '@/features/backup/queries'
 import { useStopInstance } from '@/hooks/use-instance-stop'
 import { usePanelPreferencesStore } from '@/stores/panel-preferences'
 import { apiPost } from '@/api/client'
@@ -49,6 +51,7 @@ import { getFriendlyErrorText } from '@/api/errors'
 import { instanceLabel } from '@/lib/instance-label'
 import { queryKeys } from '@/api/queries'
 import { iconForCommand } from '@/lib/mc-commands'
+import { DEFAULT_COMMAND_PRESETS } from '@/lib/mc-command-presets'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 
 /**
@@ -57,14 +60,6 @@ import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
  * / 玩家搜索、给予/传送/封禁快捷入口
  * / 实例操作（重启/备份/停止：破坏性操作二次确认，备份直接执行）
  */
-
-const DEFAULT_PRESETS = [
-  'give @p diamond 64',
-  'gamemode creative',
-  'time set day',
-  'tp @p 0 100 0',
-  'kill @e[type=!player]',
-]
 
 interface PaletteAction {
   label: string
@@ -192,8 +187,17 @@ export function CommandPalette() {
       label: '任务',
       icon: CalendarClock,
       hint: '/tasks',
-      keywords: 'tasks 定时 cron 备份',
+      keywords: 'tasks 定时 cron 自动化',
       run: () => go('/tasks'),
+    },
+    {
+      /* 「备份」这个词只归备份页：任务页那条若也带它，用户搜「备份」会落到 cron 列表，
+         而他要的是能恢复的时间点列表 */
+      label: '备份',
+      icon: History,
+      hint: '/backups',
+      keywords: 'backups 备份 存档 快照 恢复 回滚',
+      run: () => go('/backups'),
     },
     {
       label: '插件',
@@ -208,6 +212,15 @@ export function CommandPalette() {
       hint: '/instances',
       keywords: 'instances 部署 服务器',
       run: () => go('/instances'),
+    },
+    {
+      /* 与侧栏同名的「全局总览」：命令面板少这一条，用户按名字搜不到一个明明在侧栏里
+         存在的页面，只能以为它没有 */
+      label: '全局总览',
+      icon: LayoutGrid,
+      hint: '/fleet',
+      keywords: 'fleet 全局 总览 所有实例 对比 一览',
+      run: () => go('/fleet'),
     },
     {
       label: 'Webhook',
@@ -251,7 +264,9 @@ export function CommandPalette() {
 
   // 命令域：预设快捷命令。派生自面板偏好而非读一次快照——偏好是异步拉回的，
   // 读一次会把「还没拉回来」的默认值当成用户配置
-  const presets = usePanelPreferencesStore((s) => s.remote?.commandPresets ?? DEFAULT_PRESETS)
+  const presets = usePanelPreferencesStore(
+    (s) => s.remote?.commandPresets ?? DEFAULT_COMMAND_PRESETS,
+  )
 
   // 玩家域：搜索玩家（远程数据），点选打开玩家页详情；cmdk 按 value 过滤
   const playersQuery = usePlayers(instanceId)

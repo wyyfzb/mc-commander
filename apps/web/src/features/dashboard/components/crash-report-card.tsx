@@ -11,6 +11,7 @@ import type { CrashArtifact, CrashDiagnosisEntry } from '@/api/types'
 import { copyText } from '@/lib/clipboard'
 import { formatRelativeTime } from '@/lib/format'
 import { useNow } from '@/hooks/use-now'
+import { useUiStore } from '@/stores/ui'
 
 /**
  * 崩溃诊断产物卡：把最近一次崩溃的要点摆到实例页。
@@ -301,6 +302,7 @@ export function CrashReportView({
  */
 export function CrashPointerNotice({ instanceId }: { instanceId: string | null }) {
   const { data } = useCrashArtifact(instanceId)
+  const setPerfSheetInstanceId = useUiStore((s) => s.setPerfSheetInstanceId)
   // 相对时间要随时间自己走：渲染期直接 Date.now() 是不纯的（React Compiler 会告警）
   const nowMs = useNow()
   if (!data) return null
@@ -324,12 +326,23 @@ export function CrashPointerNotice({ instanceId }: { instanceId: string | null }
         崩过一次（{title}
         {data.diagnosis?.matched && data.diagnosis.entry ? `：${data.diagnosis.entry.title}` : ''}）
       </span>
+      {/* 两个入口回答不同的问题，文案按「看什么」分而不是按「诊断」分：
+          崩溃产物原文只有帮助页有（唯一能看全文的地方），性能快照则是当场取一次。
+          写成「看诊断 / 查卡顿」而不是「看诊断 / 性能诊断」，是为了让并列的两条读起来
+          是两件事，而不是同一个动作的两种说法 */}
       <Link
         to="/help"
         className="shrink-0 text-mcs-xs font-medium text-mcs-accent-fg underline-offset-2 hover:underline"
       >
         看诊断
       </Link>
+      <button
+        type="button"
+        onClick={() => setPerfSheetInstanceId(instanceId)}
+        className="shrink-0 text-mcs-xs font-medium text-mcs-accent-fg underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-mcs-focus-ring"
+      >
+        查卡顿
+      </button>
     </span>
   )
 }

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowRight, Check, Play, Send, ShieldAlert, Star, X } from 'lucide-react'
+import { ArrowRight, Check, Pencil, Play, Send, ShieldAlert, Star, Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { useMutation } from '@tanstack/react-query'
 import { IconButton } from '@/components/mcs/icon-button'
@@ -14,12 +14,8 @@ import { useTerminalStore } from '@/stores/terminal'
 import { useCommandBus } from '@/stores/command-bus'
 import { usePanelPreferencesStore, writePreference } from '@/stores/panel-preferences'
 import { useCommandHistory } from '@/api/queries'
-import {
-  colorForCommand,
-  completeCommands,
-  iconForCommand,
-  type CompletionItem,
-} from '@/lib/mc-commands'
+import { completeCommands, iconForCommand, type CompletionItem } from '@/lib/mc-commands'
+import { DEFAULT_COMMAND_PRESETS } from '@/lib/mc-command-presets'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { Card } from '@/components/mcs/card'
@@ -38,14 +34,6 @@ const HISTORY_LIMIT = 50
 /** 命令历史条目状态 */
 type CommandStatus = 'sent' | 'failed'
 
-const DEFAULT_PRESETS = [
-  'give @p diamond 64',
-  'gamemode creative',
-  'time set day',
-  'tp @p 0 100 0',
-  'kill @e[type=!player]',
-]
-
 export function CommandInput() {
   const config = useConnectionStore()
   const instanceId = useServerStore((s) => s.instanceId)
@@ -55,7 +43,9 @@ export function CommandInput() {
   const [value, setValue] = useState('')
   /** 快捷指令列表直接派生自面板偏好：另存一份本地副本就会在拉取完成前读到默认值，
    *  此时保存会把默认值整份写回，覆盖用户已有指令 */
-  const presets = usePanelPreferencesStore((s) => s.remote?.commandPresets ?? DEFAULT_PRESETS)
+  const presets = usePanelPreferencesStore(
+    (s) => s.remote?.commandPresets ?? DEFAULT_COMMAND_PRESETS,
+  )
   const [sending, setSending] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   /**
@@ -92,6 +82,10 @@ export function CommandInput() {
   const [navStatus, setNavStatus] = useState<{ status: CommandStatus; error?: string } | null>(null)
   // 删除快捷指令经二次确认（待删命令全文；null=未发起）
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
+  // 快捷指令编辑态：editingIndex 指向正在改的那条（null=没有在改）；editMode 是整块编辑开关
+  const [editMode, setEditMode] = useState(false)
+  const [editingIndex, setEditingIndex] = useState<number | null>(null)
+  const [draft, setDraft] = useState('')
 
   const completions: CompletionItem[] = value.startsWith('/') ? completeCommands(value) : []
 
@@ -198,6 +192,34 @@ export function CommandInput() {
     )
       .catch(() => toast.error('删除快捷指令失败'))
       .finally(() => setDeleteTarget(null))
+  }
+
+  /** 改写第 index 条：整份覆盖（偏好只有整份写一种访问方式） */
+  const updatePreset = (index: number) => {
+    const trimmed = draft.trim().replace(/^\//, '')
+    if (!trimmed) {
+      toast.info('命令不能为空')
+      return
+    }
+    if (presets.some((p, i) => i !== index && p === trimmed)) {
+      toast.info('该指令已存在')
+      return
+    }
+    const next = presets.map((p, i) => (i === index ? trimmed : p))
+    void writePreference('commandPresets', next)
+      .then(() => {
+        toast.success('已更新快捷指令')
+        setEditingIndex(null)
+        setDraft('')
+      })
+      .catch(() => toast.error('更新快捷指令失败'))
+  }
+
+  /** 退出编辑态时丢弃未提交的改动 */
+  const leaveEditMode = () => {
+    setEditMode(false)
+    setEditingIndex(null)
+    setDraft('')
   }
 
   return (
@@ -325,20 +347,61 @@ export function CommandInput() {
       </div>
 
       {/* 快捷 chips：输入行下方（输入为主、快捷为辅的视觉层级）；播放/删除小图标以 -m-1/p-1
-          扩大命中区（12px 视觉 → 20px 热区），视觉密度不变 */}
+          扩大命中区（12px 视觉 → 20px 热区），视觉密度不变。
+          编辑态整块切换：chip 主体已承担「填充到输入框」，再让它兼「进入编辑」就是一个控件
+          两种语义，故编辑走右上角一枚铅笔，与 properties-panel 的编辑模式同构 */}
       {presets.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5">
-          {presets.map((preset) => {
-            const name = preset.split(' ')[0]?.replace('/', '') ?? ''
-            const Icon = iconForCommand(name)
-            const colorClass = colorForCommand(name)
+          {presets.map((preset, index) => {
+            if (editingIndex === index) {
+              return (
+                <span
+                  key={`edit-${index}`}
+                  className="inline-flex items-center gap-1 rounded-mcs-sm border border-mcs-accent-border bg-mcs-bg-default px-1.5 py-0.5"
+                >
+                  <Input
+                    autoFocus
+                    value={draft}
+                    onChange={(e) => setDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.nativeEvent.isComposing) return
+                      if (e.key === 'Enter') updatePreset(index)
+                      if (e.key === 'Escape') {
+                        setEditingIndex(null)
+                        setDraft('')
+                      }
+                    }}
+                    aria-label={`编辑快捷指令 ${preset}`}
+                    className="h-6 w-64 bg-mcs-bg-subtle font-mono text-mcs-xs text-mcs-text-default md:text-mcs-xs"
+                  />
+                  <button
+                    type="button"
+                    aria-label="保存修改"
+                    className="-m-1 cursor-pointer p-1 text-mcs-text-muted hover:text-mcs-success-fg"
+                    onClick={() => updatePreset(index)}
+                  >
+                    <Check className="size-3" aria-hidden />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="取消修改"
+                    className="-m-1 cursor-pointer p-1 text-mcs-text-muted hover:text-mcs-error-fg"
+                    onClick={() => {
+                      setEditingIndex(null)
+                      setDraft('')
+                    }}
+                  >
+                    <X className="size-3" aria-hidden />
+                  </button>
+                </span>
+              )
+            }
             const display = preset.length > 26 ? `${preset.slice(0, 24)}...` : preset
             return (
               <span
                 key={preset}
                 className="inline-flex items-center gap-1 rounded-mcs-sm border border-mcs-border-default bg-mcs-bg-default px-2 py-1 text-mcs-xs text-mcs-text-muted transition-colors hover:bg-mcs-state-hover"
               >
-                <Icon className={`size-3 ${colorClass}`} aria-hidden />
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <button
@@ -351,30 +414,64 @@ export function CommandInput() {
                   </TooltipTrigger>
                   <TooltipContent side="top">{preset}</TooltipContent>
                 </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger asChild>
+                {editMode ? (
+                  <>
                     <button
                       type="button"
-                      aria-label={`发送 ${preset}`}
-                      className="-m-1 cursor-pointer p-1 text-mcs-text-muted hover:text-mcs-success-fg"
-                      onClick={() => send(preset)}
+                      aria-label={`编辑 ${preset}`}
+                      className="-m-1 cursor-pointer p-1 text-mcs-text-muted hover:text-mcs-accent-fg"
+                      onClick={() => {
+                        setEditingIndex(index)
+                        setDraft(preset)
+                      }}
                     >
-                      <Play className="size-3" aria-hidden />
+                      <Pencil className="size-3" aria-hidden />
                     </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="top">立即发送</TooltipContent>
-                </Tooltip>
-                <button
-                  type="button"
-                  aria-label={`删除 ${preset}`}
-                  className="-m-1 cursor-pointer p-1 text-mcs-text-muted hover:text-mcs-error-fg"
-                  onClick={() => setDeleteTarget(preset)}
-                >
-                  <X className="size-3" aria-hidden />
-                </button>
+                    <button
+                      type="button"
+                      aria-label={`删除 ${preset}`}
+                      className="-m-1 cursor-pointer p-1 text-mcs-text-muted hover:text-mcs-error-fg"
+                      onClick={() => setDeleteTarget(preset)}
+                    >
+                      <Trash2 className="size-3" aria-hidden />
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    aria-label={`发送 ${preset}`}
+                    className="-m-1 cursor-pointer p-1 text-mcs-text-muted hover:text-mcs-success-fg"
+                    onClick={() => send(preset)}
+                  >
+                    <Play className="size-3" aria-hidden />
+                  </button>
+                )}
               </span>
             )
           })}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                aria-label={editMode ? '完成编辑' : '编辑快捷指令'}
+                aria-pressed={editMode}
+                className={
+                  '-m-1 cursor-pointer rounded-mcs-sm p-1.5 transition-colors ' +
+                  (editMode
+                    ? 'bg-mcs-state-hover text-mcs-accent-fg'
+                    : 'text-mcs-text-muted hover:text-mcs-text-default')
+                }
+                onClick={() => (editMode ? leaveEditMode() : setEditMode(true))}
+              >
+                {editMode ? (
+                  <Check className="size-3" aria-hidden />
+                ) : (
+                  <Pencil className="size-3" aria-hidden />
+                )}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="top">{editMode ? '完成编辑' : '编辑快捷指令'}</TooltipContent>
+          </Tooltip>
         </div>
       )}
 

@@ -195,7 +195,7 @@ export function MonacoEditorPane({
     if (typeof document === 'undefined') return ''
     return (
       getComputedStyle(document.documentElement).getPropertyValue('--mcs-font-mono').trim() ||
-      "'JetBrains Mono', ui-monospace, monospace"
+      'monospace'
     )
   }, [])
 

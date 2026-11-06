@@ -222,9 +222,14 @@ export function GiveItemPanel({
 
   const applyKit = (kit: KitPreset) => {
     const next = new Map(selected)
+    // 目录里没有的 id 不能静默丢弃：用户点了礼包却少了东西，界面还报「已添加」
+    const missing: string[] = []
     for (const ki of kit.items) {
       const item = MINECRAFT_ITEMS.find((i) => i.id === ki.id)
-      if (!item) continue
+      if (!item) {
+        missing.push(ki.id)
+        continue
+      }
       const cur = next.get(item.id)
       if (cur) next.set(item.id, { ...cur, count: Math.min(MAX_COUNT, cur.count + ki.count) })
       else
@@ -237,6 +242,12 @@ export function GiveItemPanel({
     }
     setSelected(next)
     setMainTab('items')
+    if (missing.length > 0) {
+      toast.warning(
+        `已添加「${kit.name}」，但 ${missing.length} 件物品不在目录中已跳过：${missing.join('、')}`,
+      )
+      return
+    }
     toast.success(`已添加「${kit.name}」到已选列表`)
   }
 

@@ -467,6 +467,37 @@ describe('GamerulePanel 行级编辑', () => {
     await user.type(input, '0')
     expect(screen.getByRole('button', { name: '保存' })).toBeEnabled()
   })
+
+  /* 错误文案是**顶替**描述行而不是另起一行：它必须继承描述格那条「可压缩」的轨道，
+     否则一条长原因（实测最长「不得大于 2147483647：2147483648」25 字）在窄屏下
+     会把同一行的规则名与控件挤出去。jsdom 量不到宽度，故锁的是承担该性质的三个类：
+     `min-w-0`（允许被压到内容宽以下）、`flex-1`（占满剩余）、`truncate`（超出省略）。
+     这三个是一个整体，缺任一条性质就变——`min-w-0` 是其中唯一不可省的
+     （flex 子项默认 min-width:auto，去掉它 truncate 永不生效，flex-1 也压不动）。 */
+  it('错误格与描述格共用可压缩轨道（min-w-0 + flex-1 + truncate 一起承担「不撑破行、不挤走规则名」）', async () => {
+    const user = userEvent.setup()
+    snapshot = {
+      source: 'rcon',
+      rules: [{ name: 'random_tick_speed', status: 'current', type: 'integer', value: '3' }],
+    }
+    renderPanel({ mcVersion: '26.3' })
+    await screen.findByText('random_tick_speed')
+
+    // 先在描述态取锚点：两态的类名必须一致，否则「顶替」在几何上不成立
+    const descCell = within(row('random_tick_speed')).getByTitle(
+      '每游戏刻每区段中随机的方块刻发生的频率（例如植物生长，树叶腐烂等）。为0时禁用随机刻，较高的数字将增大随机刻频率。',
+    )
+
+    const input = within(row('random_tick_speed')).getByLabelText('random_tick_speed 值')
+    await user.clear(input)
+    await user.type(input, '-1')
+
+    const errorCell = screen.getByRole('alert')
+    expect(errorCell).toHaveTextContent('不得小于 0：-1')
+    // 两态同一个轨道：任一态被单独改掉（例如错误格忘了写 truncate）就会红
+    expect(errorCell.className).toBe(descCell.className)
+    expect(errorCell).toHaveClass('min-w-0', 'flex-1', 'truncate')
+  })
 })
 
 describe('GamerulePanel 搜索与分类', () => {

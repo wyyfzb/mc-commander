@@ -30,6 +30,8 @@ vi.mock('../src/utils/http-client.js', () => ({
 }));
 
 vi.mock('../src/services/backup.service.js', () => ({
+  // 判据导出：upgrade.service 用它决定要不要跑前置备份。既有用例都走「有世界」路径
+  hasWorldData: vi.fn(() => true),
   BackupService: class {
     constructor(serverManager) {
       this.serverManager = serverManager;
@@ -225,6 +227,29 @@ describe('路由 mcVersion 白名单', () => {
     expect(MC_VERSION_REGEX).toBeInstanceOf(RegExp);
     expect(MC_VERSION_REGEX.test('1.21.4')).toBe(true);
     expect(MC_VERSION_REGEX.test('../evil')).toBe(false);
+  });
+
+  it.each([
+    ['路径穿越', '../../evil'],
+    ['主机形态', 'evil.test'],
+    ['用户信息前缀', 'x@evil.test'],
+    ['查询串', '0.16.14?y=1'],
+    ['协议前缀', 'https://evil.test/0.16.14'],
+  ])('恶意 loaderVersion「%s」返回 400 且不触发审计', async (_label, payload) => {
+    const res = await request
+      .post('/api/v1/instances/inst-1/upgrade')
+      .send({ mcVersion: '1.21.4', type: 'fabric', loaderVersion: payload });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe(ErrorCodes.VALIDATION_ERROR.code);
+    expect(res.body.message).toMatch(/Invalid loaderVersion/);
+    expect(recordAudit).not.toHaveBeenCalled();
+  });
+
+  it('LOADER_VERSION_REGEX 覆盖上游三种真实形态', async () => {
+    const { LOADER_VERSION_REGEX } = await import('../src/services/upgrade.service.js');
+    for (const ok of ['0.20.1', '0.3.7.111', '0.10.6+build.214']) {
+      expect(LOADER_VERSION_REGEX.test(ok)).toBe(true);
+    }
   });
 });
 

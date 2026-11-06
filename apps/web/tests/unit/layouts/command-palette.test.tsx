@@ -198,4 +198,22 @@ describe('CommandPalette 操作辅助', () => {
     expect(screen.getByRole('option', { name: /仪表盘\s*\/dashboard/ })).toBeInTheDocument()
     expect(screen.getByRole('option', { name: /设置\s*\/settings/ })).toBeInTheDocument()
   })
+
+  /* 侧栏里有的页面，命令面板必须也搜得到：只断言两项旧条目时，
+     新增的 /backups、/fleet 删掉了照样绿，而用户按名字搜不到就会以为它没有 */
+  it('侧栏的备份页与全局总览在面板里可达', async () => {
+    await openPaletteAndFindGroup()
+    expect(screen.getByRole('option', { name: /备份\s*\/backups/ })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: /全局总览\s*\/fleet/ })).toBeInTheDocument()
+  })
+
+  /* 「备份」这个词只归备份页：任务页若也带它，用户搜「备份」会落到 cron 列表，
+     而他要的是能恢复的时间点列表 */
+  it('搜「备份」只落到备份页，不落到任务页', async () => {
+    const user = await openPaletteAndFindGroup()
+    await user.type(screen.getByPlaceholderText('输入页面名称或命令…'), '备份')
+
+    expect(await screen.findByRole('option', { name: /备份\s*\/backups/ })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /任务\s*\/tasks/ })).not.toBeInTheDocument()
+  })
 })

@@ -1,14 +1,14 @@
 /**
  * 部署/实例静态数据
- * - SERVER_TYPES：5 种服务端类型 + 中文标签
+ * - SERVER_TYPES：5 种服务端类型（从契约包再导出，不在这里另立一份）
  * - recommendedJavaVersion：版本 → Java 版本推荐
  * - 任务类型标签与状态色
  */
 import { formatStartTime } from './format'
+import type { ServerType } from '@mc-commander/schemas'
 
-/** 服务端类型（deploy 端点 validTypes） */
-export const SERVER_TYPES = ['vanilla', 'paper', 'fabric', 'forge', 'purpur'] as const
-export type ServerType = (typeof SERVER_TYPES)[number]
+/** 服务端类型（唯一声明源是契约包：部署与升级共用同一枚举） */
+export { SERVER_TYPES, type ServerType } from '@mc-commander/schemas'
 
 /** 服务端类型中文标签 */
 export const SERVER_TYPE_LABELS: Record<ServerType, string> = {
@@ -74,10 +74,14 @@ export const FALLBACK_VERSIONS = [
 export const TASK_TYPES = ['restart', 'backup', 'command', 'stop', 'start'] as const
 export type TaskType = (typeof TASK_TYPES)[number]
 
-/** 任务类型中文标签 */
+/**
+ * 任务类型中文标签（列表行徽章用）
+ * backup 标成「自动备份」而不是「备份」：侧栏「备份」页指的是可恢复的存档点，
+ * 两者是两个东西；同一个词指两处，用户搜「备份」时就分不清会落到哪。
+ */
 export const TASK_TYPE_LABELS: Record<TaskType, string> = {
   restart: '重启',
-  backup: '备份',
+  backup: '自动备份',
   command: '命令',
   stop: '停止',
   start: '启动',

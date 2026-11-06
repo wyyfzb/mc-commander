@@ -93,7 +93,7 @@ describe('TaskList 渲染', () => {
     expect(badge.className).toContain('bg-mcs-warning-bg-subtle')
     expect(badge.className).toContain('text-mcs-warning-fg')
     expect(badge.className).toContain('border-mcs-warning-border')
-    const backupBadge = screen.getByText('备份')
+    const backupBadge = screen.getByText('自动备份')
     expect(backupBadge.className).toContain('text-mcs-info-fg')
   })
 })

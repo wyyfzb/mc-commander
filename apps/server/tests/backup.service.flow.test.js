@@ -114,7 +114,10 @@ describe.skipIf(!snapshotTool)(
       config.backupsDir = backupsDir;
 
       manager = new EventEmitter();
-      manager.getInstance = vi.fn(() => ({
+      // 真实实例对象必带 id 与 serverPath：判据与备份前置校验都从 serverPath 取目录
+      manager.getInstance = vi.fn((id) => ({
+        id,
+        serverPath: path.join(serversDir, id),
         isRunning: false,
         isRconConnected: false,
         properties: { 'level-name': 'world' },
@@ -465,7 +468,10 @@ describe.skipIf(!isLinux || !hasRsync)('硬链接增量（Linux rsync --link-des
     config.backupsDir = backupsDir;
 
     manager = new EventEmitter();
-    manager.getInstance = vi.fn(() => ({
+    // 真实实例对象必带 id 与 serverPath：判据与备份前置校验都从 serverPath 取目录
+    manager.getInstance = vi.fn((id) => ({
+      id,
+      serverPath: path.join(serversDir, id),
       isRunning: false,
       isRconConnected: false,
       properties: { 'level-name': 'world' },

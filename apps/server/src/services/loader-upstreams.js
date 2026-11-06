@@ -46,15 +46,14 @@ export async function listPurpurVersions(limit = 30) {
  * 「实际下载的构建」可能不是同一个（中间有新构建发布就会错位，对正常文件报完整性失败）。
  */
 export async function resolvePurpurDownload(mcVersion) {
-  const latest = await httpJson(
-    `https://api.purpurmc.org/v2/purpur/${mcVersion}/latest`,
-    UPSTREAM_OPTIONS,
-  );
+  // 版本段一律 encodeURIComponent：请求参数只允许落在这一段里，无法改出别的路径/主机
+  const v = encodeURIComponent(mcVersion);
+  const latest = await httpJson(`https://api.purpurmc.org/v2/purpur/${v}/latest`, UPSTREAM_OPTIONS);
   const digest = latest?.md5;
   const url =
     latest?.build != null
-      ? `https://api.purpurmc.org/v2/purpur/${mcVersion}/${latest.build}/download`
-      : `https://api.purpurmc.org/v2/purpur/${mcVersion}/latest/download`;
+      ? `https://api.purpurmc.org/v2/purpur/${v}/${encodeURIComponent(latest.build)}/download`
+      : `https://api.purpurmc.org/v2/purpur/${v}/latest/download`;
   return { url, expectedHash: digest ? { algorithm: 'md5', digest } : null };
 }
 
@@ -78,8 +77,11 @@ async function latestFabricLoader() {
  */
 export async function resolveFabricDownload(mcVersion, loaderVersion) {
   const loader = loaderVersion || (await latestFabricLoader());
+  // 两段都 encodeURIComponent：它们只可能落在各自的路径段内，不能改动主机或其它路径段
   return {
-    url: `https://meta.fabricmc.net/v2/versions/loader/${mcVersion}/${loader}/1.0.1/server/jar`,
+    url: `https://meta.fabricmc.net/v2/versions/loader/${encodeURIComponent(
+      mcVersion,
+    )}/${encodeURIComponent(loader)}/1.0.1/server/jar`,
     expectedHash: null,
   };
 }
@@ -104,8 +106,11 @@ export async function resolveForgeInstallerDownload(mcVersion) {
   const promos = data?.promos ?? {};
   const forgeVersion = promos[`${mcVersion}-recommended`] ?? promos[`${mcVersion}-latest`];
   if (!forgeVersion) throw new Error(`No Forge build found for ${mcVersion}`);
+  // 版本与构建号都来自请求/上游，同样只允许落在各自路径段内
+  const v = encodeURIComponent(mcVersion);
+  const f = encodeURIComponent(forgeVersion);
   return {
-    url: `https://maven.minecraftforge.net/net/minecraftforge/forge/${mcVersion}-${forgeVersion}/forge-${mcVersion}-${forgeVersion}-installer.jar`,
+    url: `https://maven.minecraftforge.net/net/minecraftforge/forge/${v}-${f}/forge-${v}-${f}-installer.jar`,
     expectedHash: null,
   };
 }

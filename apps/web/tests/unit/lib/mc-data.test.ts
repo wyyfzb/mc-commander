@@ -42,9 +42,9 @@ beforeEach(() => {
   usePanelPreferencesStore.setState({ remote: null, saving: false })
 })
 
-describe('物品目录完整性（211 种）', () => {
-  it('共 211 种物品', () => {
-    expect(MINECRAFT_ITEMS).toHaveLength(211)
+describe('物品目录完整性（217 种）', () => {
+  it('共 217 种物品', () => {
+    expect(MINECRAFT_ITEMS).toHaveLength(217)
   })
 
   it('物品 ID 无重复', () => {
@@ -52,20 +52,20 @@ describe('物品目录完整性（211 种）', () => {
     expect(new Set(ids).size).toBe(ids.length)
   })
 
-  it('分类分布与源一致：建筑材料 49/武器装备 32/工具 26/食物 25/自然资源 22/装饰 22/杂项 18/红石 18', () => {
+  it('分类分布与源一致：建筑材料 49/武器装备 38/工具 26/食物 25/自然资源 22/装饰 21/杂项 18/红石 18', () => {
     const byCategory = new Map<string, number>()
     for (const item of MINECRAFT_ITEMS) {
       byCategory.set(item.category, (byCategory.get(item.category) ?? 0) + 1)
     }
     expect(byCategory.get('建筑材料')).toBe(49)
-    expect(byCategory.get('武器装备')).toBe(32)
+    expect(byCategory.get('武器装备')).toBe(38)
     expect(byCategory.get('工具')).toBe(26)
     expect(byCategory.get('食物')).toBe(25)
     expect(byCategory.get('自然资源')).toBe(22)
     expect(byCategory.get('装饰方块')).toBe(21)
     expect(byCategory.get('杂项')).toBe(18)
     expect(byCategory.get('红石元件')).toBe(18)
-    expect([...byCategory.values()].reduce((a, b) => a + b, 0)).toBe(211)
+    expect([...byCategory.values()].reduce((a, b) => a + b, 0)).toBe(217)
   })
 
   it('stackSize 取值合法（1/16/64），分类均在 ITEM_CATEGORIES 中', () => {
@@ -151,17 +151,20 @@ describe('药水目录完整性（20 种）', () => {
   })
 })
 
-describe('默认礼包（6 个）与持久化 schema', () => {
-  it('共 6 个默认礼包', () => {
-    expect(DEFAULT_KITS).toHaveLength(6)
+describe('默认礼包（5 个）与持久化 schema', () => {
+  it('共 5 个默认礼包', () => {
+    expect(DEFAULT_KITS).toHaveLength(5)
     const names = DEFAULT_KITS.map((k) => k.name)
-    expect(names).toEqual(['新手起步包', '钻石套装', '下界合金套装', '建材包', '食物包', '药水包'])
+    expect(names).toEqual(['新手起步包', '钻石套装', '下界合金套装', '建材包', '食物包'])
   })
 
-  it('药水包同一物品可重复出现（5 条 potion 记录）', () => {
-    const potionKit = DEFAULT_KITS.find((k) => k.name === '药水包')!
-    expect(potionKit.items).toHaveLength(5)
-    expect(potionKit.items.every((i) => i.id === 'potion' && i.count === 3)).toBe(true)
+  it('每个礼包内物品 id 互不重复', () => {
+    // 应用礼包按 id 合并进已选列表：同 id 重复出现只会累加数量，
+    // 看起来是 5 件、实际只有 1 件，条目自身也分不出彼此
+    for (const kit of DEFAULT_KITS) {
+      const ids = kit.items.map((i) => i.id)
+      expect(new Set(ids).size).toBe(ids.length)
+    }
   })
 
   it('礼包可含目录外物品 id（quartz_block），调用方容错跳过', () => {

@@ -164,4 +164,18 @@ describe('resolveFabricDownload', () => {
     jsonImpl.current = () => Promise.resolve([{ version: '0.20.2', stable: false }]);
     await expect(resolveFabricDownload('1.21.4', undefined)).rejects.toThrow(/Fabric Loader/);
   });
+
+  /* 版本段必须被编码：'/' 编成 %2F 后整段仍是一个路径段，无法穿越也无法改主机 */
+  it.each([
+    ['路径穿越', '../../evil', '..%2F..%2Fevil'],
+    ['用户信息前缀', 'x@evil.test', 'x%40evil.test'],
+    ['查询串', '0.16.14?y=1', '0.16.14%3Fy%3D1'],
+  ])('loaderVersion 的%s形态被编码，主机与路径段不变', async (_label, raw, encoded) => {
+    const { url } = await resolveFabricDownload('1.21.4', raw);
+    expect(url).toBe(
+      `https://meta.fabricmc.net/v2/versions/loader/1.21.4/${encoded}/1.0.1/server/jar`,
+    );
+    expect(new URL(url).host).toBe('meta.fabricmc.net');
+    expect(new URL(url).search).toBe('');
+  });
 });
