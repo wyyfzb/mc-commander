@@ -218,6 +218,12 @@ export class WebhookService {
           lastError = new Error(`HTTP ${response.statusCode}`);
         } catch (err) {
           lastError = err;
+          // 3xx：http-client 拒绝跟随跳转（跟过去就绕过了投递前的公网校验），重试不会改变结果
+          if (err?.statusCode >= 300 && err.statusCode < 400) {
+            responseStatus = err.statusCode;
+            responseBody = err.message;
+            break;
+          }
           // 网络错误 → 重试
         }
       }

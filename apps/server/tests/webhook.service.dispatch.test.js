@@ -313,6 +313,27 @@ describe('WebhookService._deliver 重试链路', () => {
     expect(rows[0].response_body).toBe('Not Found');
   });
 
+  it('跳转（http-client 拒绝跟随而抛 HttpError）短路不重试，落 failed 且记跳转码', async () => {
+    const hook = createHook();
+    const redirectErr = Object.assign(new Error('Refusing to follow redirect (302)'), {
+      statusCode: 302,
+    });
+    postImpl.current = vi.fn(async () => {
+      throw redirectErr;
+    });
+
+    const p = WebhookService._deliver(hook, 'player.join', { instanceId: 'inst-1' });
+    await vi.advanceTimersByTimeAsync(0);
+    await p;
+
+    expect(postImpl.current).toHaveBeenCalledTimes(1);
+    const rows = deliveriesOf(hook.id);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].status).toBe('failed');
+    expect(rows[0].attempts).toBe(1);
+    expect(rows[0].response_status).toBe(302);
+  });
+
   it('429 与 5xx 同走重试路径：429 不被短路', async () => {
     const hook = createHook();
     postImpl.current = vi.fn(async () => ({ statusCode: 429, body: 'rate limited' }));
