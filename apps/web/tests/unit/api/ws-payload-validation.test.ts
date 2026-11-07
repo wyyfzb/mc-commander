@@ -40,20 +40,31 @@ describe('validateWsPayload：按契约观测载荷', () => {
     expect(warn).toHaveBeenCalledOnce()
   })
 
-  it('未登记契约的事件直接放行（不是所有事件都有 schema）', () => {
+  it('非事件类型与无载荷事件直接放行', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    expect(validateWsPayload('deployProgress', { anything: true })).toEqual([])
-    expect(validateWsPayload('systemStatsUpdate', {})).toEqual([])
+    // pong/auth 是客户端消息的应答，不属事件目录；circuit_breaker 登记为无载荷
+    expect(validateWsPayload('pong', { anything: true })).toEqual([])
+    expect(validateWsPayload('auth', { ok: true })).toEqual([])
+    expect(validateWsPayload('circuit_breaker', {})).toEqual([])
     expect(warn).not.toHaveBeenCalled()
   })
 
-  it('同一事件类型的多个事件共用一份载荷契约', () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    // 六个 player* 事件都是 name/message/cause 这类字段，形状相同
-    for (const type of ['playerJoin', 'playerLeave', 'playerDeath', 'playerChat']) {
-      expect(validateWsPayload(type, { name: 'Steve' })).toEqual([])
-    }
-    expect(warn).not.toHaveBeenCalled()
+  it('玩家事件按类型各自校验：缺该事件必填字段即报出', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    // 形状相近不等于共用一份契约：chat 缺 message 必须被指出
+    expect(validateWsPayload('playerChat', { name: 'Steve' }).length).toBeGreaterThan(0)
+    expect(validateWsPayload('playerChat', { name: 'Steve', message: 'hi' })).toEqual([])
+  })
+
+  it('death 的两种真实形态都通过：单条与 5s 窗口聚合的批量', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    expect(validateWsPayload('playerDeath', { name: 'Steve', cause: '被射杀' })).toEqual([])
+    expect(
+      validateWsPayload('playerDeath', {
+        players: [{ name: 'Steve', cause: '被射杀' }],
+        count: 1,
+      }),
+    ).toEqual([])
   })
 
   it('性能载荷缺项会被指出（这类字段消费方会逐项读取）', () => {
@@ -63,10 +74,50 @@ describe('validateWsPayload：按契约观测载荷', () => {
     expect(issues.length).toBeGreaterThan(0)
   })
 
-  it('backup 系列共用同一份载荷契约', () => {
+  it('备份生命周期要求 content：通知中心的文案由服务端给', () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {})
     for (const type of ['backupStart', 'backupComplete', 'backupFailed', 'backupCancelled']) {
-      expect(validateWsPayload(type, { id: 1, name: 'b1' })).toEqual([])
+      expect(
+        validateWsPayload(type, { instanceId: 's1', backupId: 1, content: '备份完成' }),
+      ).toEqual([])
+      expect(validateWsPayload(type, { instanceId: 's1', backupId: 1 }).length).toBeGreaterThan(0)
     }
+  })
+
+  it('部署与升级进度事件有契约：载荷字段逐项受约束', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    expect(
+      validateWsPayload('deployProgress', {
+        stage: 'download',
+        percent: 0.5,
+        transferred: 1024,
+        total: 2048,
+      }),
+    ).toEqual([])
+    expect(
+      validateWsPayload('upgradeComplete', {
+        instanceId: 's1',
+        stage: 'completed',
+        percent: 100,
+        detail: '升级完成',
+        timestamp: 1,
+        instanceName: 'Survival',
+      }),
+    ).toEqual([])
+  })
+
+  it('系统读数复用 REST 的同一份 schema', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    expect(
+      validateWsPayload('systemStatsUpdate', {
+        cpuUsage: 12.5,
+        memoryUsage: 4.2,
+        totalMemory: 16,
+        memoryPercent: 26.3,
+        cpuCores: 8,
+        loadAvg: [0.5],
+        uptime: 3600,
+      }),
+    ).toEqual([])
   })
 })

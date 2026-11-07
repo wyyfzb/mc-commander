@@ -5,56 +5,25 @@
  * 「服务端发出的结构与契约不符」变成一条可检索的告警，而不是等前端静默
  * 渲染成空白后才被发现。
  *
- * 只对已定契约的事件登记；其余事件跳过。40 个事件类型里目前只有 9 个有
- * payload schema，未登记的按「暂无契约」处理，不是这里漏了。
+ * 契约表本身在 `@mc-commander/schemas` 的 `WS_PAYLOAD_SCHEMAS`：它按
+ * `Record<WsEventType, ...>` 声明，新增事件不登记即编译失败。这里不再维护
+ * 第二份清单——两份清单必然漂移，而漏登记的症状是「该事件从此没有契约」，
+ * 静默得几乎不可能被发现。
  *
  * **只管实时发送，不管断线补齐的重放**：重放读的是历史落库行，那些数据可能是旧
  * 版本服务端写下的，用当前 schema 校验会把「历史形状不同」报成漂移。重放因此
  * 直发 ws.send、不经过这里。
  */
-import {
-  wsStatusSnapshotSchema,
-  wsPerformancePayloadSchema,
-  wsLogPayloadSchema,
-  wsStatusEventPayloadSchema,
-  wsNameListChangedPayloadSchema,
-  wsPlayerEventPayloadSchema,
-  wsWeatherPayloadSchema,
-  wsWorldUpgradePayloadSchema,
-  wsBackupPayloadSchema,
-  wsBackupProgressPayloadSchema,
-} from '@mc-commander/schemas';
+import { WS_PAYLOAD_SCHEMAS } from '@mc-commander/schemas';
 import { logContractAlarm } from '../utils/contract-alarm.js';
-
-const PAYLOAD_SCHEMAS = new Map([
-  ['statusSnapshot', wsStatusSnapshotSchema],
-  ['performanceUpdate', wsPerformancePayloadSchema],
-  ['log', wsLogPayloadSchema],
-  ['statusEvent', wsStatusEventPayloadSchema],
-  ['nameListChanged', wsNameListChangedPayloadSchema],
-  ['weatherUpdate', wsWeatherPayloadSchema],
-  ['worldUpgrade', wsWorldUpgradePayloadSchema],
-  ['backupStart', wsBackupPayloadSchema],
-  ['backupComplete', wsBackupPayloadSchema],
-  ['backupFailed', wsBackupPayloadSchema],
-  ['backupSkipped', wsBackupPayloadSchema],
-  ['backupCancelled', wsBackupPayloadSchema],
-  ['backupProgress', wsBackupProgressPayloadSchema],
-  ['playerJoin', wsPlayerEventPayloadSchema],
-  ['playerLeave', wsPlayerEventPayloadSchema],
-  ['playerDeath', wsPlayerEventPayloadSchema],
-  ['playerRespawn', wsPlayerEventPayloadSchema],
-  ['playerChat', wsPlayerEventPayloadSchema],
-  ['playerSleep', wsPlayerEventPayloadSchema],
-  ['achievement', wsPlayerEventPayloadSchema],
-]);
 
 /**
  * @param {string} type 事件类型
  * @param {unknown} data 即将发出的载荷
  */
 export function observeWsPayload(type, data) {
-  const schema = PAYLOAD_SCHEMAS.get(type);
+  const schema = WS_PAYLOAD_SCHEMAS[type];
+  // 非事件类型（`pong`/`auth` 等）与显式标为无载荷的事件都跳过
   if (!schema) return;
   const parsed = schema.safeParse(data);
   if (!parsed.success) logContractAlarm('ws', parsed.error.issues);

@@ -70,6 +70,7 @@ import {
   resolveMarketTarget,
   makeApiEnvelopeSchema,
   pushChannelRequestBodySchema,
+  WS_PAYLOAD_SCHEMAS,
 } from '../src/index'
 
 describe('schemas 基础校验', () => {
@@ -1107,6 +1108,28 @@ describe('运行态跃迁的取值与关键子事件', () => {
 describe('事件通道口径（状态 vs 事件）', () => {
   it('每个事件都被分类，且没有多余键', () => {
     expect(Object.keys(WS_EVENT_KINDS).sort()).toEqual([...WS_EVENT_TYPES].sort())
+  })
+
+  it('每个事件都在载荷契约表里占一格（新增事件不能静默无契约）', () => {
+    // 类型级已由 Record<WsEventType, ...> 保证，这里锁住运行期实际键集：
+    // 类型断言在某些构建路径会被擦除，而这张表是两端共用的运行时事实
+    expect(Object.keys(WS_PAYLOAD_SCHEMAS).sort()).toEqual([...WS_EVENT_TYPES].sort())
+  })
+
+  it('只有显式登记的「无载荷」事件可以没有 schema', () => {
+    const noPayload = WS_EVENT_TYPES.filter((t) => WS_PAYLOAD_SCHEMAS[t] === null)
+    // 清单锁死：把某个事件改成 null 等于宣告「它不需要契约」，必须是有意的决定
+    expect(noPayload).toEqual(['circuit_breaker'])
+  })
+
+  it('契约表里的 schema 都能真正拒绝错误载荷（不是恒通过的空壳）', () => {
+    // 一批全 optional 的 schema 对任何对象都成立，等于没有契约——这里逐条确认
+    // 它对「空对象」会失败，从而保证每条契约至少约束了一个必填字段
+    for (const type of WS_EVENT_TYPES) {
+      const schema = WS_PAYLOAD_SCHEMAS[type]
+      if (!schema) continue
+      expect(schema.safeParse({}).success, `${type} 的契约对空对象也通过，等于没有约束`).toBe(false)
+    }
   })
 
   it('state 类必须声明自愈路径，event 类不得声明', () => {

@@ -33,9 +33,9 @@ describe('WS 载荷契约观测', () => {
     expect(String(errorSpy.mock.calls[0][0])).toContain('ws');
   });
 
-  it('未登记契约的事件直接放行', () => {
-    // 40 个事件类型里只有 9 个有 payload schema，其余属「暂无契约」而非漏配
-    for (const type of ['deployProgress', 'systemStatsUpdate', 'error', 'upgradeProgress']) {
+  it('非事件类型与无载荷事件直接放行', () => {
+    // pong/auth 是客户端消息的应答，不属事件目录；circuit_breaker 登记为无载荷
+    for (const type of ['pong', 'auth', 'circuit_breaker']) {
       observeWsPayload(type, { anything: true });
     }
     expect(errorSpy).not.toHaveBeenCalled();
@@ -53,17 +53,93 @@ describe('WS 载荷契约观测', () => {
     expect(errorSpy).toHaveBeenCalledTimes(2);
   });
 
-  it('player 系列共用一份载荷契约', () => {
-    for (const type of ['playerJoin', 'playerLeave', 'playerDeath', 'playerChat']) {
-      observeWsPayload(type, { name: 'Steve' });
-    }
+  it('玩家事件按类型各自校验：缺该事件必填字段即告警', () => {
+    // 形状相近不等于可以共用一份契约：chat 缺 message 必须报出来
+    expect(() => observeWsPayload('playerChat', { name: 'Steve' })).not.toThrow();
+    expect(errorSpy).toHaveBeenCalledOnce();
+
+    resetContractAlarms();
+    errorSpy.mockClear();
+    observeWsPayload('playerSleep', { name: 'Steve', sleeping: true });
     expect(errorSpy).not.toHaveBeenCalled();
   });
 
-  it('backup 系列共用一份载荷契约', () => {
-    for (const type of ['backupStart', 'backupComplete', 'backupFailed', 'backupCancelled']) {
-      observeWsPayload(type, { id: 1, name: 'b1' });
-    }
+  it('death 的两种真实形态都通过：单条与 5s 窗口聚合的批量', () => {
+    observeWsPayload('playerDeath', { name: 'Steve', cause: '被射杀' });
+    observeWsPayload('playerDeath', {
+      players: [{ name: 'Steve', cause: '被射杀' }],
+      count: 1,
+    });
+    expect(errorSpy).not.toHaveBeenCalled();
+  });
+
+  it('备份生命周期要求 content：通知中心的文案由服务端给', () => {
+    observeWsPayload('backupComplete', {
+      instanceId: 's1',
+      backupId: 1,
+      name: 'b1',
+      content: '备份完成: b1（12.3 MB）',
+    });
+    expect(errorSpy).not.toHaveBeenCalled();
+
+    observeWsPayload('backupComplete', { instanceId: 's1', backupId: 1 });
+    expect(errorSpy).toHaveBeenCalledOnce();
+  });
+
+  it('备份失败带 phase 时按枚举校验', () => {
+    observeWsPayload('backupFailed', {
+      instanceId: 's1',
+      error: '磁盘已满',
+      phase: 'execution',
+      content: '备份失败: 磁盘已满',
+    });
+    expect(errorSpy).not.toHaveBeenCalled();
+
+    resetContractAlarms();
+    errorSpy.mockClear();
+    observeWsPayload('backupFailed', { error: 'x', phase: 'not-a-phase', content: 'y' });
+    expect(errorSpy).toHaveBeenCalledOnce();
+  });
+
+  it('部署进度复用契约包里的同一份形状', () => {
+    observeWsPayload('deployProgress', {
+      stage: 'download',
+      percent: 0.5,
+      transferred: 1024,
+      total: 2048,
+      instanceId: 's1',
+      instanceName: 'Survival',
+    });
+    expect(errorSpy).not.toHaveBeenCalled();
+  });
+
+  it('升级终态要求 instanceName：通知文案要说实例名', () => {
+    const base = {
+      instanceId: 's1',
+      stage: 'completed',
+      percent: 100,
+      detail: '升级完成',
+      timestamp: 1,
+    };
+    observeWsPayload('upgradeComplete', { ...base, instanceName: 'Survival' });
+    expect(errorSpy).not.toHaveBeenCalled();
+
+    resetContractAlarms();
+    errorSpy.mockClear();
+    observeWsPayload('upgradeComplete', base);
+    expect(errorSpy).toHaveBeenCalledOnce();
+  });
+
+  it('systemStatsUpdate 与 REST 同一份 schema', () => {
+    observeWsPayload('systemStatsUpdate', {
+      cpuUsage: 12.5,
+      memoryUsage: 4.2,
+      totalMemory: 16,
+      memoryPercent: 26.3,
+      cpuCores: 8,
+      loadAvg: [0.5],
+      uptime: 3600,
+    });
     expect(errorSpy).not.toHaveBeenCalled();
   });
 });
