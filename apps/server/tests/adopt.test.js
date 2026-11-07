@@ -152,7 +152,10 @@ describe('pid 文件与启动参数注入', () => {
   });
 });
 
-describe('adoptFromPidFile 接管', () => {
+// 组级余量：本组每条都要起真实子进程并等它出现在 /proc（Linux）——进程启动与
+// /proc 扫描的耗时由内核调度决定，不随机器变好而消失。其中带 linuxOnly 的两条
+// 在 Windows 上从不执行，本地看不到它们是否逼近全局 5s 上限。
+describe('adoptFromPidFile 接管', { timeout: 30_000 }, () => {
   it('pid 文件指向本实例进程 → 接管：运行态恢复、接管标记、日志续读、started 广播（终端不注入提示行）', () => {
     const inst = makeInstance('adopt-alive');
     const pid = spawnFakeServer(inst.serverPath);
