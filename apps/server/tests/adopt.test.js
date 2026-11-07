@@ -183,7 +183,7 @@ describe('adoptFromPidFile 接管', () => {
   // （没有 /proc 就没有 cwd/cmdline 可比对，只能退化为纯验活），
   // 于是「不是我的进程 → 不接管」永远不成立。这不是实现坏了，是这条判据本身
   // 依赖 Linux 才有的 /proc；无 pidFile 的兜底扫描同理不存在于 Windows。
-  // oxlint-disable-next-line vitest/expect-expect -- 这是用例别名，不是用例本身
+  // oxlint-disable-next-line vitest/expect-expect -- 这一行只是在造用例别名，不是用例块
   const linuxOnly = it.skipIf(process.platform !== 'linux');
 
   linuxOnly(
