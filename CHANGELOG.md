@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.13.1](https://github.com/wyyfzb/mc-commander/compare/v0.13.0...v0.13.1) (2026-11-07)
+
+
+### Bug Fixes
+
+* **test:** 修复 Linux 专用用例的超时（main 当前红灯） ([#706](https://github.com/wyyfzb/mc-commander/issues/706)) ([e79c1fa](https://github.com/wyyfzb/mc-commander/commit/e79c1fab7c88b4889cd2910e92eb8767ce70441b))
+* **test:** 测试体系跨平台收敛 + WS 载荷契约穷尽 ([#704](https://github.com/wyyfzb/mc-commander/issues/704)) ([8be0e9f](https://github.com/wyyfzb/mc-commander/commit/8be0e9f9bfd27597a2b2bb9949e725b6deedf093))
+
 ## [0.13.0](https://github.com/wyyfzb/mc-commander/compare/v0.12.1...v0.13.0) (2026-11-06)
 
 
