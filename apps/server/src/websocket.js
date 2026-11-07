@@ -53,7 +53,7 @@ export const WSEvents = {
   // 用户取消部署：与 failed 分开是因为它不是故障（通知中心与筛选按严重度分档，
   // 复用 deployFailed 会让可控的主动取消显示成「部署失败」告警）
   DEPLOY_CANCELLED: 'deployCancelled',
-  CIRCUIT_BREAKER: 'circuit_breaker',
+  // 熔断没有顶层事件：它作为 statusEvent 的载荷取值发送（见 STATE 跃迁清单）
   UPGRADE_PROGRESS: 'upgradeProgress',
   UPGRADE_COMPLETE: 'upgradeComplete',
   UPGRADE_FAILED: 'upgradeFailed',

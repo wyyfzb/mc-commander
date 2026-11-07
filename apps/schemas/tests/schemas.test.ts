@@ -1116,10 +1116,10 @@ describe('事件通道口径（状态 vs 事件）', () => {
     expect(Object.keys(WS_PAYLOAD_SCHEMAS).sort()).toEqual([...WS_EVENT_TYPES].sort())
   })
 
-  it('只有显式登记的「无载荷」事件可以没有 schema', () => {
-    const noPayload = WS_EVENT_TYPES.filter((t) => WS_PAYLOAD_SCHEMAS[t] === null)
-    // 清单锁死：把某个事件改成 null 等于宣告「它不需要契约」，必须是有意的决定
-    expect(noPayload).toEqual(['circuit_breaker'])
+  it('契约表里每一条都给出了 schema，没有「无需契约」的豁免档', () => {
+    for (const type of WS_EVENT_TYPES) {
+      expect(WS_PAYLOAD_SCHEMAS[type], `${type} 没有载荷契约`).toBeTruthy()
+    }
   })
 
   it('契约表里的 schema 都能真正拒绝错误载荷（不是恒通过的空壳）', () => {
@@ -1127,7 +1127,6 @@ describe('事件通道口径（状态 vs 事件）', () => {
     // 它对「空对象」会失败，从而保证每条契约至少约束了一个必填字段
     for (const type of WS_EVENT_TYPES) {
       const schema = WS_PAYLOAD_SCHEMAS[type]
-      if (!schema) continue
       expect(schema.safeParse({}).success, `${type} 的契约对空对象也通过，等于没有约束`).toBe(false)
     }
   })

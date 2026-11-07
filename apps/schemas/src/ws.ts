@@ -39,7 +39,8 @@ export const WS_EVENT_TYPES = [
   'deployComplete',
   'deployFailed',
   'deployCancelled',
-  'circuit_breaker',
+  // 熔断不是顶层事件类型：它是 statusEvent 载荷里的 event 取值之一
+  // （见 WS_STATUS_EVENT_NAMES）。这里不另立一项，否则会与那条真实路径双报。
   'upgradeProgress',
   'upgradeComplete',
   'upgradeFailed',
@@ -454,7 +455,6 @@ export const WS_EVENT_KINDS: Readonly<Record<WsEventType, WsEventKind>> = {
   deployComplete: 'event',
   deployFailed: 'event',
   deployCancelled: 'event',
-  circuit_breaker: 'event',
   upgradeComplete: 'event',
   upgradeFailed: 'event',
   upgradeCancelled: 'event',
@@ -484,11 +484,10 @@ export const WS_STATE_RECOVERY: Readonly<Partial<Record<WsEventType, WsStateReco
  * 直接编译失败。两端各存一份表时，漏登记不会报错、也不会有告警——事件照常发送，
  * 只是从此没有契约，静默得几乎不可能被发现。
  *
- * `null` 表示该事件**不存在载荷**：`circuit_breaker` 在事件目录里是历史遗留项，
- * 服务端从未发送过它（真实的熔断走 `statusEvent` 的 `event: 'circuit_breaker'`）。
- * 登记为 null 而不是删掉，是因为删除它属于契约面的破坏性变更，需单独决策。
+ * 每个事件都必须给出 schema，没有「无需契约」的豁免档：一个事件若真的没有载荷，
+ * 那它也不该出现在事件目录里。
  */
-export const WS_PAYLOAD_SCHEMAS: Readonly<Record<WsEventType, z.ZodTypeAny | null>> = {
+export const WS_PAYLOAD_SCHEMAS: Readonly<Record<WsEventType, z.ZodTypeAny>> = {
   // ── 实例实时状态 ──
   statusSnapshot: wsStatusSnapshotSchema,
   statusEvent: wsStatusEventPayloadSchema,
@@ -541,9 +540,6 @@ export const WS_PAYLOAD_SCHEMAS: Readonly<Record<WsEventType, z.ZodTypeAny | nul
 
   // ── 主机读数 ──
   systemStatsUpdate: wsSystemStatsPayloadSchema,
-
-  // 从未发送，无载荷可校验（见本表说明）
-  circuit_breaker: null,
 }
 
 export type WsEventType = (typeof WS_EVENT_TYPES)[number]

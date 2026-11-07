@@ -396,7 +396,6 @@ describe('只读角色的 WS 事件过滤', () => {
       WSEvents.UPGRADE_COMPLETE,
       WSEvents.UPGRADE_FAILED,
       WSEvents.UPGRADE_CANCELLED,
-      WSEvents.CIRCUIT_BREAKER,
       WSEvents.ERROR,
       // MC 世界格式升级进度（MSMP 通知面一期）。归类到「拦下」而不是白名单，理由：
       // 它伴随服务端版本变更出现，是**管理员动作的余波**（与 upgradeProgress 同类语境），

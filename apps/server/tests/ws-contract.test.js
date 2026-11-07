@@ -33,9 +33,8 @@ describe('WS 载荷契约观测', () => {
     expect(String(errorSpy.mock.calls[0][0])).toContain('ws');
   });
 
-  it('非事件类型与无载荷事件直接放行', () => {
-    // pong/auth 是客户端消息的应答，不属事件目录；circuit_breaker 登记为无载荷
-    for (const type of ['pong', 'auth', 'circuit_breaker']) {
+  it('非事件类型直接放行（pong/auth 是客户端消息的应答，不在事件目录里）', () => {
+    for (const type of ['pong', 'auth']) {
       observeWsPayload(type, { anything: true });
     }
     expect(errorSpy).not.toHaveBeenCalled();

@@ -40,12 +40,10 @@ describe('validateWsPayload：按契约观测载荷', () => {
     expect(warn).toHaveBeenCalledOnce()
   })
 
-  it('非事件类型与无载荷事件直接放行', () => {
+  it('非事件类型直接放行（pong/auth 是客户端消息的应答，不在事件目录里）', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    // pong/auth 是客户端消息的应答，不属事件目录；circuit_breaker 登记为无载荷
     expect(validateWsPayload('pong', { anything: true })).toEqual([])
     expect(validateWsPayload('auth', { ok: true })).toEqual([])
-    expect(validateWsPayload('circuit_breaker', {})).toEqual([])
     expect(warn).not.toHaveBeenCalled()
   })
 

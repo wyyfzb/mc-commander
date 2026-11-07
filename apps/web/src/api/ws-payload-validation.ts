@@ -21,12 +21,12 @@ import type { z } from 'zod'
  */
 function lookupSchema(type: string): z.ZodTypeAny | null {
   if (!Object.hasOwn(WS_PAYLOAD_SCHEMAS, type)) return null
-  return WS_PAYLOAD_SCHEMAS[type as WsEventType] ?? null
+  return WS_PAYLOAD_SCHEMAS[type as WsEventType]
 }
 
 /**
- * 校验一条 WS 消息的载荷。返回遇到的问题路径列表（空数组＝通过或无载荷契约）。
- * 非事件类型（`pong`/`auth`）与显式标为无载荷的事件都直接放行。
+ * 校验一条 WS 消息的载荷。返回遇到的问题路径列表（空数组＝通过或非事件类型）。
+ * 非事件类型（`pong`/`auth`）直接放行。
  */
 export function validateWsPayload(type: string, data: unknown): string[] {
   const schema = lookupSchema(type)

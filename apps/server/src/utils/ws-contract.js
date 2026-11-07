@@ -23,7 +23,7 @@ import { logContractAlarm } from '../utils/contract-alarm.js';
  */
 export function observeWsPayload(type, data) {
   const schema = WS_PAYLOAD_SCHEMAS[type];
-  // 非事件类型（`pong`/`auth` 等）与显式标为无载荷的事件都跳过
+  // 非事件类型（`pong`/`auth` 等不在事件目录里的键）没有契约可校验
   if (!schema) return;
   const parsed = schema.safeParse(data);
   if (!parsed.success) logContractAlarm('ws', parsed.error.issues);
