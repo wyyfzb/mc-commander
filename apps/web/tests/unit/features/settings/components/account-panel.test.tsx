@@ -154,7 +154,13 @@ describe('AccountPanel 登出', () => {
       http.delete('*/api/v1/auth/sessions/:id', () => {
         kickCalled = true
         return HttpResponse.json(
-          { status: 'error', code: 40103, message: '会话已过期', details: null },
+          {
+            status: 'error',
+            code: 40103,
+            message: '会话已过期',
+            details: null,
+            timestamp: new Date().toISOString(),
+          },
           { status: 401 },
         )
       }),

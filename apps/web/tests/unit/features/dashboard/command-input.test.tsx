@@ -333,7 +333,13 @@ describe('CommandInput', () => {
       server.use(
         http.put('*/api/v1/preferences', () => {
           putCalls += 1
-          return HttpResponse.json({ status: 'ok', data: {}, message: 'Success' })
+          return HttpResponse.json({
+            status: 'ok',
+            code: 0,
+            message: 'Success',
+            data: {},
+            timestamp: new Date().toISOString(),
+          })
         }),
       )
       renderInput()
@@ -352,6 +358,8 @@ describe('CommandInput', () => {
         http.get('*/api/v1/command-history', () =>
           HttpResponse.json({
             status: 'ok',
+            code: 0,
+            message: 'Success',
             data: [
               {
                 id: 2,
@@ -375,7 +383,6 @@ describe('CommandInput', () => {
               },
             ],
             pagination: { page: 1, pageSize: 50, total: 2, totalPages: 1 },
-            message: 'Success',
             timestamp: '2026-01-01T00:00:03Z',
           }),
         ),

@@ -92,7 +92,13 @@ describe('CommandPalette 实例操作分组', () => {
     server.use(
       http.post('*/api/v1/instances/:id/stop', () => {
         stopCalled = true
-        return HttpResponse.json({ status: 'ok', data: null })
+        return HttpResponse.json({
+          status: 'ok',
+          code: 0,
+          message: 'Success',
+          data: null,
+          timestamp: new Date().toISOString(),
+        })
       }),
     )
     const user = await openPaletteAndFindGroup()
@@ -112,7 +118,13 @@ describe('CommandPalette 实例操作分组', () => {
     server.use(
       http.post('*/api/v1/instances/:id/restart', () => {
         restartCalled = true
-        return HttpResponse.json({ status: 'ok', data: null })
+        return HttpResponse.json({
+          status: 'ok',
+          code: 0,
+          message: 'Success',
+          data: null,
+          timestamp: new Date().toISOString(),
+        })
       }),
     )
     const user = await openPaletteAndFindGroup()
@@ -128,7 +140,13 @@ describe('CommandPalette 实例操作分组', () => {
     server.use(
       http.post('*/api/v1/instances/:id/backups', () => {
         backupCalled = true
-        return HttpResponse.json({ status: 'ok', data: { id: 'b1' } })
+        return HttpResponse.json({
+          status: 'ok',
+          code: 0,
+          message: 'Success',
+          data: { id: 'b1' },
+          timestamp: new Date().toISOString(),
+        })
       }),
     )
     const user = await openPaletteAndFindGroup()

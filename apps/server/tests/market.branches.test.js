@@ -17,6 +17,26 @@ vi.mock('../src/utils/http-client.js', () => ({
   httpPost: vi.fn(),
 }));
 
+// 上传暂存目录由 market.service 用 `path.join(os.tmpdir(), 'mc-commander-uploads')`
+// 现算，而 os.tmpdir() 是进程级全局值——本文件与 files.enhanced / plugins 等几个
+// 测试文件并发跑时，大家都在同一个目录里放 .market-download.tmp-*，「有没有残留」
+// 的断言就会把别人的在途文件算成自己的。这里把 os.tmpdir 钉到本文件专属沙箱。
+const SANDBOX_TMPDIR = vi.hoisted(() => {
+  // vi.mock 被提升到文件顶部，此时 ESM import 尚未执行，故直接取内建模块
+  const { mkdtempSync } = process.getBuiltinModule('node:fs');
+  const { tmpdir } = process.getBuiltinModule('node:os');
+  const { join } = process.getBuiltinModule('node:path');
+  return mkdtempSync(join(tmpdir(), 'mcs-market-branches-'));
+});
+vi.mock('os', async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    default: { ...actual.default, tmpdir: () => SANDBOX_TMPDIR },
+    tmpdir: () => SANDBOX_TMPDIR,
+  };
+});
+
 import { httpJson, httpStream } from '../src/utils/http-client.js';
 import {
   searchMarketPlugins,

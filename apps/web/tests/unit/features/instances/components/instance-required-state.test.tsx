@@ -26,7 +26,13 @@ afterAll(() => server.close())
 
 /** 统一响应信封（结构占位） */
 function okEnvelope<T>(data: T) {
-  return HttpResponse.json({ status: 'ok', code: 0, message: 'Success', data })
+  return HttpResponse.json({
+    status: 'ok',
+    code: 0,
+    message: 'Success',
+    data,
+    timestamp: new Date().toISOString(),
+  })
 }
 
 function ReachedInstances() {
@@ -78,7 +84,15 @@ describe('InstanceRequiredState', () => {
       http.get('*/api/v1/instances', () => {
         calls += 1
         return calls === 1
-          ? HttpResponse.json({ status: 'error', code: 50000, message: 'boom' }, { status: 500 })
+          ? HttpResponse.json(
+              {
+                status: 'error',
+                code: 50000,
+                message: 'boom',
+                timestamp: new Date().toISOString(),
+              },
+              { status: 500 },
+            )
           : okEnvelope([])
       }),
     )

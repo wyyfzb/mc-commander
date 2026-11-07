@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { Cron } from 'croner';
-import { success, ErrorCodes, AppError } from '../utils/response.js';
+import { ErrorCodes, AppError } from '../utils/response.js';
 import { parsePagination } from '../utils/pagination.js';
 import { ScheduledTaskModel } from '../db/scheduled_task.model.js';
 import { TaskRunHistoryModel } from '../db/task_run_history.model.js';
@@ -10,6 +10,7 @@ import {
   taskUpdatePayloadSchema,
   scheduledTaskSchema,
   taskRunHistoryListSchema,
+  nullDataSchema,
 } from '@mc-commander/schemas';
 import {
   validateBody,
@@ -209,7 +210,7 @@ export function createTaskRoutes(serverManager, taskScheduler) {
         targetType: 'task',
         targetId: req.params.id,
       });
-      res.json(success(null, 'Scheduled task deleted successfully'));
+      res.json(validatedSuccess(nullDataSchema, null, 'Scheduled task deleted successfully'));
     } catch (err) {
       next(err);
     }
@@ -235,7 +236,7 @@ export function createTaskRoutes(serverManager, taskScheduler) {
         targetType: 'task',
         targetId: id,
       });
-      res.json(success(null, 'Task execution triggered'));
+      res.json(validatedSuccess(nullDataSchema, null, 'Task execution triggered'));
     }),
   );
 

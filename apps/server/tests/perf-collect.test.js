@@ -324,19 +324,29 @@ describe('collectSnapshot：jfr', () => {
       ],
       onCommand: (command) => {
         if (command !== 'jfr stop') return;
-        fs.copyFileSync(
-          path.join(FIXTURES, 'jfr-report.json'),
+        // 用「读内容再写」而不是 copyFileSync：后者在 Windows 上会**保留源文件的
+        // mtime**（CopyFileEx 语义），而本用例把 Date 冻在假时钟上、文件落盘用的是
+        // 真实时钟，两者一错开就会让产物被 `startedAt - 1000` 的过滤当成旧文件排除，
+        // 等待循环于是永远等不到结果。重写文件以保证 mtime 是「此刻」。
+        fs.writeFileSync(
           path.join(debugDir, 'jfr-report-server-new.json'),
+          fs.readFileSync(path.join(FIXTURES, 'jfr-report.json')),
         );
       },
     });
 
     // 录制窗口是固定时长的真等待：用假定时器推进，避免用例本身占用真实时间。
     // 推进量必须引用常量——写死 15_000 会让「窗口调大」时这里干等到超时，
-    // 等于用流程用例把常量断言给出的「窗口可调」承诺架空
-    vi.useFakeTimers();
+    // 等于用流程用例把常量断言给出的「窗口可调」承诺架空。
+    //
+    // `shouldAdvanceTime` 让 Date 跟着假定时器一起走：等待循环的终止条件是
+    // `Date.now() >= deadline`，只伪造 setTimeout 而 Date 读真实时钟时，
+    // 推进定时器不会推进 deadline，循环会一直自旋到用例真超时。
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
       const pending = collectSnapshot(instance, { kind: 'jfr' });
+      // 先让 `jfr start` 的微任务链跑完，等待循环的 setTimeout 才会注册上来
+      await vi.advanceTimersByTimeAsync(0);
       await vi.advanceTimersByTimeAsync(JFR_WINDOW_MS);
       const snapshot = await pending;
       expect(snapshot.kind).toBe('jfr');

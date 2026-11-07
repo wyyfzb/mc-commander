@@ -30,10 +30,24 @@ for arg in "$@"; do
 done
 
 # 依赖：workspace 根一次装齐（根 lock 是唯一事实源）
+#
+# --ignore-scripts：npm 见到 better-sqlite3 的 binding.gyp 会隐式跑 node-gyp rebuild，
+# 而该包自带 prebuilds/ 产物、运行时优先加载它，编译是纯空转——在没有 Visual Studio
+# 的 Windows 上还会直接失败。跳过之后必须验一次真实加载，故紧接一条 probe：
+# 缺了它，跳过就从「省掉空转」变成「绕过检查」。
 ensure_deps() {
   [ -d "$PROJECT_DIR/node_modules" ] && return 0
-  echo "node_modules 不存在，执行 npm ci --no-audit --no-fund"
-  (cd "$PROJECT_DIR" && npm ci --no-audit --no-fund)
+  echo "node_modules 不存在，执行 npm ci --no-audit --no-fund --ignore-scripts"
+  (cd "$PROJECT_DIR" && npm ci --no-audit --no-fund --ignore-scripts)
+  (cd "$PROJECT_DIR" && node -e "
+    const D = require('better-sqlite3');
+    const db = new D(':memory:');
+    db.exec('create table t(a)');
+    db.prepare('insert into t values(1)').run();
+    if (db.prepare('select a from t').get().a !== 1) throw new Error('读写结果不符');
+    db.close();
+    console.log('原生模块校验通过：better-sqlite3 预编译产物可加载');
+  ")
 }
 
 echo "=== [1/6] 目录结构门禁（顶层白名单 + 源码面无测试 + 无运行期产物入库）==="

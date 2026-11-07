@@ -20,10 +20,36 @@ afterAll(() => server.close())
 
 const config: ConnectionConfig = { baseUrl: '', apiKey: 'test-key' }
 
+/** 合法信封的全部必需字段，调用方按需删掉一个来造漂移 */
+const bareOkEnvelope = {
+  status: 'ok',
+  code: 0,
+  message: 'Success',
+  data: { a: 1 },
+}
+
 describe('API 客户端（统一信封契约）', () => {
   it('解析成功信封返回 data', async () => {
     const data = await apiGet('/api/v1/overview', config)
     expect(data).toEqual(mockOverview)
+  })
+
+  it('信封缺 timestamp：判为协议错，不把 undefined 当成功数据往下传', async () => {
+    // 结构不符时若照常解包，调用方拿到的是 undefined 并在很远的地方崩，
+    // 排查时看不出根因是服务端少发了字段
+    server.use(http.get('*/api/v1/no-timestamp', () => HttpResponse.json(bareOkEnvelope)))
+    await expect(apiGet('/api/v1/no-timestamp', config)).rejects.toBeInstanceOf(NetworkError)
+    await expect(apiGet('/api/v1/no-timestamp', config)).rejects.toThrow(/不符合契约/)
+  })
+
+  it('错误信封缺 timestamp：不抛 ApiError，退回 HTTP 状态', async () => {
+    server.use(
+      http.get('*/api/v1/bad-error-envelope', () =>
+        HttpResponse.json({ status: 'error', code: 40103, message: 'expired' }, { status: 500 }),
+      ),
+    )
+    const promise = apiGet('/api/v1/bad-error-envelope', config)
+    await expect(promise).rejects.not.toBeInstanceOf(ApiError)
   })
 
   it('错误信封抛 ApiError（携带错误码与 HTTP 状态）', async () => {
@@ -279,7 +305,13 @@ describe('API 客户端双通道凭据（安全主线）', () => {
         sawRequest = true
         await gate
         return HttpResponse.json(
-          { status: 'error', code: 40103, message: 'session expired', details: null },
+          {
+            status: 'error',
+            code: 40103,
+            message: 'session expired',
+            details: null,
+            timestamp: new Date().toISOString(),
+          },
           { status: 401 },
         )
       }),

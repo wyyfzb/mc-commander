@@ -114,9 +114,15 @@ MANIFEST_STAGING="$(mktemp -t mc-commander-manifest.XXXXXX)"
 # 临时清单只在装包阶段有意义：并入正式清单后或安装中断时都必须消失，
 # 否则 /tmp 会留下一份写着「这台机器装了什么」的残件。
 PANEL_STOPPED=0
+# 回滚已接管服务重启时置 1：on_exit 若再 start 一次会把刚验证过就绪的服务再踢一遍
+CODE_RESTORED=0
 on_exit() {
   rm -f "${MANIFEST_STAGING:-}"
   if [ "${PANEL_STOPPED:-0}" -eq 1 ]; then
+    # 回滚分支已经自己重启并验过就绪，这里再 start 一次会把它刚拉起来的服务再踢一遍
+    if [ "${CODE_RESTORED:-0}" -eq 1 ]; then
+      return 0
+    fi
     warn "升级中断，正在把面板恢复运行..."
     systemctl start mc-commander 2>/dev/null || warn "自动恢复失败，请手动执行：systemctl start mc-commander"
   fi
@@ -1501,6 +1507,34 @@ if [ -n "$PREVIOUS_VERSION" ]; then
   log "已备份当前版本代码到 $CODE_BACKUP（升级失败时可回退）"
 fi
 
+# 把代码退回升级前的那一份并重启面板。
+#
+# 两处失败共用：依赖装好但原生模块加载不起来、服务没在超时内就绪。
+# 两处的失败形态不同，但「盘上是新代码、跑不起来」的补救动作是同一个——复制两份实现
+# 只会让其中一份慢慢腐烂。首次安装没有 CODE_BACKUP，此时无事可做（也不该假装回滚）。
+restore_code_backup() {
+  if [ -z "${CODE_BACKUP:-}" ] || [ ! -d "$CODE_BACKUP" ]; then
+    return 0
+  fi
+  CODE_RESTORED=1
+  echo ""
+  log "正在回退到升级前的版本（v${PREVIOUS_VERSION}）..."
+  for entry in src public mc-schemas package.json package-lock.json; do
+    [ -e "$CODE_BACKUP/$entry" ] || continue
+    rm -rf "${MC_COMMANDER_DIR:?}/$entry"
+    cp -a "$CODE_BACKUP/$entry" "$MC_COMMANDER_DIR/" 2>/dev/null || true
+  done
+  if command -v systemctl &>/dev/null; then
+    systemctl restart mc-commander 2>/dev/null || true
+  fi
+  if wait_until_ready >/dev/null 2>&1; then
+    log "已回退到 v${PREVIOUS_VERSION}，面板可用（本次升级未生效）"
+  else
+    warn "回退后服务仍未就绪，请查看日志：journalctl -u mc-commander -n 50"
+    warn "旧代码仍在 $CODE_BACKUP，可手工恢复：cp -a $CODE_BACKUP/. $MC_COMMANDER_DIR/"
+  fi
+}
+
 for entry in src public mc-schemas; do
   rm -rf "${MC_COMMANDER_DIR:?}/$entry"
 done
@@ -1514,14 +1548,39 @@ rm -rf "$TMP_TGZ" "$TMP_SUMS" "$TMP_EXTRACT"
 log "代码下载完成"
 fi  # SKIP_DOWNLOAD
 
-# 7. 安装编译工具（better-sqlite3 等原生模块需要）
-log "安装编译工具..."
-case "$PKG_MANAGER" in
-  apt) install_pkg build-essential python3 ;;
-  yum) install_pkg gcc-c++ make python3 ;;
-  dnf) install_pkg gcc-c++ make python3 ;;
-  apk) install_pkg build-base python3 ;;
-esac
+# 7. 原生模块：走包内预编译产物，不编译（故不装 build-essential / python3）
+#
+# better-sqlite3 的 npm 包自带 prebuilds/<platform>-<arch>.node，运行时
+# lib/binding.js 的 getPrebuildPath() 优先加载它，只有找不到时才回退 build/Release。
+# 也就是说正常安装路径下**从不需要编译器**。
+#
+# 之所以仍会触发 node-gyp：包内没有 install 脚本，npm 见到 binding.gyp 就隐式跑
+# `node-gyp rebuild`。上游用 binding.gyp 的 prebuild_exists 把它变成空 target，
+# 但 node-gyp 的 configure 阶段**先找 VS / 工具链、再读 binding.gyp**——顺序决定了
+# 这个空转在 Windows 上直接报错退出（找不到 Visual Studio），在 Linux/macOS 上则是
+# 装完编译器后真的什么都没编。两条路都是白付代价。
+#
+# 因此下面用 --ignore-scripts 跳过、再用一次真实加载把「跳过」变成「已验证」：
+# 编译成功不等于二进制能加载（ABI 不匹配、下载残缺都要到 require 才暴露）。
+check_native_modules() {
+  log "检查原生模块是否可加载（预编译产物，无需编译）..."
+  local probe out rc=0
+  probe='const D=require("better-sqlite3");const db=new D(":memory:");db.exec("create table t(a)");db.prepare("insert into t values(1)").run();if(db.prepare("select a from t").get().a!==1)throw new Error("读写结果不符");db.close();'
+  # 收走 node 的原始堆栈：失败时它只说明「哪一行没加载上」，而部署者要的是
+  # 「怎么办」。堆栈仅在 DEBUG=1 时回放，避免默认输出把真正的原因淹掉
+  out="$( (cd "$MC_COMMANDER_DIR" && node -e "$probe") 2>&1 )" || rc=$?
+  if [ "$rc" -eq 0 ]; then
+    log "原生模块可加载：better-sqlite3 读写正常"
+    return 0
+  fi
+  err "原生模块无法加载：预编译产物缺失或与当前 Node 版本不兼容"
+  [ "${DEBUG:-0}" = "1" ] && printf '%s\n' "$out" >&2
+  # 平台与 ABI 对不上时给出可执行动作，而不是只说「失败了」：prebuilds 只覆盖
+  # linux/darwin/win32 × x64/arm64，其余平台只能本地编译，需要工具链
+  err "当前平台 $(uname -s)/$(uname -m)、Node $(node -v)。若为 uncommon 平台，请自行安装编译工具后执行："
+  err "  cd $MC_COMMANDER_DIR && npm rebuild better-sqlite3"
+  return 1
+}
 
 # 8. 安装 npm 依赖（配置国内镜像加速）
 #
@@ -1530,8 +1589,6 @@ esac
 # 都会撞上不存在的模块而崩掉——用户在升级窗口里正好点了那个功能就中招。
 # 只在「升级」时停（首次安装还没有服务在跑），装完由后面的启动步骤拉起。
 log "安装 npm 依赖..."
-# 为 node-gyp 配置国内镜像源，避免从 nodejs.org 下载头文件超时
-export npm_config_node_mirror="https://npmmirror.com/mirrors/node/"
 
 # 升级路径：停掉正在跑的面板，给 npm ci 一个没有读者的窗口。
 # 服务由 systemd/pm2 托管，停掉不会影响已运行的 MC 实例（KillMode=process）。
@@ -1547,13 +1604,18 @@ fi
 # 用 npm ci 而非 npm install：严格按 lock 重建依赖树；升级时先清旧 node_modules，
 # 避免「半新半旧」的依赖树被 systemd 拉起来（可复现是产物带 lock 的全部意义）
 #
-# 包本体也走国内镜像：只给 node-gyp 配 node_mirror 时，npm 包仍从 registry.npmjs.org
-# 跨境直连，冷缓存实测 16.5 s，走 npmmirror 是 2.5 s。lock 里的 resolved 是
-# registry.npmjs.org，而 npm 只对**默认** registry 的地址做镜像改写，故必须显式
-# --registry 才生效；镜像站缺包或不可达时回退官方源，不让加速变成新的失败点。
+# 包本体也走国内镜像：npm 包默认从 registry.npmjs.org 跨境直连，冷缓存实测 16.5 s，
+# 走 npmmirror 是 2.5 s。lock 里的 resolved 是 registry.npmjs.org，而 npm 只对**默认**
+# registry 的地址做镜像改写，故必须显式 --registry 才生效；镜像站缺包或不可达时
+# 回退官方源，不让加速变成新的失败点。
 install_deps() {
   local registry="$1"
-  npm ci --omit=dev --registry="$registry"
+  # --ignore-scripts：跳过 npm 为 binding.gyp 隐式发起的 node-gyp rebuild——它编出来的
+  # 二进制运行时根本不加载（包内 prebuilds 优先），还要求目标机装整套编译工具链。
+  # 生产依赖里没有任何包需要 install 脚本（只有 macOS 专用的 optional 包 fsevents 有，
+  # 且它在 --omit=dev 下不参与），故跳过不会漏掉任何必要的构建步骤；
+  # 「真的能用」由紧随其后的 check_native_modules 实测，不是靠信任。
+  npm ci --omit=dev --ignore-scripts --registry="$registry"
 }
 if install_deps "https://registry.npmmirror.com"; then
   :
@@ -1563,6 +1625,17 @@ else
     err "npm 依赖安装失败（国内镜像与官方源均不可用）"
     exit 1
   }
+fi
+
+# 跳过编译后必须验证二进制真能加载：这是 --ignore-scripts 的安全前提，
+# 不是可选的自检。
+#
+# 失败时不能只 exit：on_exit 见 PANEL_STOPPED=1 会把面板「恢复运行」，而此时盘上
+# 是新代码 + 装坏的依赖，拉起来只会立刻崩。故先回滚代码再退出——否则用户看到的
+# 是「升级失败 + 面板再也起不来」，比不升级更糟。
+if ! check_native_modules; then
+  restore_code_backup || true
+  exit 1
 fi
 
 # 9. 生成/读取 .env 配置（API Key 首次部署自动生成，更新时保留原有Key）
@@ -2011,24 +2084,7 @@ if ! wait_until_ready; then
   fi
   # 升级失败要退回旧版本：只报「起不来」而把新代码留在盘上，用户重跑还是同一个
   # 坏现场。回滚后服务回到升级前的版本，用户至少还有一个能用的面板。
-  if [ -n "${CODE_BACKUP:-}" ] && [ -d "$CODE_BACKUP" ]; then
-    echo ""
-    log "正在回退到升级前的版本（v${PREVIOUS_VERSION}）..."
-    for entry in src public mc-schemas package.json package-lock.json; do
-      [ -e "$CODE_BACKUP/$entry" ] || continue
-      rm -rf "${MC_COMMANDER_DIR:?}/$entry"
-      cp -a "$CODE_BACKUP/$entry" "$MC_COMMANDER_DIR/" 2>/dev/null || true
-    done
-    if command -v systemctl &>/dev/null; then
-      systemctl restart mc-commander 2>/dev/null || true
-    fi
-    if wait_until_ready >/dev/null 2>&1; then
-      log "已回退到 v${PREVIOUS_VERSION}，面板可用（本次升级未生效）"
-    else
-      warn "回退后服务仍未就绪，请查看日志：journalctl -u mc-commander -n 50"
-      warn "旧代码仍在 $CODE_BACKUP，可手工恢复：cp -a $CODE_BACKUP/. $MC_COMMANDER_DIR/"
-    fi
-  fi
+  restore_code_backup
   echo ""
   exit 1
 fi

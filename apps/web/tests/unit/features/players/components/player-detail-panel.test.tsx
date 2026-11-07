@@ -141,7 +141,13 @@ describe('PlayerDetailPanel 回退详情端点失败', () => {
   it('请求成功：渲染玩家信息，不出现错误态', async () => {
     server.use(
       http.get(DETAIL_URL, () =>
-        HttpResponse.json({ status: 'ok', code: 0, data: makePlayer(), timestamp: 0 }),
+        HttpResponse.json({
+          status: 'ok',
+          code: 0,
+          message: 'Success',
+          data: makePlayer(),
+          timestamp: new Date().toISOString(),
+        }),
       ),
     )
     renderPanel()

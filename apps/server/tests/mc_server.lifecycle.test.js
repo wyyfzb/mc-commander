@@ -29,6 +29,25 @@ vi.mock('rcon-client', () => {
   return { Rcon };
 });
 
+// ── Java 自愈的候选来源必须可控 ──
+// `getAllJavaVersions()` 会扫 /usr/lib/jvm、C:/Program Files/Java、JAVA_HOME 与 PATH：
+// 让真实实现参与，用例的成败就取决于**跑测试的机器装没装满足要求的 Java**——
+// 本机没装 Java 17 时自愈找不到替代路径，直接抛「本机没有可用版本」，与自愈逻辑无关。
+// 这里把它固定成一个假候选，自愈的「选谁 / 写不写库」才成为被测对象本身。
+// 候选必须在磁盘上真实存在：自愈会用 `_isValidJavaExecutable` 过滤（其中含 existsSync），
+// 只给一个不存在的路径会被当成下一个坏候选而继续报「没有可用版本」。
+vi.mock('../src/utils/java-detector.js', async (importOriginal) => {
+  const actual = await importOriginal();
+  const pathMod = await import('node:path');
+  const osMod = await import('node:os');
+  const fsMod = await import('node:fs');
+  const binDir = pathMod.join(osMod.tmpdir(), 'mcs-test-fake-jre', 'bin');
+  fsMod.mkdirSync(binDir, { recursive: true });
+  const fake = pathMod.join(binDir, 'java');
+  if (!fsMod.existsSync(fake)) fsMod.writeFileSync(fake, '');
+  return { ...actual, getAllJavaVersions: vi.fn(() => [{ version: '21', path: fake }]) };
+});
+
 vi.mock('../src/db/index.js', () => ({
   InstanceModel: {
     getAll: vi.fn(() => []),

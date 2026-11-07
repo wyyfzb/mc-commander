@@ -519,7 +519,17 @@ describe('WebSocket 长任务（部署/升级）通知与补发', () => {
         isRunning: true,
         players: new Map(),
         tps: 20,
-        _performancePayload: () => ({ cpu: 12.5, memory: 1.2, tps: 20, mspt: 8 }),
+        _performancePayload: () => ({
+          cpu: 12.5,
+          memory: 1.2,
+          tps: 20,
+          mspt: 8,
+          worldTime: 1000,
+          worldDay: 3,
+          sleepingPlayers: 0,
+          sleepingPlayerNames: [],
+          awakePlayerNames: [],
+        }),
       });
 
       const ws = connect(wss);

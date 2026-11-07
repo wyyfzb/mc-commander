@@ -212,7 +212,17 @@ function expandGlob(pattern) {
   // 绝对模式必须以 '/' 起拼：pattern.split('/') 的首段是空串（代表根），
   // 从 '' 起拼会让 path.join('', 'usr') 丢掉根变成相对路径 'usr/...'，
   // 于是所有硬编码的绝对 glob（Linux/macOS 那几组）只在 cwd 恰为 '/' 时命中。
-  walk(0, pattern.startsWith('/') ? '/' : '');
+  //
+  // Windows 盘符是同一类问题：pattern 首段是 'D:' 时，path.join('', 'D:') 得到
+  // 'D:.'（盘符相对路径，不是 'D:\'），此后每段都拼在这条错路径上，existsSync
+  // 恒假——面板自供 JRE 的探测在 Windows 上永远命中不了。故盘符段单独作为起点。
+  const drive = /^[A-Za-z]:$/.exec(segments[0] || '');
+  if (drive) {
+    segments.shift();
+    walk(0, segments.length ? drive[0] + '/' : drive[0]);
+  } else {
+    walk(0, pattern.startsWith('/') ? '/' : '');
+  }
   return results;
 }
 

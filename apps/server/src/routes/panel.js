@@ -10,7 +10,14 @@ import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { Router } from 'express';
 import { asyncHandler } from '../utils/asyncHandler.js';
-import { success, error, ErrorCodes } from '../utils/response.js';
+import { error, ErrorCodes } from '../utils/response.js';
+import { validatedSuccess } from '../middleware/validate.js';
+import {
+  nullDataSchema,
+  panelDataResponseSchema,
+  panelRemovalPreviewSchema,
+  panelRuntimeStatusSchema,
+} from '@mc-commander/schemas';
 import { recordAudit, AuditActions } from '../utils/audit.js';
 import { logger } from '../utils/logger.js';
 import { AdminAccountModel, AdminRecoveryCodeModel } from '../db/index.js';
@@ -51,7 +58,7 @@ export function createPanelRoutes() {
   router.get(
     '/panel/data',
     asyncHandler(async (_req, res) => {
-      res.json(success({ items: surveyData() }, 'OK'));
+      res.json(validatedSuccess(panelDataResponseSchema, { items: surveyData() }, 'OK'));
     }),
   );
 
@@ -135,7 +142,7 @@ export function createPanelRoutes() {
         targetType: 'panel',
         targetId: 'panel',
       });
-      res.json(success(null, '面板已停止，数据全部保留'));
+      res.json(validatedSuccess(nullDataSchema, null, '面板已停止，数据全部保留'));
       // 响应发出后再停：先停会让用户拿不到这句确认，只看到连接中断
       setTimeout(() => {
         const child = spawn('sudo', args, { detached: true, stdio: 'ignore' });
@@ -220,7 +227,9 @@ export function createPanelRoutes() {
           .json(error(ErrorCodes.SERVER_ERROR, `无法启动更新流程：${raw || '未知原因'}`));
       }
 
-      res.json(success(null, '已开始更新，面板会短暂断开，完成后自动恢复'));
+      res.json(
+        validatedSuccess(nullDataSchema, null, '已开始更新，面板会短暂断开，完成后自动恢复'),
+      );
     }),
   );
 
@@ -314,7 +323,13 @@ export function createPanelRoutes() {
           .json(error(ErrorCodes.SERVER_ERROR, `无法启动迁移流程：${raw || '未知原因'}`));
       }
 
-      res.json(success(null, '已开始迁移，面板会暂停；完成后数据在新目录，失败会自动退回原目录'));
+      res.json(
+        validatedSuccess(
+          nullDataSchema,
+          null,
+          '已开始迁移，面板会暂停；完成后数据在新目录，失败会自动退回原目录',
+        ),
+      );
     }),
   );
 
@@ -326,7 +341,7 @@ export function createPanelRoutes() {
       const survey = surveyData();
       const account = AdminAccountModel.get();
       res.json(
-        success({
+        validatedSuccess(panelRemovalPreviewSchema, {
           items: survey,
           totpEnabled: Boolean(account?.totp_enabled),
           installDir: config.rootDir ?? process.env.MC_COMMANDER_DIR ?? '/opt/mc-commander',
@@ -386,7 +401,7 @@ export function createPanelRoutes() {
         return res.status(500).json(error(ErrorCodes.SERVER_ERROR, removalTriggerMessage(raw)));
       }
 
-      res.json(success(null, '已开始清理，完成后本页面会断开'));
+      res.json(validatedSuccess(nullDataSchema, null, '已开始清理，完成后本页面会断开'));
     }),
   );
 
@@ -425,7 +440,7 @@ export function createPanelRoutes() {
       }
 
       res.json(
-        success({
+        validatedSuccess(panelRuntimeStatusSchema, {
           current,
           latest,
           hasUpdate: Boolean(latest && latest !== current),
@@ -482,7 +497,13 @@ export function createPanelRoutes() {
           .json(error(ErrorCodes.SERVER_ERROR, `无法启动运行环境升级：${raw || '未知原因'}`));
       }
 
-      res.json(success(null, '已开始升级运行环境，面板会重启一次；失败会自动退回原版本'));
+      res.json(
+        validatedSuccess(
+          nullDataSchema,
+          null,
+          '已开始升级运行环境，面板会重启一次；失败会自动退回原版本',
+        ),
+      );
     }),
   );
 

@@ -199,7 +199,10 @@ describe('ensureJavaRuntime', () => {
     expect(fs.readFileSync(path.join(jreState.dir, '21', 'lib', 'modules'), 'utf-8')).toBe(
       'fake-modules',
     );
-    if (os.platform() !== 'win32') {
+    // 判据必须取**真实宿主平台**：本文件的 os.platform 被 mock 成被测代码想要的
+    // 平台（默认 linux），拿它判断「宿主有没有 POSIX 可执行位」永远是 linux ⇒
+    // 在 Windows 上照跑 chunkmod 断言，而 NTFS 上 mode 的 0o111 恒为 0。
+    if (process.platform !== 'win32') {
       expect(fs.statSync(javaPath).mode & 0o111).not.toBe(0);
     }
     // staging 不残留；进度从 0 起步、以 1 收尾
@@ -242,8 +245,10 @@ describe('ensureJavaRuntime', () => {
 
     const linkPath = path.join(jreState.dir, '21', 'legal', 'java.compiler', 'LICENSE');
     expect(fs.lstatSync(linkPath).isSymbolicLink()).toBe(true);
-    // 目标必须原样保留相对字符串：解析成绝对路径后同一份 JRE 换目录就失效
-    expect(fs.readlinkSync(linkPath)).toBe('../java.base/LICENSE');
+    // 目标必须原样保留相对字符串：解析成绝对路径后同一份 JRE 换目录就失效。
+    // 只比较「是不是相对、是不是同一目标」——Windows 的 readlink 把分隔符写成 '\'，
+    // 那是宿主的路径表示法，不是本实现的选择。
+    expect(fs.readlinkSync(linkPath).split(path.sep).join('/')).toBe('../java.base/LICENSE');
     expect(fs.readFileSync(linkPath, 'utf-8')).toBe('license-text');
     expect(fs.readFileSync(javaPath, 'utf-8')).toBe('fake-java-binary');
   });
@@ -289,7 +294,8 @@ describe('ensureJavaRuntime', () => {
 
     const linkPath = path.join(jreState.dir, '21', 'legal', 'java.compiler', 'LICENSE');
     expect(fs.lstatSync(linkPath).isSymbolicLink()).toBe(true);
-    expect(fs.readlinkSync(linkPath)).toBe('../java.base/MISSING');
+    // 分隔符同前一条：Windows 的 readlink 写 '\'，比较前归一
+    expect(fs.readlinkSync(linkPath).split(path.sep).join('/')).toBe('../java.base/MISSING');
   });
 
   it('单个文件响应体中断 → 自动重试该文件一次后成功', async () => {

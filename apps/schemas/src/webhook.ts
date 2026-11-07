@@ -55,6 +55,9 @@ export const webhookTestResultSchema = z.object({
   body: z.string().nullable(),
 })
 
+/** GET /webhooks/event-types 的响应体：可订阅事件白名单 */
+export const webhookEventTypesSchema = z.array(z.string())
+
 export type Webhook = z.infer<typeof webhookSchema>
 export type WebhookCreatePayload = z.infer<typeof webhookCreatePayloadSchema>
 export type WebhookDelivery = z.infer<typeof webhookDeliverySchema>

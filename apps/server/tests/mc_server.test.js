@@ -18,6 +18,17 @@ vi.mock('rcon-client', () => ({
   Rcon: { connect: vi.fn() },
 }));
 
+// 构造函数末尾会 fire-and-forget 调用 _detectPublicIp()（阿里云元数据 + ifconfig.me）。
+// 不桩住 fetch 的话，每构造一个实例就真的发两次外部请求，用例因此依赖外网；
+// undici 还会为每个请求在事件循环上留一个连接对象，实例一多就把后续用例拖慢。
+// 桩成「探测失败」即可——本文件没有任何用例依赖公网地址。
+vi.stubGlobal(
+  'fetch',
+  vi.fn(async () => {
+    throw new Error('network disabled in tests');
+  }),
+);
+
 vi.mock('../src/db/index.js', () => ({
   InstanceModel: {
     getAll: vi.fn(() => []),
@@ -836,6 +847,46 @@ describe('MCServerManager', () => {
   });
 
   describe('MCServerInstance - 世界出生点读取', () => {
+    it('level.dat 没有 spawn 字段时立即返回 null，不陷入 getter 递归', () => {
+      // _readWorldSpawnFromLevelDat 与 get _worldSpawn 会互相调用：getter 检测到
+      // level.dat 字节变化就回调该方法，而该方法若读 this._worldSpawn 就会再次进
+      // getter。没有 spawn 字段时 _worldSpawnRaw 永远写不进去，getter 每次判定
+      // 「字节变了」⇒ 无限递归到栈耗尽。
+      // 判据数的是 fs.existsSync 的调用次数而非耗时：递归版同样返回 null，只有
+      // 「读了几次」能区分两者，且该计数与机器快慢无关——快机器上递归到栈耗尽也可能
+      // 只花几百毫秒，时间阈值会在那里失去判别力。
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-spawn-none-'));
+      writeNbtFile(path.join(tmpDir, 'world', 'level.dat'), {
+        type: 'compound',
+        name: '',
+        value: { Data: { type: 'compound', value: { raining: { type: 'byte', value: 1 } } } },
+      });
+      const instance = manager.createInstance({
+        id: 'spawn-none',
+        name: 'Spawn None',
+        jarFile: 'server.jar',
+        serverPath: tmpDir,
+      });
+      instance.properties = { 'level-name': 'world' };
+
+      const realExistsSync = fs.existsSync;
+      let reads = 0;
+      const spy = vi.spyOn(fs, 'existsSync').mockImplementation((p) => {
+        if (typeof p === 'string' && p.endsWith('level.dat')) reads++;
+        return realExistsSync(p);
+      });
+      try {
+        expect(instance._readWorldSpawnFromLevelDat()).toBeNull();
+      } finally {
+        spy.mockRestore();
+      }
+      // 一次正常解析只查一次；递归版每层都查一次，会到上千
+      expect(reads).toBeLessThan(5);
+      // 缓存不能被写成「读过了」——文件后续补上 spawn 字段时仍要能读到
+      expect(instance._worldSpawnRaw).toBeFalsy();
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    });
+
     it('从旧版 level.dat 的 Data.SpawnX/SpawnY/SpawnZ 读取出生点', () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-spawn-'));
       writeNbtFile(path.join(tmpDir, 'world', 'level.dat'), {

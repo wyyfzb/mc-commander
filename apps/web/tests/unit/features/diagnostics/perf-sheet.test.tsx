@@ -103,14 +103,14 @@ function stubPerfFetch(
     if (u.includes('/perf/snapshot')) return Promise.resolve(handler())
     if (/\/api\/v1\/instances\/[^/]+$/.test(u)) {
       return Promise.resolve(
-        new Response(JSON.stringify({ status: 'ok', code: 0, data: status }), {
+        new Response(JSON.stringify(okEnvelope(status)), {
           status: 200,
           headers: { 'content-type': 'application/json' },
         }),
       )
     }
     return Promise.resolve(
-      new Response(JSON.stringify({ status: 'ok', code: 0, data: null }), {
+      new Response(JSON.stringify(okEnvelope(null)), {
         status: 200,
         headers: { 'content-type': 'application/json' },
       }),
@@ -140,7 +140,7 @@ function stubStatusFailure() {
       )
     }
     return Promise.resolve(
-      new Response(JSON.stringify({ status: 'ok', code: 0, data: null }), {
+      new Response(JSON.stringify(okEnvelope(null)), {
         status: 200,
         headers: { 'content-type': 'application/json' },
       }),
@@ -150,8 +150,17 @@ function stubStatusFailure() {
   return fetchMock
 }
 
+/**
+ * 成功信封。`message` 与 `timestamp` 是契约必填项：前端在请求边界会做信封
+ * 结构校验，缺字段的响应会被判成「结构不符合契约」并抛网络错误——
+ * 夹具少写这两个键时，失败会以「网络错误」的形式出现，与真实原因相距很远。
+ */
+function okEnvelope(data: unknown) {
+  return { status: 'ok', code: 0, message: 'ok', data, timestamp: new Date().toISOString() }
+}
+
 function okResponse(data: PerfSnapshotResponse) {
-  return new Response(JSON.stringify({ status: 'ok', code: 0, data }), {
+  return new Response(JSON.stringify(okEnvelope(data)), {
     status: 200,
     headers: { 'content-type': 'application/json' },
   })

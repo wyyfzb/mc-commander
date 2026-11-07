@@ -23,11 +23,12 @@ import { createHttpsRoutes } from './https.js';
 import { createPanelRoutes } from './panel.js';
 import { createPreferenceRoutes } from './preferences.js';
 import { success } from '../utils/response.js';
+import { validatedSuccess } from '../middleware/validate.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import config from '../config.js';
 import { notFoundHandler } from '../middleware/error_handler.js';
 import { requireAdminRole } from '../middleware/auth.js';
-import { compareVersions, parseVersion } from '@mc-commander/schemas';
+import { compareVersions, parseVersion, updateCheckResultSchema } from '@mc-commander/schemas';
 
 /** 版本号单一来源：package.json（/health、check-update、启动横幅共用，杜绝三处硬编码漂移） */
 const SERVER_VERSION = JSON.parse(
@@ -91,7 +92,14 @@ export function createApiV1Router(serverManager, taskScheduler, tlsState) {
     asyncHandler(async (req, res) => {
       const current = SERVER_VERSION;
       const offline = () =>
-        res.json(success({ current, latest: null, hasUpdate: false, offline: true }));
+        res.json(
+          validatedSuccess(updateCheckResultSchema, {
+            current,
+            latest: null,
+            hasUpdate: false,
+            offline: true,
+          }),
+        );
 
       const probed = await Promise.all(
         SOURCES.map(async (host) => {
@@ -117,7 +125,7 @@ export function createApiV1Router(serverManager, taskScheduler, tlsState) {
       if (!found.length) return offline();
       const best = found.reduce((a, b) => ((compareVersions(b.tag, a.tag) ?? 0) > 0 ? b : a));
       res.json(
-        success({
+        validatedSuccess(updateCheckResultSchema, {
           current,
           latest: best.tag,
           hasUpdate: (compareVersions(best.tag, current) ?? 0) > 0,

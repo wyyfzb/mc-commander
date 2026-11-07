@@ -132,7 +132,12 @@ describe('UpdateCheckSection · 立即更新', () => {
         payload = await request.json()
         if (status !== 200) {
           return HttpResponse.json(
-            { status: 'error', code: 50000, message: '面板没有自更新的权限' },
+            {
+              status: 'error',
+              code: 50000,
+              message: '面板没有自更新的权限',
+              timestamp: new Date().toISOString(),
+            },
             { status },
           )
         }

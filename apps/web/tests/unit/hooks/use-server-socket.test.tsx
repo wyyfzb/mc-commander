@@ -539,7 +539,7 @@ describe('useServerSocket（WS 单例治理）', () => {
 
     // 漂移的载荷不能整条消失：留痕 + 按宽松路径处置（非 progress ⇒ 终态：清进度、进通知层）
     expect(warn).toHaveBeenCalledWith(
-      '[ws] worldUpgrade 载荷不符合契约，按宽松读取处置',
+      '[ws] worldUpgrade 载荷不符合契约，按宽松读取处置：',
       expect.anything(),
     )
     expect(useWorldUpgradeProgressStore.getState().progress['i-1']).toBeUndefined()
@@ -576,7 +576,7 @@ describe('useServerSocket（WS 单例治理）', () => {
       // 契约不认的载荷要留痕，同时**不能整条丢掉**（宽松路径照旧处置）
       if (expectsContractWarning) {
         expect(warn).toHaveBeenCalledWith(
-          '[ws] worldUpgrade 载荷不符合契约，按宽松读取处置',
+          '[ws] worldUpgrade 载荷不符合契约，按宽松读取处置：',
           expect.anything(),
         )
       } else {

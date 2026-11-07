@@ -20,7 +20,7 @@ import { useUiStore } from '@/stores/ui'
 import { sessionAppliesToPanel } from '@/lib/mc-connection'
 import type { InstanceSummary } from '@/api/types'
 import type { Player, UpgradeStage, WsMessage } from '@/api/types'
-import { wsWorldUpgradePayloadSchema } from '@mc-commander/schemas'
+import { validateWsPayload } from '@/api/ws-payload-validation'
 
 /**
  * useServerSocket —— WS 单例 hook
@@ -111,6 +111,9 @@ export function useServerSocket(instanceId: string | null) {
     let disposed = false
 
     const handleMessage = (msg: WsMessage) => {
+      // 入口统一观测一次载荷结构：只告警不丢消息。丢弃会把「服务端改了字段」
+      // 表现成「功能偶发消失」，而下面的兜底读取本来就是为字段缺失准备的
+      validateWsPayload(msg.type, msg.data)
       const data = (msg.data ?? {}) as Record<string, unknown>
 
       // 通知分发：信封 eventId（服务端 notification_events 自增 id）统一带上，
@@ -499,16 +502,11 @@ export function useServerSocket(instanceId: string | null) {
         // （started / finished / failed）才交回通知层——见 lib/notifications.ts。
         case 'worldUpgrade': {
           const data = msg.data as Record<string, unknown>
-          // 按契约解析，但**不因为解析失败就整条丢掉**：本分支存在的意义就是让进度可见，
-          // 静默丢弃会把「服务端改了字段」表现成「进度条有时不出现」。故失败时照旧按宽松读取
-          // 处置，并留一条痕给出定位线索。
-          const parsed = wsWorldUpgradePayloadSchema.safeParse(msg.data)
-          if (!parsed.success) {
-            console.warn('[ws] worldUpgrade 载荷不符合契约，按宽松读取处置', parsed.error.issues)
-          }
-          const state = parsed.success ? parsed.data.state : String(data.state ?? '')
+          // 结构告警已在入口统一做过（见 handleMessage 顶部），这里只按宽松读取取用：
+          // 解析失败时仍要尽力显示进度，否则「服务端改了字段」表现为「进度条有时不出现」
+          const state = String(data.state ?? '')
           if (state === 'progress') {
-            const raw = parsed.success ? parsed.data.progress : data.progress
+            const raw = data.progress
             // 判据必须是 typeof number：契约允许 progress 为 null（零参通知的 params 整个缺席
             // 时服务端就发 null），而 `Number(null) === 0` 会被当成合法的 0% 渲染出一条恒空的条。
             // 量纲（0..1 分数 → 百分数）在 applyWorldUpgradeFraction 里只换算一次。

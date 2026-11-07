@@ -51,11 +51,14 @@ describe('LastOutputDialog', () => {
       http.get('*/api/v1/instances/:id', () =>
         HttpResponse.json({
           status: 'ok',
+          code: 0,
+          message: 'Success',
           data: {
             ...mockInstanceStatus,
             lastOutput:
               '[12:00:01] [Server thread/ERROR]: Failed to start server\n[12:00:02] Done (1.2s)!',
           },
+          timestamp: new Date().toISOString(),
         }),
       ),
     )
@@ -82,7 +85,10 @@ describe('LastOutputDialog', () => {
         if (fail) return new HttpResponse(null, { status: 500 })
         return HttpResponse.json({
           status: 'ok',
+          code: 0,
+          message: 'Success',
           data: { ...mockInstanceStatus, lastOutput: 'recovered' },
+          timestamp: new Date().toISOString(),
         })
       }),
     )
@@ -100,7 +106,13 @@ describe('LastOutputDialog', () => {
   it('点击关闭按钮复位 ui store', async () => {
     server.use(
       http.get('*/api/v1/instances/:id', () =>
-        HttpResponse.json({ status: 'ok', data: { ...mockInstanceStatus, lastOutput: 'x' } }),
+        HttpResponse.json({
+          status: 'ok',
+          code: 0,
+          message: 'Success',
+          data: { ...mockInstanceStatus, lastOutput: 'x' },
+          timestamp: new Date().toISOString(),
+        }),
       ),
     )
     const user = userEvent.setup()
@@ -117,12 +129,15 @@ describe('LastOutputDialog', () => {
       http.get('*/api/v1/instances/:id', () =>
         HttpResponse.json({
           status: 'ok',
+          code: 0,
+          message: 'Success',
           // 虚构长 JSON 行（如 /give 附魔 NBT 回显）：不折行即横向滚动、行首滚出视野
           data: {
             ...mockInstanceStatus,
             lastOutput:
               '{"id":"minecraft:diamond_sword","components":{"minecraft:enchantments":{"levels":{"minecraft:sharpness":255}}}}',
           },
+          timestamp: new Date().toISOString(),
         }),
       ),
     )

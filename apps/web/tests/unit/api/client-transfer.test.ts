@@ -171,7 +171,13 @@ describe('apiDownloadFile · 错误传播', () => {
     server.use(
       http.get('*/api/v1/dl', () =>
         HttpResponse.json(
-          { status: 'error', code: 40103, message: 'session expired', details: null },
+          {
+            status: 'error',
+            code: 40103,
+            message: 'session expired',
+            details: null,
+            timestamp: new Date().toISOString(),
+          },
           { status: 401, headers: { 'Content-Type': 'application/json' } },
         ),
       ),
@@ -198,7 +204,13 @@ describe('apiDownloadFile · 错误传播', () => {
     server.use(
       http.get('*/api/v1/dl', () =>
         HttpResponse.json(
-          { status: 'error', code: 40103, message: 'session expired', details: null },
+          {
+            status: 'error',
+            code: 40103,
+            message: 'session expired',
+            details: null,
+            timestamp: new Date().toISOString(),
+          },
           { status: 401, headers: { 'Content-Type': 'application/json' } },
         ),
       ),

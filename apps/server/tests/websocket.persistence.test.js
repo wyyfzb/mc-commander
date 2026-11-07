@@ -150,13 +150,29 @@ describe('WebSocket 通知持久化与断线补齐', () => {
     flushNotificationEvents();
     expect(fakeDb.inserted.length).toBe(1);
 
-    // 高频快照（无 event 字段）：不落库
-    serverManager.emit('instance:status', { instanceId: 's1', isRunning: true, tps: 20 });
+    // 高频快照（无 event 字段）：不落库。字段与 wsStatusSnapshotSchema 同构——
+    // 夹具缺字段会让「快照形状」的判定与契约漂移各自演化
+    serverManager.emit('instance:status', {
+      instanceId: 's1',
+      status: 'running',
+      isRunning: true,
+      players: [],
+      tps: 20,
+      msmpPush: false,
+    });
     flushNotificationEvents();
     expect(fakeDb.inserted.length).toBe(1);
 
-    // 高频快照（event 不在跃迁集合）：不落库
-    serverManager.emit('instance:status', { instanceId: 's1', event: 'performance', cpu: 50 });
+    // 再一条快照形状（值不同）：同样不落库——落库判据是「有没有跃迁事件」，
+    // 不是「载荷长什么样」。夹具按快照的真实形状给，不用虚构的 event 值冒充
+    serverManager.emit('instance:status', {
+      instanceId: 's1',
+      status: 'stopped',
+      isRunning: false,
+      players: [],
+      tps: null,
+      msmpPush: false,
+    });
     flushNotificationEvents();
     expect(fakeDb.inserted.length).toBe(1);
   });

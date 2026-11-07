@@ -13,7 +13,7 @@ import {
   resolvePurpurDownload,
 } from '../services/loader-upstreams.js';
 import config from '../config.js';
-import { success, error, ErrorCodes, AppError } from '../utils/response.js';
+import { error, ErrorCodes, AppError } from '../utils/response.js';
 import { getRecommendedJavaVersion } from '../utils/java-detector.js';
 import { ensureJavaRuntime } from '../services/java-runtime.service.js';
 import { readJarVersionInfo } from '../services/mc-server/jar-version.js';
@@ -32,6 +32,8 @@ import {
   deployCancelRequestSchema,
   deployCancelResponseSchema,
   deployStatusResponseSchema,
+  deployResultSchema,
+  versionsResponseSchema,
 } from '@mc-commander/schemas';
 import { validateBody, validatedSuccess } from '../middleware/validate.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
@@ -424,13 +426,15 @@ export function createServerJarRoutes(serverManager) {
       try {
         if (type === 'paper') {
           const versions = await getPaperVersions();
-          return res.json(success({ type: 'paper', versions }));
+          return res.json(validatedSuccess(versionsResponseSchema, { type: 'paper', versions }));
         }
 
         if (type === 'vanilla') {
           // 与升级共用同一实现；只认 release（快照不进部署选项）
           const releases = await listVanillaReleases();
-          return res.json(success({ type: 'vanilla', versions: releases }));
+          return res.json(
+            validatedSuccess(versionsResponseSchema, { type: 'vanilla', versions: releases }),
+          );
         }
 
         if (type === 'fabric') {
@@ -447,7 +451,13 @@ export function createServerJarRoutes(serverManager) {
               .map((v) => v.version)
               .slice(0, 10);
           } catch {}
-          return res.json(success({ type: 'fabric', versions: versions.slice(0, 30), loaders }));
+          return res.json(
+            validatedSuccess(versionsResponseSchema, {
+              type: 'fabric',
+              versions: versions.slice(0, 30),
+              loaders,
+            }),
+          );
         }
 
         if (type === 'forge') {
@@ -470,11 +480,16 @@ export function createServerJarRoutes(serverManager) {
             .filter((v) => /^\d+(\.\d+)*$/.test(v))
             .reverse()
             .slice(0, 30);
-          return res.json(success({ type: 'forge', versions }));
+          return res.json(validatedSuccess(versionsResponseSchema, { type: 'forge', versions }));
         }
 
         if (type === 'purpur') {
-          return res.json(success({ type: 'purpur', versions: await listPurpurVersions() }));
+          return res.json(
+            validatedSuccess(versionsResponseSchema, {
+              type: 'purpur',
+              versions: await listPurpurVersions(),
+            }),
+          );
         }
 
         // 其余类型不再委托库：部署契约只允许 vanilla/paper/fabric/forge/purpur，
@@ -891,7 +906,8 @@ export function createServerJarRoutes(serverManager) {
         logger.info(`Instance ${instanceId} deployed successfully`);
 
         res.json(
-          success(
+          validatedSuccess(
+            deployResultSchema,
             {
               id: instanceId,
               name: instanceConfig.name,

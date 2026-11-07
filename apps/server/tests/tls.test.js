@@ -101,7 +101,10 @@ suite('services/tls 证书生命周期', () => {
     expect(r.reissued).toBe(false);
   });
 
-  it('私钥落 0600、证书 0644（私钥可读即可冒充面板）', () => {
+  // Windows 没有 POSIX 权限位：NTFS 上 statSync().mode 恒为 0666，落盘时设的
+  // 0600/0644 不体现为 mode 差异（私钥保护在那里靠 ACL，不是 mode）。这条断言
+  // 在 Windows 上测的是宿主有没有 chmod 语义，而不是本实现对不对。
+  it.skipIf(process.platform === 'win32')('私钥落 0600、证书 0644（私钥可读即可冒充面板）', () => {
     const mode = (f) => fs.statSync(path.join(cert.getTlsDir(), f)).mode & 0o777;
     expect(mode('ca.key')).toBe(0o600);
     expect(mode('server.key')).toBe(0o600);

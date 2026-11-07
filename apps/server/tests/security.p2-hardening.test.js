@@ -73,7 +73,7 @@ beforeEach(() => {
 // 超时余量：本 describe 含 scrypt(N=131072) 哈希/校验（单次实测 ~270ms，成本由 N 决定）。
 // 5s 默认值按空载耗时设定，并行争抢下没有余量（本批同类用例实测 5.16s 越线）；
 // 显式放宽到本仓 15s 口径——scrypt 强度不因测试下调。
-describe(' scrypt 成本参数（N=2^17）', { timeout: 15_000 }, () => {
+describe('scrypt 成本参数（N=2^17）', { timeout: 15_000 }, () => {
   it('新哈希使用 N=131072 自描述参数', () => {
     const stored = hashPassword('some-password-1');
     expect(stored).toMatch(/^scrypt\$131072\$8\$/);
@@ -117,7 +117,7 @@ describe(' scrypt 成本参数（N=2^17）', { timeout: 15_000 }, () => {
 
 // ──：safeEqual SHA-256 归一化 ──
 
-describe(' safeEqual 归一化恒时比较', () => {
+describe('safeEqual 归一化恒时比较', () => {
   it('等值 true / 不等 false', () => {
     expect(safeEqual('same-value', 'same-value')).toBe(true);
     expect(safeEqual('value-a', 'value-b')).toBe(false);
@@ -138,7 +138,7 @@ describe(' safeEqual 归一化恒时比较', () => {
 
 // ──：认证前 JSON body 1MB（413 语义） ──
 
-describe(' body 限制与 413 映射', () => {
+describe('body 限制与 413 映射', () => {
   it('entity.too.large → 413（errorHandler 明确语义，不再落 500）', async () => {
     const mini = express();
     mini.use(express.json({ limit: '1kb' }));
@@ -163,7 +163,7 @@ describe(' body 限制与 413 映射', () => {
 
 // ──：会话生命周期 ──
 
-describe(' 会话 30 天绝对过期', () => {
+describe('会话 30 天绝对过期', () => {
   function seedSession({ createdAtOffsetMs = 0, expiresInMs = 60_000 } = {}) {
     const token = generateSessionToken();
     // production 同口径：CURRENT_TIMESTAMP 的无时区 UTC 串（写 ISO 会让裸解析
@@ -237,7 +237,7 @@ describe(' 会话 30 天绝对过期', () => {
   });
 });
 
-describe(' 会话并发上限（每用户 5 条挤最旧）', () => {
+describe('会话并发上限（每用户 5 条挤最旧）', () => {
   it('enforceLimit：保留最近活跃 5 条，挤掉最旧', () => {
     const ids = [];
     for (let i = 0; i < 7; i++) {

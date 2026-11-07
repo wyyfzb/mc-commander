@@ -38,7 +38,7 @@ jobs:
           node-version: 24
           cache: npm
           cache-dependency-path: package-lock.json
-      - run: npm ci
+      - run: npm ci --ignore-scripts
       # workspace 根（安装一次覆盖三包 + Biome）。
       # 只查 formatter，不含 lint——lint 由下方各包的 oxlint job 承担；
       # 格式化范围与排除项（dist/public/coverage/e2e 产物/.ai/锁文件，以及 CSS 与 Markdown）
@@ -123,7 +123,7 @@ jobs:
           node-version: 24
           cache: npm
           cache-dependency-path: package-lock.json
-      - run: npm ci
+      - run: npm ci --ignore-scripts
         working-directory: .
       - run: npm run lint -w apps/schemas
       # 覆盖率阈值配在 vitest.config.js，由各包自己判——不汇总到单独 job，
@@ -156,11 +156,27 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
       # workspace 根一次安装（根 lock 是唯一事实源）
-      - run: npm ci
+      # --ignore-scripts：跳过 npm 见到 binding.gyp 就隐式发起的 node-gyp rebuild。
+      # better-sqlite3 自带 prebuilds/<platform>-<arch>.node，运行时优先加载它，
+      # 正常路径下从不需要编译器；而 node-gyp 的 configure 阶段先找工具链再读
+      # binding.gyp，上游「有预编译就空转」的设计在 Windows 上根本到不了。
+      # 跳过必须配一次真实加载才算数——编译成功也不等于二进制能加载（ABI/残缺）。
+      - run: npm ci --ignore-scripts
         working-directory: .
-        # 服务端经 workspace 链接消费契约包产物（main → apps/schemas/dist/index.js），
-        # 故先建 dist——这一步就是「服务端不会吃到陈旧契约」的 CI 保证
+      # 服务端经 workspace 链接消费契约包产物（main → apps/schemas/dist/index.js），
+      # 故先建 dist——这一步就是「服务端不会吃到陈旧契约」的 CI 保证
       - run: npm run build -w apps/schemas
+      - name: 断言原生模块可加载
+        run: |
+          node -e "
+            const D = require('better-sqlite3');
+            const db = new D(':memory:');
+            db.exec('create table t(a)');
+            db.prepare('insert into t values(1)').run();
+            if (db.prepare('select a from t').get().a !== 1) throw new Error('读写结果不符');
+            db.close();
+            console.log('better-sqlite3 预编译产物可加载，读写正常');
+          "
       - run: npm run lint -w apps/server
       - run: npm run test:coverage -w apps/server
 
@@ -178,7 +194,7 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
       # workspace 根一次安装（根 lock 是唯一事实源）
-      - run: npm ci
+      - run: npm ci --ignore-scripts
         working-directory: .
       - run: npm run lint -w apps/web
       - run: npm run test:coverage -w apps/web
@@ -200,7 +216,7 @@ jobs:
           node-version: 24
           cache: npm
           cache-dependency-path: package-lock.json
-      - run: npm ci
+      - run: npm ci --ignore-scripts
         working-directory: .
       # build 内含 tsc -b（类型检查），产物供 preview e2e 复用（E2E_SERVER=preview）
       - run: npm run build -w apps/web

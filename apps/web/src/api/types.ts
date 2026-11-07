@@ -75,9 +75,15 @@ export type {
   WsPerformancePayload,
   WsLogPayload,
   WsStatusEventPayload,
-  WsPlayerEventPayload,
+  WsPlayerDeathPayload,
+  WsPlayerJoinPayload,
+  WsPlayerLeavePayload,
+  WsPlayerRespawnPayload,
+  WsPlayerChatPayload,
+  WsPlayerSleepPayload,
+  WsAchievementPayload,
   WsWeatherPayload,
-  WsBackupPayload,
+  WsBackupLifecyclePayload,
 } from '@mc-commander/schemas'
 
 // ── 备份 ──

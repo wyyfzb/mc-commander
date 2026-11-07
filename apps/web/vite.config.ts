@@ -11,19 +11,22 @@ import pkg from './package.json' with { type: 'json' }
 // 开发期经 proxy 转发规避跨域；生产 M7 由 Express 同源托管
 const proxyTarget = process.env.VITE_PROXY_TARGET || 'http://localhost:25566'
 
-// 纯逻辑用例（不碰 DOM/RTL，且**传递依赖**也不碰）：改跑 `node` 环境，省下每文件的 jsdom 构建
-// 与 jest-dom/RTL setup 导入 —— jsdom 环境构建是全量耗时大头（2026-09-15 实测环境累计 ~1046s、
-// setup ~306s）。维护规则：新增纯逻辑用例把路径加进来；若在 node 下报「x is not defined」就把它
-// 移回 dom 项目（失败是**明确报错**，不会静默跳过）。stores 域的 3 个用例暂不放入
-// （其 persist/localStorage 依赖经 jsdom 才成立）。
+// 纯逻辑用例（不碰 DOM/RTL，且**传递依赖**也不碰）：改跑 `node` 环境。
+// jsdom 项目的成本主要不是 DOM 本身（单个窗口建+关约 10ms），而是**每个文件的固定开销**：
+// 同样 163 个空测试文件，jsdom 项目 130s，换成不做任何事的 environment 只要 14s；差值平摊到
+// 每个文件约 0.7s，与文件里跑什么无关。包内优化（少渲染、少交互）动不到这笔钱——把用例移出
+// dom 项目是唯一能让它对这批文件失效的手段。
+// 维护规则：新增纯逻辑用例把路径加进来；若在 node 下报「x is not defined」就把它
+// 移回 dom 项目（失败是**明确报错**，不会静默跳过）。stores 域里依赖 persist/localStorage
+// 的用例仍留在 dom 项目：那些 store 在 import 期就访问 localStorage，node 下没有该全局。
 const NODE_ENV_TESTS = [
   'tests/unit/token-integrity.test.ts',
   // 字体子集覆盖：只读 woff2 字节（自带 cmap 解析），不碰 DOM
   'tests/unit/font-subset.test.ts',
   'tests/unit/api/errors.test.ts',
   // 注意：`tests/unit/api/{audit,files,files-enhanced}` **不能**放这里 —— 它们用相对 URL
-  // （`/api/v1/...`）调 fetch，需要 jsdom 提供的 base URL，在 node 下会报
-  // `TypeError: Failed to parse URL from /api/...`（2026-09-15 实测，已移回 dom 项目）。
+  // （`/api/v1/...`）调 fetch，需要 jsdom 提供的 base URL；node 下没有 base URL，
+  // 会报 `TypeError: Failed to parse URL from /api/...`
   'tests/unit/api/players.test.ts',
   'tests/unit/api/tasks.test.ts',
   'tests/unit/api/world.test.ts',
@@ -54,6 +57,29 @@ const NODE_ENV_TESTS = [
   'tests/unit/lib/tailwind-merge.test.ts',
   'tests/unit/lib/terminal-log.test.ts',
   'tests/unit/support/fixtures.test.ts',
+  // ── 纯逻辑（传递依赖也不碰 DOM/浏览器 API）──
+  'tests/unit/features/audit/audit-export.test.ts',
+  'tests/unit/features/players/op-labels.test.ts',
+  'tests/unit/features/players/player-export.test.ts',
+  'tests/unit/layouts/safe-command.test.ts',
+  'tests/unit/lib/data-table-hygiene.test.ts',
+  'tests/unit/lib/instance-hue.test.ts',
+  'tests/unit/lib/instance-label.test.ts',
+  'tests/unit/lib/instance-memory.test.ts',
+  'tests/unit/lib/mc-data.test.ts',
+  'tests/unit/lib/mc-datapack.test.ts',
+  'tests/unit/lib/mc-deploy.fallback-versions.test.ts',
+  'tests/unit/lib/mc-item-versions.test.ts',
+  'tests/unit/lib/mc-tps.test.ts',
+  'tests/unit/lib/mc-version.test.ts',
+  'tests/unit/lib/platform.test.ts',
+  'tests/unit/lib/query-phase.test.ts',
+  'tests/unit/stores/deploy-store-terminal.test.ts',
+  'tests/unit/stores/server-phase.test.ts',
+  'tests/unit/stores/server-ws.test.ts',
+  'tests/unit/stores/terminal.test.ts',
+  'tests/unit/stores/upgrade.test.ts',
+  'tests/unit/stores/world-upgrade-progress.test.ts',
 ]
 const DOM_EXCLUDE = ['e2e/**', 'node_modules/**']
 
@@ -186,9 +212,14 @@ export default defineConfig({
       include: ['src/**/*.{ts,tsx}'],
       exclude: ['tests/**'],
       // 阈值由本包自己判，不做跨包合计——合计判阈值会让一个包掉到 30%、
-      // 另一个 95% 也照样通过
+      // 另一个 95% 也照样通过。
+      // 四维全判：只看 statements 会放过「分支只走了一半」的情况——条件的一侧从未
+      // 执行，语句覆盖率依然可以是满的。数值取实测值下浮 3 个点。
       thresholds: {
-        statements: 70,
+        statements: 81,
+        branches: 77,
+        functions: 79,
+        lines: 82,
       },
     },
   },

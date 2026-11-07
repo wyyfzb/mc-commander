@@ -321,7 +321,13 @@ describe('BackupPanel 取消与进度', () => {
     server.use(
       http.post('*/api/v1/instances/:id/backups/cancel', () =>
         HttpResponse.json(
-          { status: 'error', code: 40904, message: 'No active backup operation', data: null },
+          {
+            status: 'error',
+            code: 40904,
+            message: 'No active backup operation',
+            data: null,
+            timestamp: new Date().toISOString(),
+          },
           { status: 409 },
         ),
       ),

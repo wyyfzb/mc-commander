@@ -7,6 +7,7 @@
  * 连接配置来自 useConnectionStore（onboarding 配置，默认同源 dev proxy）
  */
 import type { ApiEnvelope, ApiErrorEnvelope } from './types'
+import { apiEnvelopeSchema, apiErrorEnvelopeSchema } from '@mc-commander/schemas'
 import { sessionAppliesToPanel } from '@/lib/mc-connection'
 import {
   getStoredSession,
@@ -146,8 +147,12 @@ async function requestEnvelope<T>(
     if (!res.ok && res.status >= 400) {
       // 尽量解析错误信封拿错误码；解析失败退回 HTTP 状态
       try {
-        const errPayload = (await res.json()) as ApiErrorEnvelope
-        if (errPayload.status === 'error') {
+        const raw = (await res.json()) as unknown
+        const parsed = apiErrorEnvelopeSchema.safeParse(raw)
+        // 结构不符时不把原始对象当信封用：下面几行都按字段读取，
+        // 缺字段会静默变成 undefined 并被当成「没有错误码」的普通失败
+        const errPayload = parsed.success ? parsed.data : null
+        if (errPayload?.status === 'error') {
           if (
             errPayload.code === AUTH_SESSION_EXPIRED_CODE &&
             sessionToken !== null &&
@@ -166,8 +171,16 @@ async function requestEnvelope<T>(
 
     let payload: ApiEnvelope<T> | ApiErrorEnvelope
     try {
-      payload = (await res.json()) as ApiEnvelope<T> | ApiErrorEnvelope
-    } catch {
+      const raw = (await res.json()) as unknown
+      const ok = apiEnvelopeSchema.safeParse(raw)
+      const err = ok.success ? null : apiErrorEnvelopeSchema.safeParse(raw)
+      // 两种信封都对不上就是协议错，不能当作成功往下走：payload.data 会是 undefined，
+      // 调用方拿到 undefined 后崩在离这里很远的地方
+      if (ok.success) payload = raw as ApiEnvelope<T>
+      else if (err && err.success) payload = raw as ApiErrorEnvelope
+      else throw new NetworkError(`响应结构不符合契约（HTTP ${res.status}）`)
+    } catch (e) {
+      if (e instanceof NetworkError) throw e
       throw new NetworkError(`响应解析失败（HTTP ${res.status}）`)
     }
 
@@ -432,7 +445,15 @@ export function apiUploadFile<T>(
     xhr.addEventListener('load', () => {
       let payload: ApiEnvelope<T> | ApiErrorEnvelope
       try {
-        payload = JSON.parse(xhr.responseText) as ApiEnvelope<T> | ApiErrorEnvelope
+        const raw = JSON.parse(xhr.responseText) as unknown
+        const ok = apiEnvelopeSchema.safeParse(raw)
+        const err = ok.success ? null : apiErrorEnvelopeSchema.safeParse(raw)
+        if (ok.success) payload = raw as ApiEnvelope<T>
+        else if (err && err.success) payload = raw as ApiErrorEnvelope
+        else {
+          reject(new NetworkError(`响应结构不符合契约（HTTP ${xhr.status}）`))
+          return
+        }
       } catch {
         reject(new NetworkError(`响应解析失败（HTTP ${xhr.status}）`))
         return
