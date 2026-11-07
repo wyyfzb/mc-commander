@@ -24,10 +24,11 @@ MC\_Commander 是一个自托管的 Minecraft 服务器管理面板：不装插�
 `--ignore-scripts` 不是可选项：`better-sqlite3` 自带 `prebuilds/<platform>-<arch>.node`，
 运行时 `lib/binding.js` 优先加载它，而 npm 见到 `binding.gyp` 会隐式跑 `node-gyp rebuild`
 ——上游用 `binding.gyp` 的 `prebuild_exists` 想让它空转，但 `node-gyp` 的 configure 阶段
-**先找工具链、再读 `binding.gyp`**，于是这段空转在没有 Visual Studio 的 Windows 上直接
-失败、在 Linux 上则要求装一整套编译器。生产依赖里没有任何包需要 install 脚本（唯一有
-install 脚本的 `fsevents` 是 macOS 专用的 optional 包），故跳过不会漏掉必要构建。
-跳过之后**必须验一次真实加载**（`require` + 建表读写）：编译成功也不等于二进制能加载。
+**先找工具链、再读 `binding.gyp`**，于是这段空转在两个平台各付一笔纯代价：没有 Visual
+Studio 的 Windows 上直接失败，Linux 上则白装一整套编译器（编出来的东西运行时根本不加载）。
+生产依赖里没有任何包需要 install 脚本（唯一有 install 脚本的 `fsevents` 是 macOS 专用的
+optional 包），故跳过不会漏掉必要构建。
+跳过之后**必须验一次真实加载**：编译成功也不等于二进制能加载。
 包间依赖走 workspace 链接（`apps/server` 声明 `@mc-commander/schemas: "*"`），因此**服务端消费契约包产物**——
 `apps/schemas/dist` 必须先构建：`npm run build -w apps/schemas`。前端则经 vite alias
 直读 `apps/schemas/src`（改契约立即可见）。**`dist` 是构建产物、不入库**：服务端测试与运行前
@@ -43,10 +44,10 @@ bash tools/ci/local-check.sh
 
 # 仓库根＝workspace 根：一次装齐三包依赖 + Biome
 # --ignore-scripts：better-sqlite3 自带 prebuilds/ 产物、运行时优先加载它，npm 见到
-# binding.gyp 隐式发起的 node-gyp rebuild 是纯空转（无 Visual Studio 的 Windows 上还会
-# 直接失败）。跳过之后必须验一次真实加载——省掉的是编译，不是检查：
+# binding.gyp 隐式发起的 node-gyp rebuild 在 Windows 上是硬失败、在 Linux 上是白装
+# 一套编译器。跳过之后必须验一次真实加载——省掉的是编译，不是检查：
 npm ci --ignore-scripts
-node -e "const D=require('better-sqlite3');new D(':memory:').exec('create table t(a)');console.log('ok')"
+node -e "const D=require('better-sqlite3');const db=new D(':memory:');db.exec('create table t(a)');db.prepare('insert into t values(1)').run();if(db.prepare('select a from t').get().a!==1)throw new Error('读写结果不符');db.close();console.log('原生模块校验通过')"
 npm run format               # 按 biome.jsonc 格式化全仓
 npm run format:check         # 只检查不改写（CI 与 local-check 用这条）
 npm run check:layout         # 目录结构门禁（顶层白名单 / 源码面无测试 / 无产物入库）
