@@ -1434,7 +1434,10 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
   // 与 /proc 无关，整组跳过会把它们一起藏掉。
   // oxlint-disable-next-line vitest/expect-expect -- 这是用例别名，不是用例本身
   const linuxIt = it.skipIf(process.platform !== 'linux');
-  describe('卸载前停止运行中的实例', () => {
+  // 组级余量：本组要走「javac 编译 → jar 打包 → 起真 JVM → 等 1.5s → 扫 /proc」的
+  // 全链路，耗时由这些真实进程决定，与断言无关。CI 共享 runner 上 JVM 冷启动可达数秒，
+  // 5s 全局上限会让它随机超时且失败信息只写「Test timed out」，看不出卡在哪一步。
+  describe('卸载前停止运行中的实例', { timeout: 30_000 }, () => {
     const fnSource = script.match(/stop_running_instances\(\) \{[\s\S]*?\n\}/);
     if (!fnSource) throw new Error('未能在部署脚本中定位 stop_running_instances');
     // 数据目录由 .env 决定（用户可能把它指到别的分区），抽取函数时一并带上解析器
@@ -1804,7 +1807,9 @@ describe('deploy-mc-commander.sh 安全修复回归', () => {
      平台前提：判据是 `ss -ltnp` 的真实输出，ss 是 iproute2 的命令、Linux 专有。
      只跳真正需要 ss 的两条；「端口空闲 → 放行」走的是 `command -v ss` 失败即
      return 0 的早退分支，没有 iproute2 也能验——那正是非 Linux 的真实路径。 */
-  describe('起服务前预检端口', () => {
+  // 组级余量：「端口被占」那条会走满脚本里的等待循环（PORT_FREE_WAIT 次 sleep 1），
+  // 再叠一次真实 ss 调用，本身就近 3s；共享 runner 上并发一挤就顶到 5s 全局上限。
+  describe('起服务前预检端口', { timeout: 30_000 }, () => {
     const fnSource = script.match(/check_port_free\(\) \{[\s\S]*?\n\}/);
     if (!fnSource) throw new Error('未能在部署脚本中定位 check_port_free');
 
