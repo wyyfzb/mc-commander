@@ -12,9 +12,10 @@ import { describe, it, expect } from 'vitest'
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-// 不走 import.meta.url：本文件在 jsdom 项目下运行，那里的 import.meta.url 不是 file 协议。
-// vitest 的工作目录即包根（apps/web）。
-const LIB_DIR = join(process.cwd(), 'src', 'lib')
+// 路径锚在**本文件**而不是 process.cwd()：cwd 取决于从哪个目录发起 vitest
+// （包根 / 仓库根 / CI 的 workspace 脚本），换个入口就会指到不存在的目录，
+// 而失败信息只会说「ENOENT: scandir」，看不出是路径推导错了。
+const LIB_DIR = join(import.meta.dirname, '..', '..', '..', 'src', 'lib')
 
 /** 全部数据表模块（mc-*），排除测试与类型文件 */
 function dataTableFiles(): string[] {
