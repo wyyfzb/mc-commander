@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.2](https://github.com/wyyfzb/mc-commander/compare/v0.13.1...v0.13.2) (2026-11-09)
+
+
+### Bug Fixes
+
+* **deps:** bump the minor-and-patch group across 1 directory with 13 updates ([#707](https://github.com/wyyfzb/mc-commander/issues/707)) ([7b75914](https://github.com/wyyfzb/mc-commander/commit/7b759141e5a790e960ff7ac8ef2e2b61ca7a4274))
+
 ## [0.13.1](https://github.com/wyyfzb/mc-commander/compare/v0.13.0...v0.13.1) (2026-11-07)
 
 
