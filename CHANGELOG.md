@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.3](https://github.com/wyyfzb/mc-commander/compare/v0.13.2...v0.13.3) (2026-11-10)
+
+
+### Bug Fixes
+
+* **server:** 修复停机兜底定时器残留与全量并行下的测试余量缺失 ([#709](https://github.com/wyyfzb/mc-commander/issues/709)) ([42cd18c](https://github.com/wyyfzb/mc-commander/commit/42cd18c25197cbce36484190ac77c541507db5dc))
+
 ## [0.13.2](https://github.com/wyyfzb/mc-commander/compare/v0.13.1...v0.13.2) (2026-11-09)
 
 
