@@ -83,7 +83,20 @@ describe('停机退出', () => {
       expect(Date.now() - sentAt).toBeLessThan(5000);
       ws.terminate();
     } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
+      // 先等子进程真正退出再删目录：进程刚收到退出信号时其 SQLite/日志句柄尚未释放，
+      // 直接 rmSync 在 Windows 上会抛 EPERM。清理失败不判红（它不属本用例的断言面），
+      // 残留由 global-setup 按前缀回收。
+      try {
+        if (child && child.exitCode === null) {
+          await new Promise((resolve) => {
+            child.once('exit', resolve);
+            setTimeout(resolve, 3000);
+          });
+        }
+        fs.rmSync(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+      } catch {
+        /* 句柄占用中，留待后续回收 */
+      }
     }
   }, 40_000);
 });

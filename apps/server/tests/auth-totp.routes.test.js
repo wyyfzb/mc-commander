@@ -253,7 +253,9 @@ describe('安全档位变更后的会话吊销（confirm / disable）', { timeou
   });
 });
 
-describe('挂靠流程：enroll → confirm', () => {
+// 组级余量：本组每条都要先登录（scrypt N=2^17）再走 TOTP 挂靠往返，
+// 与本文件其余几组同源；并行负载下会越过默认上限。
+describe('挂靠流程：enroll → confirm', { timeout: 30_000 }, () => {
   it('status：未挂靠时为 false / null / 0，且响应只有三个字段（无 secret）', async () => {
     seedAccount();
     const login = await request(app).post('/api/v1/auth/login').send({ password: PASSWORD });
@@ -440,7 +442,9 @@ describe('挂靠流程：enroll → confirm', () => {
   });
 });
 
-describe('关闭两步验证：密码 + 第二因子双证', () => {
+// 组级余量：每条都要 enroll → confirm → 双证关闭，含多次 scrypt 登录与 TOTP 校验，
+// 与本文件其余几组同源；并行负载下会越过默认上限。
+describe('关闭两步验证：密码 + 第二因子双证', { timeout: 30_000 }, () => {
   it('密码错误 → 401/40102 且仍启用；正确密码 + 错误码 → 401/40106 且仍启用', async () => {
     const { secret, token } = await enrollAndConfirm();
     const auth = { Authorization: `Bearer ${token}` };

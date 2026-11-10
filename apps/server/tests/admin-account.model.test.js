@@ -3,6 +3,12 @@ import fs from 'fs';
 
 // dataDir 指向临时目录（真实 SQLite）：本文件验证的是「改密与 TOTP 挂靠共处同一行」
 // 的列保留语义，必须在真库上验证（内存 mock 无法呈现 REPLACE 的先删后插）
+//
+// 文件级余量：每条用例 2~4 次 scrypt(N=2^17) 哈希/校验，计算量由产品安全参数决定、
+// 不随机器变快而消失；全量并行时与其他重负载文件争抢 CPU 会越过默认上限。
+// scrypt 强度是产品安全参数，不为测试下调。
+vi.setConfig({ testTimeout: 15_000 });
+
 vi.mock('../src/config.js', async (importOriginal) => {
   const actual = await importOriginal();
   const fs = await import('fs');

@@ -307,7 +307,11 @@ describe('_verifySnapshot 完整性边界', () => {
   });
 });
 
-describe('executeBackup：RCON 保存序列与对称恢复', () => {
+// 组级余量：走 RCON 保存序列的用例含一次固定的 2s 真实等待（executeBackup 发完
+// save-all flush 后等磁盘写入，见 services/backup.service.js）。这段等待是产品语义，
+// 不能被 mock 掉——否则「保存后立刻快照」这条时序就测不到了。
+// 等待时长已占去默认上限的近半，并行负载下没有余量。
+describe('executeBackup：RCON 保存序列与对称恢复', { timeout: 30_000 }, () => {
   let tmpRoot;
   let serversDir;
   let backupsDir;

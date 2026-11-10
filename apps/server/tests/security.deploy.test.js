@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   readFileSync,
   mkdtempSync,
@@ -22,6 +22,12 @@ import { PAYLOAD } from '../../../tools/deploy/stage-payload.mjs';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SCRIPT_PATH = path.resolve(__dirname, '../scripts/deploy-mc-commander.sh');
 const script = readFileSync(SCRIPT_PATH, 'utf8');
+
+// 文件级余量：本文件大量用例经 runBash 起真实 bash 进程（语法检查、抽函数求值、
+// 执行脚本里的 awk）。进程启动开销由操作系统与 shell 实现决定，不同平台差异可达
+// 一个数量级，全量并行时还会叠加 CPU 争抢——默认上限只够空载时跑完。
+// 被测对象是脚本行为，不能为了压缩耗时把它换成对脚本文本的静态复述。
+vi.setConfig({ testTimeout: 30_000 });
 
 // bash 定位：Git for Windows 的 bash 常不在 PATH 上（可执行文件在 <Git 安装目录>/usr/bin/bash.exe），
 // 故支持 BASH_BIN 指定绝对路径；缺省按 PATH 查找。

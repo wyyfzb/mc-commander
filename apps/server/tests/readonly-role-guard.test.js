@@ -15,6 +15,11 @@ import express from 'express';
 import request from 'supertest';
 import fs from 'fs';
 
+// 文件级余量：本文件的断言方式是「把已注册路由表逐条打成真实请求」——端点账目
+// 闭合要求每条都真的走完认证中间件与路由处理链，请求数随端点总数增长且必须串行
+// （逐条归类才能定位越权项）。CPU 争抢会按请求数线性放大整组耗时。
+vi.setConfig({ testTimeout: 30_000 });
+
 vi.mock('../src/config.js', async (importOriginal) => {
   const actual = await importOriginal();
   const fsMod = await import('fs');

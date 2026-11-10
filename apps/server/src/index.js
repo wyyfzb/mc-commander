@@ -488,14 +488,18 @@ async function shutdown(signal) {
     // 无 TLS 时 server 就是 plainServer 本身，按集合去重后逐个关
     const closables = secureServer ? [server, plainServer, secureServer] : [plainServer];
     let pending = closables.length;
+    // 兜底：close 回调未触发也强制退出。close 回调可能同步触发，故定时器先于循环
+    // 声明，done 里才能可靠取消它。
+    const forceExitTimer = setTimeout(() => process.exit(0), 3000).unref();
     const done = () => {
       if (--pending > 0) return;
       logger.info('Server closed');
+      // 正常路径已退出，兜底定时器必须就地取消：留着会让拦截了 process.exit 的宿主
+      // （测试进程）在 3 秒后被这个陈旧定时器退出。
+      clearTimeout(forceExitTimer);
       process.exit(0);
     };
     for (const s of closables) s.close(done);
-    // 兜底：close 回调未触发也强制退出
-    setTimeout(() => process.exit(0), 3000).unref();
   });
 }
 

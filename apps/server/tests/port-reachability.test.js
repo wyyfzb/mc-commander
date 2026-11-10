@@ -23,7 +23,10 @@ async function listenLocal() {
   return srv.address().port;
 }
 
-describe('实例端口可达性', () => {
+// 组级余量：「公网连不上」那条走满产品的探测超时 PROBE_TIMEOUT_MS=4s
+// （services/port-reachability.js），单个用例就占去默认上限的绝大部分，并行负载下
+// 没有余量。探测超时是被测语义，不能为测试调小。
+describe('实例端口可达性', { timeout: 30_000 }, () => {
   it('没有公网地址时不说「已可达」（面板自己都不知道对外入口）', async () => {
     const r = await checkInstanceReachability({ port: 25567, publicHost: null });
     expect(r.state).toBe(NO_PUBLIC_ADDRESS);

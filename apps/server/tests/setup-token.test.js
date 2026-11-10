@@ -5,6 +5,10 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
+// 文件级余量：走 /auth/setup 的用例每次都要 scrypt(N=2^17) 计算密码哈希
+// （端点内部调用，测试文件里不直接出现 hashPassword）；并行负载下会越过默认上限。
+vi.setConfig({ testTimeout: 30_000 });
+
 // dataDir 指向临时目录（真实 SQLite，路由全链路），其余 config 保留实际值
 vi.mock('../src/config.js', async (importOriginal) => {
   const actual = await importOriginal();
