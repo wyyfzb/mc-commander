@@ -38,7 +38,10 @@ afterEach(async () => {
   await new Promise((resolve) => server.close(resolve));
 });
 
-describe('httpJson', () => {
+// 组级余量：重试臂要走产品的真实指数退避（1s → 2s，见 utils/http-client.js 的
+// backoffDelay），两次重试合计约 3s 真实等待。这是被测语义本身（退避不能被 mock 掉，
+// 否则测的就不是重试了），固定等待已占去默认上限的大半。
+describe('httpJson', { timeout: 30_000 }, () => {
   it('解析 JSON 并透传 headers', async () => {
     handler = () => ({ status: 200, body: JSON.stringify({ ok: true, n: 42 }) });
     const data = await httpJson(`${base}/x`, { headers: { 'User-Agent': 'UA-Test' } });

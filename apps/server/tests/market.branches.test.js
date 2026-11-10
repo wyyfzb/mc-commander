@@ -158,7 +158,11 @@ describe('market.service 分支补测', () => {
       mkdirSpy.mockRestore();
     });
 
-    it('流式超限（>100MB）：计数中间层断流 → 50301 且半成品清理', async () => {
+    // 超时余量：本用例要真实流过 102MB（1MB × 102 为触发 100MB 上限的最小量，
+    // 上限是产品常量、不能为测试调小），并经 pipeline 写入磁盘——耗时由真实数据量
+    // 与磁盘 IO 决定，换不了替身（半成品清理只有在真写入后才可验）。写入量是固定的
+    // 百 MB 级，机器快慢与磁盘并发都会成倍影响它。
+    it('流式超限（>100MB）：计数中间层断流 → 50301 且半成品清理', { timeout: 30_000 }, async () => {
       const before = new Set(fs.existsSync(tmpUploadsDir) ? fs.readdirSync(tmpUploadsDir) : []);
       httpStream.mockImplementation(() => {
         const src = new PassThrough();
