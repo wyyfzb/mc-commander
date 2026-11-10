@@ -9,7 +9,7 @@
  * mock 数据为结构占位（虚构凭据），严禁真实服务器信息
  */
 import { describe, it, expect, beforeEach, afterEach, afterAll, beforeAll } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router'
 import { HttpResponse, http } from 'msw'
@@ -176,18 +176,22 @@ describe('LoginPage（登录/首访设密三态）', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('请输入 SETUP_TOKEN')
 
     // 错误 token → 服务端仍 40104
-    await userEvent.type(tokenInput, WRONG_TOKEN)
+    // 令牌用一次性赋值：逐字符 type 对每个字符都要走一遍 React 事件调度与重渲染，
+    // 成本随字符数线性增长（64 字符即上百次状态更新）。本用例验证的是「令牌随请求头
+    // 发送」，不验证逐键输入——逐字模拟在这里只制造重负载，机器慢或全量并发时会被
+    // 放大到超出用例超时上限。
+    fireEvent.change(tokenInput, { target: { value: WRONG_TOKEN } })
     await userEvent.click(screen.getByRole('button', { name: /设置密码并登录/ }))
     expect(await screen.findByRole('alert')).toHaveTextContent('SETUP_TOKEN 缺失或错误')
 
     // 正确 token → 携 SetupToken 头请求成功，写会话并跳转
-    await userEvent.clear(screen.getByLabelText(/SETUP_TOKEN/))
-    await userEvent.type(screen.getByLabelText(/SETUP_TOKEN/), CORRECT_TOKEN)
+    fireEvent.change(screen.getByLabelText(/SETUP_TOKEN/), {
+      target: { value: CORRECT_TOKEN },
+    })
     await userEvent.click(screen.getByRole('button', { name: /设置密码并登录/ }))
     await waitFor(() => expect(screen.getByText('dashboard-reached')).toBeInTheDocument())
     expect(useAuthStore.getState().session?.sessionId).toBe('sess-mock-1')
-    // 慢机器全量并发超基线（单跑/CI 均绿），放宽上限避免抖动误报
-  }, 15000)
+  })
 
   it('returnTo 参数：登录后回跳原页面（非 dashboard）', async () => {
     renderLoginPage('/login?returnTo=%2Fonboarding')

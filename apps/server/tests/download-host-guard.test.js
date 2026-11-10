@@ -107,8 +107,14 @@ describe('部署前磁盘余量预检', () => {
     const dir = mkdtempSync(path.join(os.tmpdir(), 'mcs-disk-'));
     try {
       const r = checkDeployDiskSpace(dir);
+      // 可用空间是活值：同一目录的两次 statfs 在有其他进程写盘时本就不相等，
+      // 精确相等会让本用例随整机磁盘活动随机变红，与被测逻辑无关。
+      // 故断言量级一致（同一目录、同一时刻附近的真实值），而非某次快照的精确值。
       const stat = statfsSync(dir);
-      expect(r.freeBytes).toBe(stat.bavail * stat.bsize);
+      const nowFree = stat.bavail * stat.bsize;
+      expect(r.freeBytes).toBeGreaterThan(0);
+      expect(r.freeBytes).toBeGreaterThan(nowFree * 0.5);
+      expect(r.freeBytes).toBeLessThan(nowFree * 2);
       expect(r.requiredBytes).toBe(DEPLOY_MIN_FREE_BYTES);
       expect(typeof r.ok).toBe('boolean');
     } finally {
