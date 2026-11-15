@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.0](https://github.com/wyyfzb/mc-commander/compare/v0.13.3...v0.14.0) (2026-11-15)
+
+
+### Features
+
+* **web:** 给予物品改为目录+清单工作台，玩家详情改居中弹窗 ([#711](https://github.com/wyyfzb/mc-commander/issues/711)) ([b285144](https://github.com/wyyfzb/mc-commander/commit/b285144f56c147e84e162a0e6a6c0ae0f4d061af))
+
 ## [0.13.3](https://github.com/wyyfzb/mc-commander/compare/v0.13.2...v0.13.3) (2026-11-10)
 
 
