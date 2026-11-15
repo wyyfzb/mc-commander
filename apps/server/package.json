@@ -27,9 +27,9 @@
   "dependencies": {
     "@mc-commander/schemas": "*",
     "adm-zip": "^0.6.0",
-    "better-sqlite3": "^13.0.3",
+    "better-sqlite3": "^13.1.1",
     "croner": "^11.0.0",
-    "dotenv": "^18.0.9",
+    "dotenv": "^18.0.10",
     "express": "^5.2.1",
     "helmet": "^8.3.0",
     "iconv-lite": "^0.7.3",
@@ -38,13 +38,13 @@
     "prismarine-nbt": "^2.8.0",
     "qrcode": "^1.5.4",
     "rcon-client": "^4.2.5",
-    "ws": "^8.22.1",
+    "ws": "^8.22.2",
     "zod": "^4.6.7"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "^5.0.3",
     "oxlint": "^1.93.0",
-    "supertest": "^7.3.1",
+    "supertest": "^7.3.2",
     "vitest": "^5.0.3"
   }
 }
