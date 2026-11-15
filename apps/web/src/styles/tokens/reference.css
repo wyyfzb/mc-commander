@@ -30,10 +30,11 @@
   --ref-purple: oklch(0.709 0.1592 293.54);     /* #A78BFA 7.1:1 */
 
   /* ── 亮色中性（独立映射，不镜像暗色）── */
-  --ref-light-bg: oklch(0.9814 0.0045 258.32);  /* #F7F9FC */
-  --ref-light-card: oklch(1 0 none);            /* #FFFFFF */
-  --ref-light-secondary: oklch(0.9608 0.0039 258.32);   /* #EDF1F6 次级面 */
-  --ref-light-popover: oklch(1 0 none);         /* #FFFFFF */
+  --ref-light-bg: oklch(0.9814 0.0045 258.32);  /* #F7F9FC 画布 */
+  --ref-light-card: oklch(1 0 none);            /* #FFFFFF 卡片 */
+  --ref-light-secondary: oklch(0.9608 0.0039 258.32);   /* #EDF1F6 深嵌区（比画布深一档） */
+  --ref-light-secondary-soft: oklch(0.9706 0.0042 258.32); /* #F1F4F9 次级面（介于画布与卡片） */
+  --ref-light-popover: oklch(1 0 none);         /* #FFFFFF 弹层 */
   --ref-light-border: oklch(0.9118 0.0058 258.32);  /* #DCE3EA */
 
   /* ── 亮色文字两级（全层背景 ≥4.5:1，WCAG AA）── */

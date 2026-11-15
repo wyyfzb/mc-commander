@@ -5,6 +5,7 @@
 import type { Dispatch, SetStateAction } from 'react'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { Label } from '@/components/ui/label'
+import { Input } from '@/components/ui/input'
 import type { CustomPointDraft } from '../../use-quick-teleports'
 import { CoordField } from './coord-field'
 
@@ -41,13 +42,12 @@ export function CustomPointDialog({
       <div className="flex flex-col gap-2.5">
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="quick-point-name">名称</Label>
-          <input
+          <Input
             id="quick-point-name"
             value={draft?.name ?? ''}
             onChange={(e) => onDraftChange((d) => (d ? { ...d, name: e.target.value } : d))}
             placeholder="如：基地、刷怪塔"
             maxLength={24}
-            className="w-full rounded-mcs-xs border border-mcs-border-default bg-mcs-bg-default px-2.5 py-1.5 text-mcs-sm text-mcs-text-default placeholder:text-mcs-text-muted focus:outline-none focus:ring-1 focus:ring-mcs-focus-ring"
           />
         </div>
         <div className="grid grid-cols-3 gap-2">

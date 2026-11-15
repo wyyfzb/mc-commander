@@ -1,5 +1,5 @@
 /**
- * 静态数据完整性单测：211 物品 / 20 药水 / 6 礼包 + 礼包 schema 往返
+ * 静态数据完整性单测：217 物品 / 20 药水 / 6 礼包 + 礼包 schema 往返
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ITEM_CATEGORIES, MINECRAFT_ITEMS, fullItemId, itemImageUrl } from '@/lib/mc-items'
@@ -77,7 +77,10 @@ describe('物品目录完整性（217 种）', () => {
 
   it('派生函数：fullId / imageUrl', () => {
     expect(fullItemId('diamond')).toBe('minecraft:diamond')
-    expect(itemImageUrl('diamond')).toBe('https://mc-heads.net/item/diamond/36')
+    // 贴图随包分发：URL 由打包器指纹化，只锁「是 png 资源」与缺图返回 null 两种契约
+    expect(itemImageUrl('diamond')).toMatch(/\.png$/)
+    // 26.x 新物品无随包贴图 → null（UI 走占位块，不产生 404）
+    expect(itemImageUrl('sulfur')).toBeNull()
   })
 
   it('覆盖 26.x 新物品（金蒲公英/硫磺系列/朱砂系列/新唱片/重锤）', () => {
@@ -103,6 +106,38 @@ describe('药水目录完整性（20 种）', () => {
       expect([1, 2]).toContain(p.vanillaMaxLevel)
       expect(p.color).toBeGreaterThanOrEqual(0)
       expect(p.color).toBeLessThanOrEqual(0xffffff)
+    }
+  })
+
+  it('effectId 必须是官方效果注册表 id（不是药水 id）', () => {
+    /* 命令里写的是 potion_contents.custom_effects:[{id:"minecraft:<effectId>"}]，
+       只接受**效果 id**。`swiftness` / `turtle_master` 是药水 id，写进效果组件会被
+       服务端整条拒绝——而两者都长得像效果名，只靠人眼审不出来，故钉死这份清单。
+       全量 39 条见 1.20.5 客户端 jar 的 effect.minecraft.* 语言键；这里只收目录用到的。 */
+    const OFFICIAL_EFFECT_IDS = new Set([
+      'fire_resistance',
+      'infested',
+      'instant_damage',
+      'instant_health',
+      'invisibility',
+      'jump_boost',
+      'luck',
+      'night_vision',
+      'oozing',
+      'poison',
+      'regeneration',
+      'resistance',
+      'slow_falling',
+      'slowness',
+      'speed',
+      'strength',
+      'water_breathing',
+      'weakness',
+      'weaving',
+      'wind_charged',
+    ])
+    for (const p of MINECRAFT_POTIONS) {
+      expect(OFFICIAL_EFFECT_IDS.has(p.effectId), `${p.name}(${p.effectId})`).toBe(true)
     }
   })
 

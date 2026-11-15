@@ -42,6 +42,16 @@ describe('isItemAvailableIn - 语义边界', () => {
     expect(requiredVersionFor('diamond')).toBe(null)
     expect(requiredVersionFor('music_disc_bounce')).toBe('26.2')
   })
+
+  it('版本不可解析时按可用处置（与同域其余判定同极性）', () => {
+    // 服务端 _getMcVersion 的两种真实取值：读不到 JAR 且 DB 无记录 → 'unknown'；
+    // 用户手动换快照 JAR → 周快照号（parseVersion 对 25w35a 显式返回 null）。
+    // 若这里按「不可用」，快照服会永久少一截物品且用户无法绕过。
+    expect(isItemAvailableIn('sulfur', 'unknown')).toBe(true)
+    expect(isItemAvailableIn('sulfur', '26w14a')).toBe(true)
+    // 空串走 itemAvailabilityError 的早退，这里同样不该判成不可用
+    expect(isItemAvailableIn('sulfur', '')).toBe(true)
+  })
 })
 
 describe('生成表的结构约束（生成器坏掉时先在这里失败）', () => {

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback, type ChangeEvent } from 'react'
+import { useEffect, useRef, useCallback, type ChangeEvent, type Ref } from 'react'
 import { Search, X } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
@@ -25,6 +25,8 @@ interface SearchInputProps {
   inputClassName?: string
   size?: 'default' | 'sm'
   testId?: string
+  /** 底层 input 的 ref（打开界面即聚焦、「/」快捷键定位用） */
+  ref?: Ref<HTMLInputElement>
 }
 
 const SIZE_STYLES = {
@@ -46,6 +48,7 @@ export function SearchInput({
   inputClassName,
   size = 'default',
   testId,
+  ref,
 }: SearchInputProps) {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const s = SIZE_STYLES[size]
@@ -89,6 +92,7 @@ export function SearchInput({
         aria-hidden
       />
       <Input
+        ref={ref}
         value={value}
         onChange={handleChange}
         placeholder={placeholder}

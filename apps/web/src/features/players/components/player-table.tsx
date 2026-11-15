@@ -8,7 +8,7 @@
  * 单元拆分：列定义 player-table-columns / 行组件 player-table-row /
  * 行菜单 player-row-menu / 卡片态 player-card-list / 共享常量 player-table-config
  */
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { flexRender, useTable, type ColumnDef, type SortingState } from '@tanstack/react-table'
 import { cn } from '@/lib/utils'
@@ -62,6 +62,7 @@ export function PlayerTable({
   const selectedUuids = usePlayersUiStore((s) => s.selectedUuids)
   const toggleSelect = usePlayersUiStore((s) => s.toggleSelect)
   const toggleSelectPage = usePlayersUiStore((s) => s.toggleSelectPage)
+  const setRowOrder = usePlayersUiStore((s) => s.setRowOrder)
   const [sorting, setSorting] = useState<SortingState>([])
   const [pageSize, setPageSize] = useState<(typeof PAGE_SIZE_OPTIONS)[number]>(20)
   const [pageIndex, setPageIndex] = useState(0)
@@ -182,6 +183,14 @@ export function PlayerTable({
   })
 
   const allRows = table.getRowModel().rows
+
+  /* 把**实际渲染的行序**（含表头排序）上报给 store：详情弹窗的 ‹ › 按它换人。
+     外部复算要复制排序键/列 id/undefined 口径，任一处漂移都会让 ‹ › 跳到看不见的名字上。 */
+  const rowOrderKey = allRows.map((r) => r.original.name).join('\u0000')
+  useEffect(() => {
+    setRowOrder(rowOrderKey === '' ? [] : rowOrderKey.split('\u0000'))
+  }, [rowOrderKey, setRowOrder])
+
   // 切片口径与表头「全选当前页」共用同一实现（player-pagination），勿就地重写
   const {
     rows: visibleRows,

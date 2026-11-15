@@ -67,7 +67,7 @@ export interface Enchantment {
   appliesTo: ItemSlotType[]
   /** 互斥附魔 ID 列表（单向声明即可，过滤时会双向检查） */
   conflicts?: string[]
-  /** 是否为 1.21+ 新增附魔（重锤专属：致密/破甲/风爆）。UI 上需标注 "1.21+" 徽章 */
+  /** 是否为 1.20.5 新增附魔（重锤专属：致密/破甲/风爆，与 Data Components 同期） */
   isNew121?: boolean
 }
 
@@ -124,7 +124,7 @@ export const ENCHANTMENTS: Enchantment[] = [
   { id: 'fire_aspect', name: '火焰附加', maxLevel: 2, appliesTo: [ItemSlotType.sword] },
   { id: 'looting', name: '抢夺', maxLevel: 3, appliesTo: [ItemSlotType.sword] },
   { id: 'sweeping_edge', name: '横扫之刃', maxLevel: 3, appliesTo: [ItemSlotType.sword] },
-  // 1.21 重锤专属附魔
+  // 重锤专属附魔（1.20.5 随重锤加入，1.20.4 及以下没有）
   { id: 'density', name: '致密', maxLevel: 5, appliesTo: [ItemSlotType.mace], isNew121: true },
   { id: 'breach', name: '破甲', maxLevel: 4, appliesTo: [ItemSlotType.mace], isNew121: true },
   { id: 'wind_burst', name: '风爆', maxLevel: 3, appliesTo: [ItemSlotType.mace], isNew121: true },
@@ -356,6 +356,9 @@ export function getEnchantmentById(id: string): Enchantment | undefined {
  * 返回指定物品可用的附魔列表。
  * 不可附魔物品（槽位类型为 null）返回空列表。
  * 鞘翅仅返回通用附魔（原版限制）。
+ *
+ * 不做版本过滤：目录里的附魔最晚也在面板下限 1.20.5 就已存在
+ * （致密/破甲/风爆随重锤同期加入，见 `isNew121`）。
  */
 export function getEnchantmentsForItem(item: MinecraftItem): Enchantment[] {
   const slot = getItemSlotType(item)

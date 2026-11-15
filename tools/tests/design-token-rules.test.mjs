@@ -8,11 +8,14 @@
 import { describe, it, expect } from 'vitest'
 import {
   baseTierOf,
+  collectBareFocusHits,
   collectCardSurfaceOffsets,
   collectDangerousButtonBorderHits,
   collectFocusCancellationHits,
+  collectHandwrittenAriaHits,
   collectHeadingTiers,
   collectRoleTierMaps,
+  collectSmallTargetHits,
   collectTextBaseHits,
   collectTintAsInteractionHits,
   lineAt,
@@ -292,6 +295,33 @@ describe('第 29 条边界（替换口径与判定面分工）', () => {
     const code = '<input className="outline-none focus-visible:ring-1 focus-visible:ring-ring" />'
     expect(collectFocusCancellationHits(code)).toEqual([])
   })
+
+  it('属性逐个换行（className 在标签下方数行）同样命中，行号指向 className 行', () => {
+    // 现实形态：give-item-ticket 的数量输入框。同行匹配看不见它——属性换行是常态写法
+    const code = [
+      '    <input',
+      '      type="number"',
+      '      aria-label="数量"',
+      '      className="h-full w-9 outline-none"',
+      '    />',
+    ].join('\n')
+    expect(collectFocusCancellationHits(code)).toEqual([{ line: 4 }])
+  })
+
+  it('跨行形态下带替换 → 放行（不得因换行误报）', () => {
+    const code = [
+      '    <input',
+      '      type="number"',
+      '      className="h-full outline-none focus-visible:ring-1"',
+      '    />',
+    ].join('\n')
+    expect(collectFocusCancellationHits(code)).toEqual([])
+  })
+
+  it('字符串里的 `>` 不截断标签（aria-label 含大于号时仍能判到 className）', () => {
+    const code = ['<input', '  aria-label="a > b"', '  className="outline-none"', '/>'].join('\n')
+    expect(collectFocusCancellationHits(code)).toEqual([{ line: 3 }])
+  })
 })
 
 describe('第 30 条：交互悬浮只走覆盖层（内容面 tint 不得上状态前缀）', () => {
@@ -328,5 +358,82 @@ describe('第 30 条：交互悬浮只走覆盖层（内容面 tint 不得上状
   it('行号逐行报（只报命中那一行，其余行不牵连）', () => {
     const code = ['<div className="p-2" />', '<button className="hover:bg-mcs-error-bg-subtle" />']
     expect(collectTintAsInteractionHits(code.join('\n'))).toEqual([{ line: 2 }])
+  })
+})
+
+describe('第 31 条：自造 ARIA 交互组件', () => {
+  it('手写 switch / tablist / listbox / combobox 命中', () => {
+    for (const role of ['switch', 'tablist', 'listbox', 'combobox', 'menu', 'radiogroup']) {
+      const code = `<div role="${role}" />`
+      expect(collectHandwrittenAriaHits(code), role).toEqual([{ line: 1, role }])
+    }
+  })
+
+  it('role="button" 不判（自定义可点容器是合理选择）', () => {
+    expect(collectHandwrittenAriaHits('<div role="button" tabIndex={0} />')).toEqual([])
+  })
+
+  it('注释里的写法示例不算现场（判定面是剥离注释后的正文）', () => {
+    const raw = '/** 不要手写 role="switch" */\n<div className="x" />'
+    expect(collectHandwrittenAriaHits(stripComments(raw), raw)).toEqual([])
+  })
+
+  it('@design-system-ok 豁免：写明理由即放行', () => {
+    const raw =
+      '/** @design-system-ok: 焦点须常驻输入框，弹层模型不适用 */\n<div role="combobox" />'
+    expect(collectHandwrittenAriaHits(stripComments(raw), raw)).toEqual([])
+  })
+
+  it('空理由不放行（豁免不能变成随手加的静音开关）', () => {
+    const raw = '/** @design-system-ok: */\n<div role="combobox" />'
+    expect(collectHandwrittenAriaHits(stripComments(raw), raw)).toEqual([
+      { line: 2, role: 'combobox' },
+    ])
+  })
+})
+
+describe('第 32 条：指针目标 <24×24（WCAG 2.2 SC 2.5.8）', () => {
+  it('按钮上的 size-4 / w-5 / h-5 命中', () => {
+    expect(collectSmallTargetHits('<button className="size-4" onClick={fn} />')).toEqual([
+      { line: 1 },
+    ])
+    expect(collectSmallTargetHits('<button className="w-5" onClick={fn} />')).toEqual([{ line: 1 }])
+  })
+
+  it('h-6 / size-6（24px）不判', () => {
+    expect(collectSmallTargetHits('<button className="size-6" onClick={fn} />')).toEqual([])
+    expect(collectSmallTargetHits('<button className="h-6 w-6" onClick={fn} />')).toEqual([])
+  })
+
+  it('非交互元素上的图标尺寸不判（纯装饰）', () => {
+    expect(collectSmallTargetHits('<Minus className="size-3" aria-hidden />')).toEqual([])
+  })
+
+  it('aria-hidden 的标记不判（即便同行有按钮语义）', () => {
+    expect(
+      collectSmallTargetHits(
+        '<button onClick={fn}><Minus className="size-3" aria-hidden /></button>',
+      ),
+    ).toEqual([])
+  })
+})
+
+describe('第 33 条：焦点样式用 focus: 而非 focus-visible:', () => {
+  it('focus:ring-1 命中', () => {
+    expect(
+      collectBareFocusHits('<input className="focus:ring-1 focus:ring-mcs-focus-ring" />'),
+    ).toEqual([{ line: 1 }])
+  })
+
+  it('focus-visible: 不判', () => {
+    expect(
+      collectBareFocusHits(
+        '<input className="focus-visible:ring-1 focus-visible:ring-mcs-focus-ring" />',
+      ),
+    ).toEqual([])
+  })
+
+  it('同 className 内已有 focus-visible: 时放行（两档并存是允许的）', () => {
+    expect(collectBareFocusHits('className="focus:border-x focus-visible:ring-1"')).toEqual([])
   })
 })

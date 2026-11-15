@@ -97,6 +97,7 @@ function renderPanel(player: Player | null = null) {
           mcVersion="1.21.4"
           onAction={async () => {}}
           onOpenBanDialog={() => {}}
+          onClose={() => {}}
         />
       </TooltipProvider>
     </QueryClientProvider>,

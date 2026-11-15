@@ -97,27 +97,51 @@ export function collectDangerousButtonBorderHits(code) {
  * 单独裸取消正是它的漏检面；「outline-none + 仅 outline 颜色类」的组合刻意留给
  * 第 8 条判，本条不重复计数）。替换指示器按 focus ring 与 focus outline 的粗细档
  * 近似，outline-1 不算——替换须达到全局兜底同级的 2px 基线。
- * 交互形态按同行标记近似：按钮四标记之外含 input/textarea/select（表单控件的
- * 焦点环同等重要，ui/command.tsx:103 的命令面板输入框曾是现实反例）；弹层容器、
- * role=tab 等其余形态刻意不判——跨行 className 也不判（与第 28 条同口径，宁漏不误报）。
+ * 交互形态按**元素标签**判定，不按同行标记：JSX 的属性常逐个换行写，
+ * className 落在标签起始行的下方数行是常态（give-item-ticket 的数量输入框即此形态，
+ * 同行匹配看不见它）。故先按标签扫描出每个元素的起始行与结束行，再在元素范围内判
+ * 取消与替换。弹层容器、role=tab 等非表单/按钮形态刻意不判。
  * 入参须是 stripComments 后的正文。
- * @returns {{ line: number }[]} 1 基行号，按出现顺序
+ * @returns {{ line: number }[]} 1 基行号（className 所在行），按出现顺序
  */
 const OUTLINE_CANCEL = /\boutline-(none|hidden)\b/
-const INTERACTIVE_MARKERS =
-  /\bonClick=|<Button\b|<button\b|role="button"|<input\b|<textarea\b|<select\b/
+/** 交互元素起始标签（开标签本身，属性可跨行）；role="button" 的自定义容器同样计入 */
+const INTERACTIVE_TAG_OPEN = /<(button|input|textarea|select|Button)\b|<(\w+)\b[^>]*?role="button"/g
 const FOCUS_INDICATOR =
   /focus(-visible)?:(ring-(?:[1-9]|\d{2,}|\[)|outline-(?:[2-9]|\d{2,}|mcs-|\[))/
+
+/**
+ * JSX 开标签的结束偏移：从 `<tag` 起按引号/括号深度扫，直到深度归零的 `>`。
+ * 自闭合 `/>` 同样在 `>` 处结束。找不到返回 -1（畸形源码，不判）。
+ */
+function tagEndOffset(code, start) {
+  let depth = 0
+  let quote = null
+  for (let i = start; i < code.length; i++) {
+    const ch = code[i]
+    if (quote) {
+      if (ch === quote && code[i - 1] !== '\\') quote = null
+      continue
+    }
+    if (ch === '"' || ch === "'" || ch === '`') quote = ch
+    else if (ch === '{') depth++
+    else if (ch === '}') depth--
+    else if (ch === '>' && depth === 0) return i
+  }
+  return -1
+}
+
 export function collectFocusCancellationHits(code) {
   const hits = []
-  for (const [i, line] of code.split('\n').entries()) {
-    if (
-      OUTLINE_CANCEL.test(line) &&
-      INTERACTIVE_MARKERS.test(line) &&
-      !FOCUS_INDICATOR.test(line)
-    ) {
-      hits.push({ line: i + 1 })
-    }
+  for (const m of code.matchAll(INTERACTIVE_TAG_OPEN)) {
+    const start = m.index
+    const end = tagEndOffset(code, start)
+    if (end === -1) continue
+    const tag = code.slice(start, end + 1)
+    if (!OUTLINE_CANCEL.test(tag) || FOCUS_INDICATOR.test(tag)) continue
+    // 报 className 所在行（用户要改的那一行），而非标签起始行
+    const cancelIdx = tag.search(OUTLINE_CANCEL)
+    hits.push({ line: lineAt(code, start + cancelIdx) })
   }
   return hits
 }
@@ -266,15 +290,115 @@ export function collectHeadingTiers(scopedCodes, baseCodes) {
  * 调用点逐字照抄（曾扩散到 4 处），只扫 feature 等于放行源头。
  * 状态前缀按「变体名里含 hover/focus/active」取，故 hover:/focus-visible:/group-hover:/
  * dark:hover: 一并命中；跨行 className 不判（与第 28/29 条同口径，宁漏不误报）。
+ *
+ * 数据属性形态的选中态（`data-active:` / `data-[state=active]:`）**不在判定面**：它们表达
+ * 「已选中」而非「按下/悬浮」，用内容面 tint 正是设计意图（TONE_SELECTED_* 就这么写）。
+ * 判据是前缀里出现 `data-`——CSS 伪类 `active:`（按下态）仍属违规，继续命中。
  * 入参须是 stripComments 后的正文。
  * @returns {{ line: number }[]} 1 基行号，按出现顺序
  */
-const TINT_AS_INTERACTION = /(?:[\w-]*(?:hover|focus|active)[\w-]*:)+bg-mcs-[a-z-]*bg-subtle\b/
+const TINT_AS_INTERACTION =
+  /(?:^|[\s"'`{>])((?:[a-z][\w-]*(?:\[[^\]]*\])?:)+)bg-mcs-[a-z-]*bg-subtle\b/g
+
+/** 交互状态前缀（悬浮/聚焦/按下）；`active` 与 `data-*` 由调用方区分 */
+const INTERACTION_PREFIX = /^(?:[\w-]*(?:hover|focus|active)[\w-]*)$/
 
 export function collectTintAsInteractionHits(code) {
   const hits = []
   for (const [i, line] of code.split('\n').entries()) {
-    if (TINT_AS_INTERACTION.test(line)) hits.push({ line: i + 1 })
+    for (const m of line.matchAll(TINT_AS_INTERACTION)) {
+      const prefixes = m[1].split(':').filter(Boolean)
+      // 数据属性形态（data-active / data-[state=active]）是选中态，不是交互悬浮
+      if (prefixes.some((p) => p.startsWith('data-'))) continue
+      if (!prefixes.some((p) => INTERACTION_PREFIX.test(p))) continue
+      hits.push({ line: i + 1 })
+      break
+    }
+  }
+  return hits
+}
+
+/**
+ * 第 31 条：自造 ARIA 交互组件。
+ *
+ * 基座（ui/ 下的 Radix 封装）已经提供完整的键盘语义与 ARIA 关系：Switch 有空格切换与
+ * aria-checked、Tabs 有 roving tabindex / aria-controls / 方向键、Select 有 listbox 全套。
+ * 手写 role="switch" / role="tablist" / role="listbox" 的现场实测都缺关键属性
+ * （tablist 缺 aria-controls 且每个 tab 都是 tabIndex=0；listbox 的 option 缺 aria-selected），
+ * 读屏与键盘用户拿到的是一个「看起来像、用起来不是」的控件。
+ *
+ * 判定面：role= 后跟 switch/tablist/listbox/menu/combobox 字面量。扫描面＝src/
+ * （排除 components/ui/ 本身——基座就是这些角色的合法声明处）。
+ * 宁漏不误报：role="button" 不判（自定义可点容器是常见且合理的选择）。
+ *
+ * 豁免：文件顶部带 @design-system-ok: <理由> 注释的现场不判。用于「基座装不下、
+ * 但已按 ARIA APG 完整实现」的少数场景（如终端命令补全：输入框必须常驻焦点，
+ * 用 aria-activedescendant 而非把焦点移进列表，ui/select 的弹层模型不适用）。
+ * 豁免要求写出理由——空理由不放行，避免变成随手加的静音开关。
+ */
+const HANDWRITTEN_ARIA_ROLES = /\brole=["'](switch|tablist|listbox|combobox|menu|radiogroup)["']/
+/** 理由须是同行的实词（只写注释结束符的空豁免不算） */
+const ARIA_EXEMPTION = /@design-system-ok:[ \t]*(?!\*\/)\S+/
+
+/**
+ * @param code 已剥离注释的正文（注释里写的 role="switch" 示例不算现场）
+ * @param raw  原文，用于识别 @design-system-ok 豁免标记（它在注释里，剥离后就没了）
+ */
+export function collectHandwrittenAriaHits(code, raw = '') {
+  if (ARIA_EXEMPTION.test(raw)) return []
+  const hits = []
+  for (const [i, line] of code.split('\n').entries()) {
+    const m = HANDWRITTEN_ARIA_ROLES.exec(line)
+    if (m) hits.push({ line: i + 1, role: m[1] })
+  }
+  return hits
+}
+
+/**
+ * 第 32 条：指针目标尺寸低于 WCAG 2.2 SC 2.5.8 的 24×24 CSS px。
+ *
+ * 判定的是**明确小于 24px 的显式尺寸**：size-3/3.5/4/5（12/14/16/20px）、
+ * h-3…h-5、w-3…w-5。只认这些「写死的小档」——h-full w-5 这类相对尺寸要结合父容器
+ * 才知道实际像素，静态判不出来（宁漏不误报）。
+ *
+ * 按**标签范围**判而不是按行：JSX 属性逐个换行是常态，className 与 <button 常不在同一行。
+ * 扫描每个交互元素标签（button/input/textarea/select/Button 与 role="button" 容器），
+ * 在标签范围内找小尺寸档；`aria-hidden` 的元素整体跳过（纯装饰标记，如按钮内的图标）。
+ *
+ * @returns {{ line: number }[]} 1 基行号（小尺寸所在行），按出现顺序
+ */
+const SMALL_TARGET = /\b(?:size-(?:3|3\.5|4|5)|h-(?:3|3\.5|4|5)|w-(?:3|3\.5|4|5))\b/
+const SMALL_TARGET_TAG_OPEN =
+  /<(button|input|textarea|select|Button)\b|<(\w+)\b[^>]*?role="button"/g
+
+export function collectSmallTargetHits(code) {
+  const hits = []
+  for (const m of code.matchAll(SMALL_TARGET_TAG_OPEN)) {
+    const start = m.index
+    const end = tagEndOffset(code, start)
+    if (end === -1) continue
+    const tag = code.slice(start, end + 1)
+    if (/aria-hidden/.test(tag)) continue
+    const small = tag.search(SMALL_TARGET)
+    if (small === -1) continue
+    hits.push({ line: lineAt(code, start + small) })
+  }
+  return hits
+}
+
+/**
+ * 第 33 条：焦点样式用 focus: 而非 focus-visible:。
+ *
+ * focus: 在鼠标点击时也匹配，于是鼠标用户每次点输入框都会看到一圈「键盘焦点环」——
+ * 它既是视觉噪音，也让真正需要它的键盘用户失去信号（两者不再可区分）。
+ * 判定面：focus: 后紧跟 ring/outline 类，且同一 className 内没有 focus-visible: 同档。
+ * 基座（ui/）已统一用 focus-visible:，故本条只扫 feature 层。
+ */
+const BARE_FOCUS_RING = /\bfocus:(?:ring-|outline-)/
+export function collectBareFocusHits(code) {
+  const hits = []
+  for (const [i, line] of code.split('\n').entries()) {
+    if (BARE_FOCUS_RING.test(line) && !/focus-visible:/.test(line)) hits.push({ line: i + 1 })
   }
   return hits
 }

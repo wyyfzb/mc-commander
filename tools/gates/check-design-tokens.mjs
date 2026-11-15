@@ -80,8 +80,11 @@ import {
   STRING_LITERAL,
   collectCardSurfaceOffsets,
   collectDangerousButtonBorderHits,
+  collectBareFocusHits,
   collectFocusCancellationHits,
+  collectHandwrittenAriaHits,
   collectHeadingTiers,
+  collectSmallTargetHits,
   collectTextBaseHits,
   collectTintAsInteractionHits,
   lineAt,
@@ -602,6 +605,29 @@ function walkDir(dir) {
       for (const hit of collectTintAsInteractionHits(stripComments(content))) {
         console.log(
           `${relPath}:${hit.line}: 状态前缀上用了内容面 tint（*-bg-subtle）→ 交互悬浮只走覆盖层 --mcs-state-*（危险族用 --mcs-state-hover-error）`,
+        )
+        violations++
+      }
+      // 31. 自造 ARIA 交互组件（手写 role=switch/tablist/listbox 等）。
+      // 判定面是剥离注释后的正文（注释里的写法示例不算现场）；豁免标记在注释里，
+      // 故额外传原文供它识别
+      for (const hit of collectHandwrittenAriaHits(stripComments(content), content)) {
+        console.log(
+          `${relPath}:${hit.line}: 手写 role="${hit.role}" → 改用 ui/ 基座（Switch/Tabs/Select）；手写版缺 aria-controls、roving tabindex、aria-selected 等关键语义`,
+        )
+        violations++
+      }
+      // 32. 指针目标小于 WCAG 2.2 SC 2.5.8 的 24×24
+      for (const hit of collectSmallTargetHits(stripComments(content))) {
+        console.log(
+          `${relPath}:${hit.line}: 交互目标尺寸 <24×24（size/h/w 3~5）→ WCAG 2.2 SC 2.5.8 要求指针目标 ≥24×24 CSS px；改用 h-6/w-6 或给足间距`,
+        )
+        violations++
+      }
+      // 33. 焦点样式用 focus: 而非 focus-visible:
+      for (const hit of collectBareFocusHits(stripComments(content))) {
+        console.log(
+          `${relPath}:${hit.line}: 焦点环写在 focus: 上 → 鼠标点击也会出环，键盘焦点信号被稀释；改用 focus-visible:`,
         )
         violations++
       }

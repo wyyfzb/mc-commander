@@ -1,7 +1,8 @@
 /**
- * PlayersPage —— 玩家页（Master-Detail 双栏）
- * - 左：筛选栏 + 表格（排序/分页/虚拟滚动/行内菜单）
- * - 右：详情面板（5 Tab；批量模式仅传送/给予）
+ * PlayersPage —— 玩家页（列表 + 玩家详情弹窗）
+ * - 筛选栏 + 表格（排序/分页/虚拟滚动/行内菜单）
+ * - 详情为居中弹窗（960×760，ui/dialog 提供 role=dialog / 焦点陷阱 / Esc / 背景 inert）；
+ *   表格不再被右栏借宽，主流桌面宽度下始终 8 列
  * - 底部浮动批量操作条（选中时出现）
  * - URL 深链接：?q=<搜索词>&mode=<状态>&player=<玩家名>（可分享、可刷新保持）
  * - 数据流：usePlayers 30s 保底轮询 + WS 事件 invalidate（use-server-socket 全局分派）
@@ -44,21 +45,10 @@ import { PlayerDetailPanel } from './components/player-detail-panel'
 import { BatchBar } from './components/batch-bar'
 import { BanDialog } from './components/ban-dialog'
 import { BanRecordsDialog } from './components/ban-records-dialog'
-import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
-import { useContainerWidth } from '@/hooks/use-container-width'
+import { useGiveDraftStore } from './give-draft'
 
 /** data 未就绪时的稳定空数组（避免 ?? [] 每次渲染新建引用、污染下游 useMemo） */
 const NO_PLAYERS: Player[] = []
-
-/**
- * 详情面板内联并列所需的内容宽：面板 w-105（420px，右列无 gap，见 PlayerDetailPanel 的 inline 变体）
- * + 裁列后表格的最小可用宽（480px，见 player-table 的 FULL_COLUMNS_MIN_WIDTH 一档的下一级）。
- * 低于此宽表格会被压到百 px 级，改由 Sheet 全屏承载（role=dialog / 焦点陷阱 / Esc / 背景 inert），
- * 既免去旧 CSS 覆盖层无 dialog 语义的问题，也不挤压表格与筛选栏。
- * 判据取**容器实宽**而非视口：侧栏折叠会使同视口下内容宽差 152px，视口断点会把
- * 「明明并得下」的宽度误判成 Sheet（折叠侧栏 1024 视口内容已有 936px）
- */
-const PANEL_INLINE_MIN_CONTENT = 420 + 480
 
 export function PlayersPage() {
   const instanceId = useServerStore((s) => s.instanceId)
@@ -76,12 +66,21 @@ export function PlayersPage() {
   const detail = usePlayersUiStore((s) => s.detail)
   const openPlayerDetail = usePlayersUiStore((s) => s.openPlayerDetail)
   const openBatchDetail = usePlayersUiStore((s) => s.openBatchDetail)
+  const switchPlayerDetail = usePlayersUiStore((s) => s.switchPlayerDetail)
+  const rowOrder = usePlayersUiStore((s) => s.rowOrder)
   const resetForInstance = usePlayersUiStore((s) => s.resetForInstance)
   const closeDetail = usePlayersUiStore((s) => s.closeDetail)
   const selectedUuids = usePlayersUiStore((s) => s.selectedUuids)
-  // 容器实宽（而非视口）：侧栏折叠 / 面板开合都直接反映在测量值里
-  const [areaRef, areaWidth] = useContainerWidth<HTMLDivElement>()
-  const isSheetLayout = areaWidth != null && areaWidth < PANEL_INLINE_MIN_CONTENT
+
+  /**
+   * 关闭详情 = 关弹窗 + 复位给予草稿。草稿归属「本次打开详情」（切 Tab 不清）。
+   * 草稿复位挂在页面侧而非 store：`store.ts` 被命令面板静态引用，
+   * 在它里面挂业务模块会把附魔/药水目录拉进首屏 chunk。
+   */
+  const closeDetailAndResetDraft = () => {
+    useGiveDraftStore.getState().reset()
+    closeDetail()
+  }
 
   const playersQuery = usePlayers(instanceId)
   const statusQuery = useInstanceStatus(instanceId)
@@ -102,6 +101,7 @@ export function PlayersPage() {
   useEffect(() => {
     if (prevInstanceRef.current !== null && prevInstanceRef.current !== instanceId) {
       resetForInstance()
+      useGiveDraftStore.getState().reset()
     }
     prevInstanceRef.current = instanceId
   }, [instanceId, resetForInstance])
@@ -140,6 +140,15 @@ export function PlayersPage() {
     if (!detail || detail.batchMode || !detail.playerName) return null
     return allPlayers.find((p) => p.name === detail.playerName) ?? null
   }, [detail, allPlayers])
+
+  /** ‹ › 换人：按表格上报的真实行序（含表头排序）取上/下一名 */
+  const detailIndex = useMemo(() => {
+    if (!detailPlayer) return -1
+    return rowOrder.indexOf(detailPlayer.name)
+  }, [detailPlayer, rowOrder])
+  const prevPlayerName = detailIndex > 0 ? rowOrder[detailIndex - 1]! : null
+  const nextPlayerName =
+    detailIndex >= 0 && detailIndex < rowOrder.length - 1 ? rowOrder[detailIndex + 1]! : null
 
   /** 统一操作回调（mutation + 错误 toast） */
   const handleAction = async (req: PlayerActionRequest): Promise<void> => {
@@ -214,8 +223,8 @@ export function PlayersPage() {
     <div className="flex h-full min-h-0 flex-col gap-4 p-4">
       <PageHeader title="玩家" description="查看 · 管理 · 洞察服务器玩家" />
 
-      {/* 左栏：筛选 + 表格（容器实宽决定详情面板内联还是 Sheet，见 PANEL_INLINE_MIN_CONTENT） */}
-      <div ref={areaRef} className="relative flex min-h-0 flex-1">
+      {/* 表格区（详情改居中弹窗后不再被右栏借宽） */}
+      <div className="relative flex min-h-0 flex-1">
         <div className="flex min-w-0 flex-1 flex-col">
           <FilterBar
             players={filteredPlayers}
@@ -265,54 +274,57 @@ export function PlayersPage() {
             />
           )}
         </div>
+      </div>
 
-        {/* 右栏：详情面板（容器并得下时内联并列；并不下移入 Sheet，见下） */}
-        {detail !== null && !isSheetLayout && (
+      {/* 玩家详情：居中弹窗（960×760）。模态后不再能点表格换人，
+          ‹ › 按表格上报的行序在弹窗内换人（1 次点击，鼠标不必回表格） */}
+      <Dialog
+        open={detail !== null}
+        onOpenChange={(open) => {
+          if (!open) closeDetailAndResetDraft()
+        }}
+      >
+        <DialogContent
+          showCloseButton={false}
+          className="flex h-[min(760px,88dvh)] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(960px,calc(100%_-_2rem))]"
+        >
+          <DialogTitle className="sr-only">
+            {detail?.batchMode
+              ? `批量操作 ${selectedPlayers.length} 名玩家`
+              : `${detailPlayer?.name ?? '玩家'} 详情`}
+          </DialogTitle>
+          <DialogDescription className="sr-only">
+            玩家详情与操作面板：概览、物品栏、传送、给予物品、操作与日志
+          </DialogDescription>
           <PlayerDetailPanel
             instanceId={instanceId ?? ''}
             player={detailPlayer}
-            batchTargets={detail.batchMode ? selectedPlayers : []}
-            isBatchMode={detail.batchMode}
+            batchTargets={detail?.batchMode ? selectedPlayers : []}
+            isBatchMode={detail?.batchMode ?? false}
             isRconConnected={isRconConnected}
             mcVersion={mcVersion}
             onAction={handleAction}
             onOpenBanDialog={setBanTarget}
+            onClose={closeDetailAndResetDraft}
+            onPrevPlayer={
+              detail?.batchMode || !detailPlayer
+                ? null
+                : prevPlayerName
+                  ? () => switchPlayerDetail(prevPlayerName)
+                  : null
+            }
+            onNextPlayer={
+              detail?.batchMode || !detailPlayer
+                ? null
+                : nextPlayerName
+                  ? () => switchPlayerDetail(nextPlayerName)
+                  : null
+            }
+            prevPlayerName={prevPlayerName ?? undefined}
+            nextPlayerName={nextPlayerName ?? undefined}
           />
-        )}
-      </div>
-
-      {/* 容器并不下面板时（含平板/窄屏）：详情面板以 Sheet（Radix Dialog）承载，获得 role=dialog / aria-modal / 焦点陷阱 / Esc 关闭 / 背景 inert */}
-      {detail !== null && isSheetLayout && (
-        <Sheet
-          open
-          onOpenChange={(open) => {
-            if (!open) closeDetail()
-          }}
-        >
-          <SheetContent
-            side="right"
-            showCloseButton={false}
-            className="w-full! gap-0 p-0 sm:max-w-none!"
-          >
-            <SheetTitle className="sr-only">
-              {detail.batchMode
-                ? `批量操作 ${selectedPlayers.length} 名玩家`
-                : `${detailPlayer?.name ?? '玩家'} 详情`}
-            </SheetTitle>
-            <PlayerDetailPanel
-              variant="overlay"
-              instanceId={instanceId ?? ''}
-              player={detailPlayer}
-              batchTargets={detail.batchMode ? selectedPlayers : []}
-              isBatchMode={detail.batchMode}
-              isRconConnected={isRconConnected}
-              mcVersion={mcVersion}
-              onAction={handleAction}
-              onOpenBanDialog={setBanTarget}
-            />
-          </SheetContent>
-        </Sheet>
-      )}
+        </DialogContent>
+      </Dialog>
 
       {/* 封禁对话框 */}
       {banTarget && (

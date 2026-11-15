@@ -26,6 +26,21 @@ const streamState = vi.hoisted(() => ({
   calls: new Map(),
 }));
 
+/* 文件符号链接能力：Windows 建文件软链要管理员权限或开发者模式，而这两条用例的前提
+   （清单里的 link 条目真的落到盘上）无法用 junction 替代——它是**文件**链接，且要
+   校验 readlink 的原样目标。故探测一次，不可用则跳过（与 fs-utils / files 同口径）。 */
+const symlinkSupported = (() => {
+  const probe = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-symlink-probe-'));
+  try {
+    fs.symlinkSync('probe-target', path.join(probe, 'probe-link'), 'file');
+    return true;
+  } catch {
+    return false;
+  } finally {
+    fs.rmSync(probe, { recursive: true, force: true });
+  }
+})();
+
 vi.mock('os', async (importOriginal) => {
   const actual = await importOriginal();
   return {
@@ -229,29 +244,32 @@ describe('ensureJavaRuntime', () => {
     expect(jreFiles()).toEqual([]);
   });
 
-  it('真实清单形状（file/directory/link 三类）：合法相对链接按原样复刻，安装成功', async () => {
-    setupComponent({
-      files: {
-        bin: { type: 'directory' },
-        'bin/java': 'fake-java-binary',
-        'legal/java.base': { type: 'directory' },
-        'legal/java.base/LICENSE': 'license-text',
-        'legal/java.compiler': { type: 'directory' },
-        'legal/java.compiler/LICENSE': { type: 'link', target: '../java.base/LICENSE' },
-      },
-    });
+  it.skipIf(!symlinkSupported)(
+    '真实清单形状（file/directory/link 三类）：合法相对链接按原样复刻，安装成功',
+    async () => {
+      setupComponent({
+        files: {
+          bin: { type: 'directory' },
+          'bin/java': 'fake-java-binary',
+          'legal/java.base': { type: 'directory' },
+          'legal/java.base/LICENSE': 'license-text',
+          'legal/java.compiler': { type: 'directory' },
+          'legal/java.compiler/LICENSE': { type: 'link', target: '../java.base/LICENSE' },
+        },
+      });
 
-    const javaPath = await ensureJavaRuntime('21');
+      const javaPath = await ensureJavaRuntime('21');
 
-    const linkPath = path.join(jreState.dir, '21', 'legal', 'java.compiler', 'LICENSE');
-    expect(fs.lstatSync(linkPath).isSymbolicLink()).toBe(true);
-    // 目标必须原样保留相对字符串：解析成绝对路径后同一份 JRE 换目录就失效。
-    // 只比较「是不是相对、是不是同一目标」——Windows 的 readlink 把分隔符写成 '\'，
-    // 那是宿主的路径表示法，不是本实现的选择。
-    expect(fs.readlinkSync(linkPath).split(path.sep).join('/')).toBe('../java.base/LICENSE');
-    expect(fs.readFileSync(linkPath, 'utf-8')).toBe('license-text');
-    expect(fs.readFileSync(javaPath, 'utf-8')).toBe('fake-java-binary');
-  });
+      const linkPath = path.join(jreState.dir, '21', 'legal', 'java.compiler', 'LICENSE');
+      expect(fs.lstatSync(linkPath).isSymbolicLink()).toBe(true);
+      // 目标必须原样保留相对字符串：解析成绝对路径后同一份 JRE 换目录就失效。
+      // 只比较「是不是相对、是不是同一目标」——Windows 的 readlink 把分隔符写成 '\'，
+      // 那是宿主的路径表示法，不是本实现的选择。
+      expect(fs.readlinkSync(linkPath).split(path.sep).join('/')).toBe('../java.base/LICENSE');
+      expect(fs.readFileSync(linkPath, 'utf-8')).toBe('license-text');
+      expect(fs.readFileSync(javaPath, 'utf-8')).toBe('fake-java-binary');
+    },
+  );
 
   it('link 目标解析后越出安装根 → 拒绝并清理 staging', async () => {
     setupComponent({
@@ -282,21 +300,24 @@ describe('ensureJavaRuntime', () => {
     expect(jreFiles()).toEqual([]);
   });
 
-  it('悬空 link（目标文件不在清单里）不阻断安装：读不到根外内容', async () => {
-    setupComponent({
-      files: {
-        'bin/java': 'fake-java-binary',
-        'legal/java.compiler/LICENSE': { type: 'link', target: '../java.base/MISSING' },
-      },
-    });
+  it.skipIf(!symlinkSupported)(
+    '悬空 link（目标文件不在清单里）不阻断安装：读不到根外内容',
+    async () => {
+      setupComponent({
+        files: {
+          'bin/java': 'fake-java-binary',
+          'legal/java.compiler/LICENSE': { type: 'link', target: '../java.base/MISSING' },
+        },
+      });
 
-    await ensureJavaRuntime('21');
+      await ensureJavaRuntime('21');
 
-    const linkPath = path.join(jreState.dir, '21', 'legal', 'java.compiler', 'LICENSE');
-    expect(fs.lstatSync(linkPath).isSymbolicLink()).toBe(true);
-    // 分隔符同前一条：Windows 的 readlink 写 '\'，比较前归一
-    expect(fs.readlinkSync(linkPath).split(path.sep).join('/')).toBe('../java.base/MISSING');
-  });
+      const linkPath = path.join(jreState.dir, '21', 'legal', 'java.compiler', 'LICENSE');
+      expect(fs.lstatSync(linkPath).isSymbolicLink()).toBe(true);
+      // 分隔符同前一条：Windows 的 readlink 写 '\'，比较前归一
+      expect(fs.readlinkSync(linkPath).split(path.sep).join('/')).toBe('../java.base/MISSING');
+    },
+  );
 
   it('单个文件响应体中断 → 自动重试该文件一次后成功', async () => {
     setupComponent({ files: { 'bin/java': 'fake-java-binary' } });

@@ -228,6 +228,10 @@ export default defineConfig({
     __APP_VERSION__: JSON.stringify(pkg.version),
   },
   build: {
+    // 物品贴图（assets/items/*.png，197 张、其中 150 张小于默认内联阈值 4KB）必须**逐文件发**：
+    // 内联会把它们 base64 进引用它的 chunk（实测玩家页 375 → 494KB），既无法被浏览器
+    // 缓存复用、也无法按需懒加载。对 PNG 返回 false 即全部留在文件系统里，URL 仍由构建器指纹化。
+    assetsInlineLimit: (filePath) => (filePath.endsWith('.png') ? false : undefined),
     rollupOptions: {
       output: {
         // 分包（M6 方案）：框架/路由/查询库 vendor 拆分 + 页面 route-level lazy 已覆盖主体积。

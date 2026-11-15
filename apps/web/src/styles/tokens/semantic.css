@@ -116,12 +116,20 @@
   /* 间距不设 token：统一走 Tailwind 默认 4px 刻度（--spacing 0.25rem），
      结构间距必须 4px 倍数、组件内微节奏允许 2px 档（纪律见 AGENTS.md） */
 
-  /* ── 圆角（v2 整体上调一档：面板 6 / 控件 8 / 卡片 12 / 弹窗 16 / 全应用上限 20）── */
-  --mcs-radius-xs: 6px;   /* 面板/输入框 */
-  --mcs-radius-sm: 8px;   /* 小控件 */
-  --mcs-radius-md: 12px;  /* 卡片 */
-  --mcs-radius-lg: 16px;  /* 弹窗 */
-  --mcs-radius-xl: 20px;  /* @reserved 全应用上限档（当前 0 消费，保留档位语义） */
+  /* ── 圆角（5 档：6 / 8 / 12 / 16 / 20）
+        档位与消费点的实际对应（shadcn 的 --radius-* 逐档错位绑定，故 `rounded-lg` 落在
+        --radius-lg ← --mcs-radius-md = 12px，见 index.css 的映射表）：
+          6px  内嵌小块（chip 内层、角标、行内小按钮）
+          8px  小控件（chip、状态胶囊、紧凑按钮）
+          12px 表单控件与卡片（ui/input、ui/textarea、ui/button、ui/select 的默认档，Card）
+          16px 弹窗与抽屉（ui/dialog、ui/sheet、命令预览条）
+          20px @reserved（当前 0 消费）
+        表单控件取 12px 而不是 8px：与卡片同档，控件落在卡片上时边缘曲率一致。 */
+  --mcs-radius-xs: 6px;
+  --mcs-radius-sm: 8px;
+  --mcs-radius-md: 12px;
+  --mcs-radius-lg: 16px;
+  --mcs-radius-xl: 20px; /* @reserved 全应用上限档（当前 0 消费，保留档位语义） */
 
   /* ── 字体（CJK 规范：正文行高 1.6；字重走 Tailwind font-medium/semibold、行高覆盖走 leading-*）
         文字档 6 档 = 22 / 18 / 14 / 14 / 12 / 10；两个 14px 档语义不同（正文基准 vs 强调正文），
@@ -165,16 +173,18 @@
 }
 
 .light {
-  /* 亮色主题独立映射（换档不换色，明暗独立验证） */
-  --mcs-bg-default: var(--ref-light-bg);
+  /* 亮色主题独立映射（换档不换色，明暗独立验证）
+     五个面必须彼此可区分：暗色靠「越浮起越亮」形成阶梯，亮色靠「越浮起越白」，
+     而画布与深嵌区必须比卡片暗，否则 bg-default 与 bg-subtle 同值 ⇒ 组件无法表达
+     「深嵌」这一层级（终端/代码块/进度轨道全部退化成与页面底同色）。 */
+  --mcs-bg-default: var(--ref-light-bg); /* 画布 */
   /* 涟漪在亮色面上升档：同一 0.6 在亮色玻璃面上合成后只有 2.63:1（图形口径要 ≥3:1） */
   --mcs-ripple-opacity: 0.75;
-  --mcs-bg-muted: var(--ref-light-card);
-  /* 深嵌区：亮色下与页面底同值（浅灰）。终端等真正深嵌场景由 M2 引入
-     主题无关的 --mcs-terminal-* 专用 token（ServerTerminal 独立深底） */
-  --mcs-bg-subtle: var(--ref-light-bg);
-  --mcs-bg-emphasis: var(--ref-light-popover);
-  --mcs-bg-secondary: var(--ref-light-secondary);
+  --mcs-bg-muted: var(--ref-light-card); /* 卡片 */
+  /* 深嵌区：比画布再深一档。终端等真正深嵌场景由 --mcs-terminal-* 承担 */
+  --mcs-bg-subtle: var(--ref-light-secondary);
+  --mcs-bg-emphasis: var(--ref-light-popover); /* 弹层（靠 shadow + ring 与卡片区分） */
+  --mcs-bg-secondary: var(--ref-light-secondary-soft); /* 次级面：介于画布与卡片之间 */
 
   --mcs-text-default: var(--ref-light-text-default);
   --mcs-text-muted: var(--ref-light-text-muted);

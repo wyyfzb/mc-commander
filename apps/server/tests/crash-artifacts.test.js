@@ -313,17 +313,49 @@ describe('getCrashArtifact 取用与降级', () => {
     expect(inst.getCrashArtifact()).toBeNull();
   });
 
-  it('符号链接指向实例外时不读取（路径包含性）', () => {
+  it('符号链接文件指向实例外时不读取（路径包含性）', () => {
     const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-outside-'));
     try {
       fs.writeFileSync(path.join(outside, 'evil.txt'), read('crash-invalid-secret.txt'));
       fs.mkdirSync(path.join(tmpDir, 'crash-reports'), { recursive: true });
-      fs.symlinkSync(
-        path.join(outside, 'evil.txt'),
-        path.join(tmpDir, 'crash-reports', 'crash-2026-10-05_01.00.00-server.txt'),
-      );
-      // 符号链接 resolve 后落在实例外 ⇒ 丢弃
+      try {
+        fs.symlinkSync(
+          path.join(outside, 'evil.txt'),
+          path.join(tmpDir, 'crash-reports', 'crash-2026-10-05_01.00.00-server.txt'),
+        );
+      } catch (err) {
+        // Windows 建**文件**软链要管理员/开发者模式。不能用 junction 顶替：
+        // junction 只能指向目录，而目录的 stat().isFile() 为 false，会在 _crashArtifactStat
+        // 那步就被排除，contained() 根本轮不到判定——测试会因错误的原因通过
+        // （见本文件头「期望 null 的用例因错误的原因通过」那条警告）。
+        if (err.code === 'EPERM' || err.code === 'EACCES') return;
+        throw err;
+      }
+      // resolve 后落在实例外 ⇒ 丢弃
       expect(makeInstance(tmpDir).getCrashArtifact()).toBeNull();
+    } finally {
+      fs.rmSync(outside, { recursive: true, force: true });
+    }
+  });
+
+  it('链接解析到实例外一律判 false（含目录链接：不依赖 isFile 先排除）', () => {
+    /* 上一条在无 symlink 权限的 Windows 上是跳过的，而目录链接（junction）那里
+       免权限可建——用它直接考 _crashArtifactContained 本身：这是「isFile 通过之后
+       仍要拦」的那一关，绕过枚举层的 stat 判定，故与上一条互补而非重复。 */
+    const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-outside-'));
+    try {
+      fs.writeFileSync(path.join(outside, 'evil.txt'), read('crash-invalid-secret.txt'));
+      const reportDir = path.join(tmpDir, 'crash-reports');
+      fs.mkdirSync(reportDir, { recursive: true });
+      const linkedDir = path.join(reportDir, 'linked');
+      try {
+        fs.symlinkSync(outside, linkedDir, 'junction');
+      } catch {
+        return; // 造不出链接的环境：前提无法建立
+      }
+      const inside = path.join(linkedDir, 'evil.txt');
+      expect(fs.existsSync(inside)).toBe(true); // 读得到
+      expect(crashArtifacts._crashArtifactContained(reportDir, inside)).toBe(false); // 但不给
     } finally {
       fs.rmSync(outside, { recursive: true, force: true });
     }

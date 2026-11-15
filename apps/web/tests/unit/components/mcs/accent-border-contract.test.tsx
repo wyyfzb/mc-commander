@@ -172,9 +172,12 @@ describe('accent 描边角色契约', () => {
     const track = screen.getByRole('tablist', { name: '物品栏子视图' })
     const active = within(track).getByRole('tab', { selected: true })
     expectNoAccentBorder(active)
-    // 状态可辨识性由底色 + 前景承担（不是靠边界），轨道只挂中性描边
-    expect(tokens(active)).toContain('bg-mcs-accent-bg-subtle')
-    expect(tokens(active)).toContain('text-mcs-accent-fg')
+    // 状态可辨识性由底色 + 前景承担（不是靠边界），轨道只挂中性描边。
+    // Tab 走 ui/tabs 基座后，激活态配色挂在 data-active: 变体上（Radix 的选中态属性），
+    // 故断言看「类名里出现了这个 token」，不看它是否无前缀
+    const classes = active.className
+    expect(classes).toContain('bg-mcs-accent-bg-subtle')
+    expect(classes).toContain('text-mcs-accent-fg')
     expect(tokens(track)).toContain('border-mcs-border-muted')
   })
 
