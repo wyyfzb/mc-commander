@@ -130,6 +130,15 @@ interface PlayersUiState {
   /** 选中玩家 uuid 集合（有序数组保证批量目标顺序稳定） */
   selectedUuids: string[]
   filter: PlayersFilter
+  /**
+   * 表格当前行序（玩家名）。由 PlayerTable 在渲染后上报，供详情 ‹ › 换人使用。
+   *
+   * 不在页面侧复算：排序状态在表格内部（列 id 与 accessorFn 也是表格的私事），
+   * 外部复算要同时复制排序键、列 id 与 undefined 口径，任何一处漂移都会让 ‹ › 跳到
+   * 用户看不见的名字上。上报真实行序是唯一不会分叉的口径。
+   */
+  rowOrder: string[]
+  setRowOrder: (names: string[]) => void
   detail: PlayersDetailState | null
   toggleSelect: (uuid: string) => void
   /** 表头 tristate：全部选中则取消全选，否则全选当前页 */
@@ -141,6 +150,8 @@ interface PlayersUiState {
   /** 批量模式打开详情面板（传送/给予物品复用） */
   openBatchDetail: (tab: PlayerDetailTab) => void
   setDetailTab: (tab: PlayerDetailTab) => void
+  /** 在当前详情里换人（保留 Tab；仅单个模式有意义） */
+  switchPlayerDetail: (playerName: string) => void
   closeDetail: () => void
   /** 实例切换时重置（清空选中+重置筛选） */
   resetForInstance: () => void
@@ -151,7 +162,16 @@ export const usePlayersUiStore = create<PlayersUiState>()(
     (set) => ({
       selectedUuids: [],
       filter: { ...DEFAULT_PLAYERS_FILTER },
+      rowOrder: [],
       detail: null,
+
+      setRowOrder: (rowOrder) =>
+        set((s) =>
+          s.rowOrder.length === rowOrder.length &&
+          s.rowOrder.every((name, i) => name === rowOrder[i])
+            ? s
+            : { rowOrder },
+        ),
 
       toggleSelect: (uuid) =>
         set((s) => ({
@@ -186,10 +206,19 @@ export const usePlayersUiStore = create<PlayersUiState>()(
 
       setDetailTab: (tab) => set((s) => (s.detail ? { detail: { ...s.detail, tab } } : s)),
 
+      /** 换人：保留 Tab，只换目标（弹窗头 ‹ › 与批量查看共用） */
+      switchPlayerDetail: (playerName) =>
+        set((s) => (s.detail ? { detail: { ...s.detail, playerName, batchMode: false } } : s)),
+
       closeDetail: () => set({ detail: null }),
 
       resetForInstance: () =>
-        set({ selectedUuids: [], filter: { ...DEFAULT_PLAYERS_FILTER }, detail: null }),
+        set({
+          selectedUuids: [],
+          filter: { ...DEFAULT_PLAYERS_FILTER },
+          rowOrder: [],
+          detail: null,
+        }),
     }),
     {
       name: 'mcs-players-ui',

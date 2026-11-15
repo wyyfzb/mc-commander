@@ -58,14 +58,19 @@ export const ITEM_SINCE_VERSION: Readonly<Record<string, string>> = {
  * 该物品是否在目标版本可用。
  *
  * 未在 `ITEM_SINCE_VERSION` 中的物品按「起点即存在」处理 ⇒ 可用。
- * 含义是「**已知**不早于此版本」，不是「已核实适用」——注册表只覆盖正式版，
- * 快照版与模组物品不在其列。
+ * 含义是「**已知**不早于此版本」，不是「已核实适用」——注册表只覆盖正式版。
+ *
+ * 版本不可解析时按**可用**处置。取值来自服务端 `_getMcVersion`：读不到 JAR 且 DB
+ * 无记录时是 `'unknown'`，用户手动换快照 JAR 时是 `25w35a` 这类周快照号。两种都无法
+ * 比较，但同域其余判定（`supportsDataComponents` / `usesDirectEnchantmentMap` /
+ * `isMc26` / gamerule 选集）一律按「假设新版」处置——若这里反向，面板会用 26.x 的
+ * 语法拼命令，却把 26.x 才有的物品从货架上删掉，自相矛盾；对快照服更是直接削掉
+ * 一截可用物品，用户无法绕过。
  */
 export function isItemAvailableIn(itemId: string, mcVersion: string): boolean {
   const since = ITEM_SINCE_VERSION[itemId]
   if (!since) return true
-  // 版本不可解析时按「不可用」处置：宁可少列可用物品，也不给出服务端会拒绝的 id
-  return isVersionAtLeast(mcVersion, since, false)
+  return isVersionAtLeast(mcVersion, since, true)
 }
 
 /**

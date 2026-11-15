@@ -3,7 +3,7 @@
  * MSW 拦截（mockPlayers 结构占位数据，无真实服务器信息）
  */
 import { describe, it, expect, beforeEach, afterEach, afterAll, beforeAll } from 'vitest'
-import { render, screen, fireEvent, within } from '@testing-library/react'
+import { render, screen, fireEvent, within, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { HttpResponse, http } from 'msw'
@@ -12,9 +12,9 @@ import { createMemoryRouter, RouterProvider } from 'react-router'
 import { Toaster } from 'sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { handlers, mockPlayers } from '@tests/support/handlers'
-import { mockContainerWidth } from '@tests/support/mock-container-width'
 import { PlayersPage } from '@/features/players/players-page'
 import { usePlayersUiStore } from '@/features/players/store'
+import { useGiveDraftStore } from '@/features/players/give-draft'
 import { useConnectionStore } from '@/stores/connection'
 import { useServerStore } from '@/stores/server'
 
@@ -230,24 +230,75 @@ describe('PlayersPage', () => {
     }
   })
 
-  it('深链接 ?player=Steve 打开详情', async () => {
+  it('深链接 ?player=Steve 打开详情弹窗', async () => {
     renderPage('/players?player=Steve')
-    expect(await screen.findByText('基本信息')).toBeInTheDocument()
-    // 未测到容器宽（jsdom 无布局引擎）按宽兜底走内联右栏，不得退化成 Sheet
-    expect(screen.queryByRole('dialog')).toBeNull()
+    const dialog = await screen.findByRole('dialog', { name: /Steve 详情/ })
+    expect(within(dialog).getByText('基本信息')).toBeInTheDocument()
   })
 
-  it('容器并不下面板时（<900px 内容宽）详情以 dialog 承载，不再是内联窄列', async () => {
-    // 只喂「主从区实宽 < PANEL_INLINE_MIN_CONTENT」：折叠侧栏 768 视口、或宽视口开面板都命中此档
-    const restore = mockContainerWidth(784)
-    try {
-      renderPage('/players?player=Steve')
-      // 轮询到列表就绪后的可访问名（标题取玩家名，SR 可播报上下文）
-      const dialog = await screen.findByRole('dialog', { name: /Steve 详情/ })
-      expect(within(dialog).getByText('基本信息')).toBeInTheDocument()
-    } finally {
-      restore()
-    }
+  it('详情弹窗内 ‹ › 按表格顺序换人，保留当前 Tab', async () => {
+    const user = userEvent.setup()
+    renderPage('/players?player=Steve')
+    const dialog = await screen.findByRole('dialog', { name: /Steve 详情/ })
+    // 先切到「给予物品」：换人后 Tab 必须仍是它（换人不是重新打开）
+    await user.click(within(dialog).getByRole('tab', { name: '给予物品' }))
+    expect(within(dialog).getByText('发放清单')).toBeInTheDocument()
+
+    await user.click(within(dialog).getByRole('button', { name: '下一个玩家' }))
+    // 列表排序：在线优先（Steve/Alex/Bot_farm1 ⇒ Alex 是第二位）
+    const next = await screen.findByRole('dialog', { name: /Alex 详情/ })
+    expect(within(next).getByText('发放清单')).toBeInTheDocument()
+    expect(within(next).getByRole('tab', { name: '给予物品' })).toHaveAttribute(
+      'data-state',
+      'active',
+    )
+  })
+
+  it('点表头排序后 ‹ › 跟随表格行序（不是默认收敛序）', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText('Steve')
+
+    // 先点「玩家」列降序（此时表格未处于弹窗 inert 下）：行序反转
+    const sortButton = screen.getByRole('button', { name: '玩家' })
+    await user.click(sortButton)
+    await user.click(sortButton)
+
+    await user.click(screen.getByRole('button', { name: '查看 Steve 详情' }))
+    await screen.findByRole('dialog', { name: /Steve 详情/ })
+    // 降序后 Steve 在首位，下一名是 Charlie；默认收敛序里 Steve 的下一名是 Alex
+    await user.click(screen.getByRole('button', { name: '下一个玩家' }))
+    const next = await screen.findByRole('dialog', { name: /Charlie 详情/ })
+    expect(next).toBeInTheDocument()
+  })
+
+  it('详情弹窗关闭后清除给予草稿（草稿归属「本次打开详情」）', async () => {
+    const user = userEvent.setup()
+    renderPage('/players?player=Steve')
+    const dialog = await screen.findByRole('dialog', { name: /Steve 详情/ })
+    await user.click(within(dialog).getByRole('tab', { name: '给予物品' }))
+    await user.click(within(dialog).getByTestId('item-cell-diamond'))
+    expect(within(dialog).getByTestId('give-line-diamond')).toBeInTheDocument()
+    // 检索词也属于本次打开：下次进来应回到完整目录
+    await user.type(within(dialog).getByLabelText('搜索物品'), '钻')
+
+    await user.click(within(dialog).getByRole('button', { name: '关闭详情面板' }))
+    // 草稿复位由页面侧的关闭入口统一承担（store 保持零业务依赖）
+    await waitFor(() => expect(useGiveDraftStore.getState().entries).toHaveLength(0))
+    expect(useGiveDraftStore.getState().search).toBe('')
+  })
+
+  it('Esc 关闭弹窗同样清草稿（关闭路径不止按钮一条）', async () => {
+    const user = userEvent.setup()
+    renderPage('/players?player=Steve')
+    const dialog = await screen.findByRole('dialog', { name: /Steve 详情/ })
+    await user.click(within(dialog).getByRole('tab', { name: '给予物品' }))
+    await user.click(within(dialog).getByTestId('item-cell-diamond'))
+    expect(within(dialog).getByTestId('give-line-diamond')).toBeInTheDocument()
+
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(useGiveDraftStore.getState().entries).toHaveLength(0)
   })
 
   it('封禁记录弹窗：全量列表 + 解封确认', async () => {

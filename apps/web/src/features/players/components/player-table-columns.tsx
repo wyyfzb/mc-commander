@@ -281,7 +281,7 @@ export function buildPlayerColumns({
       cell: ({ row }) => {
         const p = row.original
         return (
-          <span className="block text-right text-mcs-xs text-mcs-text-muted">
+          <span className="block text-right font-mono text-mcs-xs tabular-nums text-mcs-text-muted">
             {p.isOnline && p.onlineTime != null
               ? formatOnlineTimeShort(p.onlineTime)
               : formatRelativeTime(p.lastSeen ?? null, Date.now(), '未知')}

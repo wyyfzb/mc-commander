@@ -56,10 +56,12 @@ export function InfoHint({ label, term, children, variant = 'icon' }: InfoHintPr
             {term ?? label}
           </button>
         ) : (
+          /* 命中区 24×24（WCAG 2.2 SC 2.5.8）：按钮本体 24px，负外边距把多出的 4px
+             还给行内流——图标视觉仍是 14px，排版不位移。 */
           <button
             type="button"
             aria-label={label}
-            className="inline-flex size-4 shrink-0 items-center justify-center rounded-mcs-xs align-middle text-mcs-text-muted transition-colors hover:text-mcs-text-default focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mcs-focus-ring"
+            className="-mx-1 inline-flex size-6 shrink-0 items-center justify-center rounded-mcs-xs align-middle text-mcs-text-muted transition-colors hover:text-mcs-text-default focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mcs-focus-ring"
           >
             <Info className="size-3.5" aria-hidden />
           </button>

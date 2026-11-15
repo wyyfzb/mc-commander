@@ -1,7 +1,9 @@
 /**
- * Minecraft 物品目录（212 种）
+ * Minecraft 物品目录（217 种）
  * 覆盖 MC 1.20.5 – 26.2+（Data Components 时代），含 1.21 新物品与 26.x 新物品。
- * 物品贴图来自 mc-heads.net（游戏内纹理渲染）。
+ * 物品贴图随包分发（`assets/items/<id>.png`，游戏内纹理的 128px 渲染）：
+ * 远程贴图服务对浏览器的物品端点返回 403，全部格子会退化为空图；
+ * 且离线部署的面板本来就不该依赖外网。缺图的 id 由 components/mcs/item-icon 兜底为占位块。
  * stackSize：1（工具/护甲/武器）、16（末影珍珠/鸡蛋/药水）、64（方块/资源/食物），用于数量输入自动上限。
  */
 
@@ -16,17 +18,39 @@ export interface MinecraftItem {
   stackSize: number
 }
 
-/** 物品贴图服务根地址（36px 渲染） */
-export const ITEM_IMAGE_BASE = 'https://mc-heads.net/item'
-
 /** 全名（含 minecraft: 前缀），用于 give 命令 */
 export function fullItemId(id: string): string {
   return `minecraft:${id}`
 }
 
-/** 贴图 URL（mc-heads.net 36×36 物品渲染） */
-export function itemImageUrl(id: string): string {
-  return `${ITEM_IMAGE_BASE}/${id}/36`
+/**
+ * 随包贴图表：`id → URL`。用 `import.meta.glob` 的 eager + query 形式把每个 PNG 变成
+ * 一个由构建器指纹化的资源 URL——手写 `assets/items/${id}.png` 拼串会被打包器当作
+ * 「运行时才知道的路径」，产物里既没有这些文件、也不会随部署子路径前缀解析。
+ */
+const ITEM_ICON_URLS = import.meta.glob<string>('../../assets/items/*.png', {
+  eager: true,
+  query: '?url',
+  import: 'default',
+})
+
+/** `id → 资源 URL`（键从文件路径里取出裸 id） */
+const ITEM_ICON_BY_ID = new Map<string, string>(
+  Object.entries(ITEM_ICON_URLS).map(([path, url]) => [
+    path.slice(path.lastIndexOf('/') + 1, -'.png'.length),
+    url,
+  ]),
+)
+
+/**
+ * 物品贴图 URL；目录里没有该 id 的随包贴图时返回 null（调用点走分类色块兜底）。
+ *
+ * 26.1+ 的 20 件新物品没有随包贴图（贴图包发布早于这些版本），
+ * 它们只在版本徽章下才可选，缺图概率低；返回 null 而不是指向不存在文件的 404，
+ * 让「缺图」在渲染期就是可知的，不靠 onError 事后补救。
+ */
+export function itemImageUrl(id: string): string | null {
+  return ITEM_ICON_BY_ID.get(id) ?? null
 }
 
 /** 筛选 Tab 的全部分类（药水分类在 UI 层由 mc-potions 提供 20 种效果虚拟物品） */

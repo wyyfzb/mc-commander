@@ -1,6 +1,6 @@
 /**
- * 礼包编辑器 —— KitEditorDialog（新建/编辑礼包弹窗）+ KitTab（预设礼包 Tab 内容）
- * 从 give-item-dialog.tsx 提取，礼包管理独立可测试。
+ * 礼包编辑器 —— KitEditorDialog（新建/编辑礼包弹窗）+ KitManagerDialog（礼包管理列表）+ KitList（列表内容）
+ * 礼包在工作台里是「清单预设」而非平级 Tab：目录顶部一行 chips 直接应用，管理入口收进弹窗。
  * KitEditorDialog 带脏状态关闭拦截（对齐 task-dialog 范式）：
  * name/icon/desc/items 相对初始值有改动时，ESC/遮罩/X/取消一律先弹确认（继续编辑/放弃修改）。
  */
@@ -9,6 +9,7 @@ import { Minus, MoreVertical, Pencil, Plus, Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,16 +26,11 @@ import {
 } from '@/components/ui/dialog'
 import { SearchInput } from '@/components/mcs/search-input'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
+import { ItemIcon } from '@/components/mcs/item-icon'
 import { useRadioGroup } from '@/hooks/use-radio-group'
 import { TONE_SELECTED_CLASSES, TONE_SELECTED_SURFACE_CLASSES } from '@/components/mcs/tone'
 import { cn } from '@/lib/utils'
-import {
-  ITEM_CATEGORIES,
-  MINECRAFT_ITEMS,
-  fullItemId,
-  itemImageUrl,
-  type MinecraftItem,
-} from '@/lib/mc-items'
+import { ITEM_CATEGORIES, MINECRAFT_ITEMS, fullItemId, type MinecraftItem } from '@/lib/mc-items'
 import { type KitItem, type KitPreset } from '@/lib/mc-kits'
 
 /** 数量上限（1-6400 clamp） */
@@ -67,8 +63,8 @@ const KIT_ICON_PRESETS = [
   '\u{1F35E}',
 ]
 
-/** 礼包 Tab：卡片列表 + 新建入口 + 编辑/删除/应用 */
-export function KitTab({
+/** 礼包列表（无弹窗壳）：新建入口 + 每包一张卡（应用/编辑/删除） */
+export function KitList({
   kits,
   onApply,
   onEdit,
@@ -146,6 +142,42 @@ export function KitTab({
         </div>
       ))}
     </div>
+  )
+}
+
+/** 礼包管理弹窗：列表 + 新建/编辑入口（工作台里只暴露目录顶部的一行 chips） */
+export function KitManagerDialog({
+  kits,
+  onApply,
+  onEdit,
+  onDelete,
+  onNew,
+  onClose,
+}: {
+  kits: KitPreset[]
+  onApply: (kit: KitPreset) => void
+  onEdit: (index: number, kit: KitPreset) => void
+  onDelete: (index: number) => void
+  onNew: () => void
+  onClose: () => void
+}) {
+  return (
+    <Dialog
+      open
+      onOpenChange={(next) => {
+        if (!next) onClose()
+      }}
+    >
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>管理礼包</DialogTitle>
+          <DialogDescription>
+            礼包是清单预设：应用后并入发放清单，再逐项调整数量与属性。
+          </DialogDescription>
+        </DialogHeader>
+        <KitList kits={kits} onApply={onApply} onEdit={onEdit} onDelete={onDelete} onNew={onNew} />
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -306,14 +338,14 @@ export function KitEditorDialog({
             {/* 描述 */}
             <div className="flex flex-col gap-1">
               <span className="text-mcs-xs text-mcs-text-muted">描述（可选）</span>
-              <textarea
+              <Textarea
                 value={desc}
                 onChange={(e) => setDesc(e.target.value)}
                 aria-label="礼包描述"
                 placeholder="如：木镐+石剑+面包×16"
                 rows={2}
                 maxLength={60}
-                className="resize-none rounded-mcs-sm border border-mcs-border-default bg-mcs-bg-default px-2.5 py-1.5 text-mcs-sm text-mcs-text-default placeholder:text-mcs-text-muted focus:border-mcs-accent-border focus:outline-none focus:ring-1 focus:ring-mcs-focus-ring"
+                className="resize-none"
               />
             </div>
 
@@ -335,16 +367,9 @@ export function KitEditorDialog({
                         className="flex w-50 shrink-0 items-center gap-1 rounded-mcs-sm border border-mcs-border-subtle bg-mcs-bg-muted py-1 pl-1 pr-1.5"
                       >
                         {item ? (
-                          <img
-                            src={itemImageUrl(item.id)}
-                            alt={item.name}
-                            width={22}
-                            height={22}
-                            draggable={false}
-                            className="shrink-0 select-none"
-                          />
+                          <ItemIcon id={item.id} alt={item.name} size={22} className="shrink-0" />
                         ) : (
-                          <span className="flex size-5.5 shrink-0 items-center justify-center rounded-mcs-xs bg-mcs-error-bg-subtle font-mono text-mcs-2xs text-mcs-error-fg">
+                          <span className="flex size-6 shrink-0 items-center justify-center rounded-mcs-xs bg-mcs-error-bg-subtle font-mono text-mcs-2xs text-mcs-error-fg">
                             ?
                           </span>
                         )}
@@ -435,14 +460,7 @@ export function KitEditorDialog({
                         onClick={() => addItem(item)}
                         className="flex flex-col items-center gap-0.5 rounded-mcs-sm border border-mcs-border-subtle bg-mcs-bg-muted px-0.5 py-1 transition-colors hover:border-mcs-accent-border hover:bg-mcs-state-hover"
                       >
-                        <img
-                          src={itemImageUrl(item.id)}
-                          alt={item.name}
-                          width={28}
-                          height={28}
-                          draggable={false}
-                          className="select-none"
-                        />
+                        <ItemIcon id={item.id} alt={item.name} size={28} />
                         <span className="w-full truncate text-center text-mcs-2xs text-mcs-text-default">
                           {item.name}
                         </span>

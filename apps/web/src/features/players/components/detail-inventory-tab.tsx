@@ -4,7 +4,7 @@
  * 【契约落实】
  * 1. 布局 41 格：装备 5（头盔/胸甲/护腿/靴子/副手，带标签横排）+ 主背包 27（9×3）+ 快捷栏 9（1 行）
  *    + 子 Tab：玩家物品栏 / 末影箱（27 格 9×3，紫色调边框）
- * 2. 格子渲染：mc-heads.net 36px 贴图（itemImageUrl）；数量角标（count>1 右下角）；hover tooltip
+ * 2. 格子渲染：随包 32px 物品贴图（ItemIcon，缺图回退首字）；数量角标（count>1 右下角）；hover tooltip
  *    显示 id/数量/耐久百分比/附魔标记/自定义名；附魔物品紫色边框+微光；底部耐久条（绿→黄→红）
  * 3. 空态三分支：封禁 → 锁图标「该玩家已被封禁，无法查看物品栏」；旁观模式 →「旁观模式无物品栏」；
  *    无数据（inventory=null）→ 在线「RCON 不可用」/ 离线「无存档数据」（附解释性 subtext）
@@ -24,8 +24,10 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { fullItemId, itemImageUrl } from '@/lib/mc-items'
+import { fullItemId } from '@/lib/mc-items'
+import { ItemIcon } from '@/components/mcs/item-icon'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import type { InventoryItem, Player, PlayerInventory } from '@/api/types'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
 
@@ -136,29 +138,30 @@ export function InventoryTab({ player }: InventoryTabProps) {
 
   return (
     <div className="flex flex-col gap-3">
-      {/* ── 子 Tab 切换器（激活态 accent 底 + 前景；边界由轨道承载）── */}
-      <div
-        role="tablist"
-        aria-label="物品栏子视图"
-        className="inline-flex self-start rounded-mcs-sm border border-mcs-border-muted bg-mcs-bg-muted p-0.5"
+      {/* ── 子 Tab 切换器 ──
+          走 ui/tabs 基座：aria-controls、roving tabindex（整条只占一个 Tab 停靠点）与
+          方向键切换都由 Radix 提供。手写 tablist 曾缺 aria-controls 且每个 tab 都是
+          tabIndex=0，键盘用户要逐个 Tab 才能穿过两个标签。 */}
+      <Tabs
+        value={subTab}
+        onValueChange={(v) => setSubTab(v as SubTab)}
+        className="gap-0 self-start"
       >
-        {SUB_TABS.map((t) => (
-          <button
-            key={t.value}
-            role="tab"
-            aria-selected={subTab === t.value}
-            onClick={() => setSubTab(t.value)}
-            className={cn(
-              'rounded-mcs-xs px-3 py-1 text-mcs-xs transition-colors',
-              subTab === t.value
-                ? 'bg-mcs-accent-bg-subtle font-medium text-mcs-accent-fg'
-                : 'text-mcs-text-muted hover:text-mcs-text-default',
-            )}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+        <TabsList
+          aria-label="物品栏子视图"
+          className="h-auto min-h-0 gap-0 rounded-mcs-sm border border-mcs-border-muted bg-mcs-bg-muted p-0.5"
+        >
+          {SUB_TABS.map((t) => (
+            <TabsTrigger
+              key={t.value}
+              value={t.value}
+              className="h-auto rounded-mcs-xs px-3 py-1 text-mcs-xs data-active:bg-mcs-accent-bg-subtle data-active:font-medium data-active:text-mcs-accent-fg data-[state=inactive]:text-mcs-text-muted"
+            >
+              {t.label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
 
       {/* ── 快照提示条（契约第 4 条）── */}
       {inventory.source === 'snapshot' && (
@@ -384,28 +387,12 @@ function InventorySlot({
   )
 }
 
-/** 物品贴图（mc-heads.net；加载失败回退 ID 前两字符） */
+/** 物品贴图（随包资源；缺图/解码失败由 ItemIcon 回退首字占位块） */
 function SlotIcon({ item }: { item: InventoryItem }) {
-  const [failed, setFailed] = useState(false)
-
-  if (failed) {
-    return (
-      <span className="flex size-full items-center justify-center overflow-hidden font-mono text-mcs-2xs text-mcs-text-muted">
-        {item.id.slice(0, 2) || '?'}
-      </span>
-    )
-  }
-
   return (
-    <img
-      src={itemImageUrl(item.id)}
-      alt={item.id}
-      width={SLOT_SIZE - 4}
-      height={SLOT_SIZE - 4}
-      draggable={false}
-      onError={() => setFailed(true)}
-      className="absolute inset-0 m-auto select-none"
-    />
+    <span className="absolute inset-0 flex items-center justify-center">
+      <ItemIcon id={item.id} alt={item.id} size={SLOT_SIZE - 4} />
+    </span>
   )
 }
 

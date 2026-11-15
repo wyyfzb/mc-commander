@@ -8,6 +8,7 @@
 import { useState, type ReactNode } from 'react'
 import { Feather, Flame, MoveDown, Snowflake, Wind, Zap } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Textarea } from '@/components/ui/textarea'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { toast } from 'sonner'
 import { getFriendlyErrorText } from '@/api/errors'
@@ -377,13 +378,13 @@ export function OverviewTab({
           setMessageOpen(false)
         }}
       >
-        <textarea
+        <Textarea
           value={messageText}
           onChange={(e) => setMessageText(e.target.value)}
           placeholder="输入消息内容…"
           rows={3}
           maxLength={200}
-          className="w-full resize-none rounded-mcs-xs border border-mcs-border-default bg-mcs-bg-default px-2.5 py-2 text-mcs-sm text-mcs-text-default placeholder:text-mcs-text-muted focus:outline-none focus:ring-1 focus:ring-mcs-focus-ring"
+          className="resize-none"
         />
       </ConfirmDialog>
 

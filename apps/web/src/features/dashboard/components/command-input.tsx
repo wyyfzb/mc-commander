@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { ArrowRight, Check, Pencil, Play, Send, ShieldAlert, Star, Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { useMutation } from '@tanstack/react-query'
@@ -12,6 +12,7 @@ import { useConnectionStore } from '@/stores/connection'
 import { useServerStore } from '@/stores/server'
 import { useTerminalStore } from '@/stores/terminal'
 import { useCommandBus } from '@/stores/command-bus'
+import { cn } from '@/lib/utils'
 import { usePanelPreferencesStore, writePreference } from '@/stores/panel-preferences'
 import { useCommandHistory } from '@/api/queries'
 import { completeCommands, iconForCommand, type CompletionItem } from '@/lib/mc-commands'
@@ -27,6 +28,12 @@ import { Card } from '@/components/mcs/card'
  * - ↑↓ 翻命令历史（读服务端 command_history，与审计页同源；连续重复去重；导航中保留草稿）
  * - 快捷 chips：5 默认 + 面板偏好，播放=立即发送，点主体=仅填充，X=删除
  * - RCON 未启用时显示降级横幅
+ *
+ * @design-system-ok: 补全下拉是 ARIA APG 的 combobox + listbox 手写实现，不是自造控件：
+ * 焦点必须常驻输入框（终端输入不能中断），故用 aria-activedescendant 播报高亮项，
+ * 而 ui/select 是「弹层接管焦点」的模型，装不下这个场景。全套语义已实现：
+ * role=combobox + aria-expanded + aria-controls + aria-activedescendant，
+ * listbox 的每个 option 有 aria-selected 与稳定 id，↑↓ 在列表内循环、Enter 取当前项。
  */
 
 const HISTORY_LIMIT = 50
@@ -88,6 +95,10 @@ export function CommandInput() {
   const [draft, setDraft] = useState('')
 
   const completions: CompletionItem[] = value.startsWith('/') ? completeCommands(value) : []
+  /** 补全列表的高亮项（键盘 ↑↓ 在列表内移动；-1 = 未选中） */
+  const [activeCompletion, setActiveCompletion] = useState(-1)
+  /** 补全项 id 前缀（aria-activedescendant 指向它） */
+  const completionIdPrefix = useId()
 
   // 注册命令总线 overlayRunner（Cmd+K 命令域执行入口；终端回显，优先级高于全局 baseRunner）
   const setOverlayRunner = useCommandBus((s) => s.setOverlayRunner)
@@ -263,8 +274,28 @@ export function CommandInput() {
             setValue(e.target.value)
           }}
           onKeyDown={(e) => {
-            // IME 组合期（中文候选）↑↓ 用于选词，不触发历史导航
+            // IME 组合期（中文候选）↑↓ 用于选词，不触发历史导航/补全移动
             if (e.nativeEvent.isComposing) return
+            /* 补全下拉打开时 ↑↓/Enter 归下拉（ARIA combobox 口径）：
+               输入框是 listbox 的宿主，焦点始终留在输入框，靠 aria-activedescendant 播报高亮项 */
+            const completionOpen = completions.length > 0
+            if (completionOpen && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+              e.preventDefault()
+              const delta = e.key === 'ArrowDown' ? 1 : -1
+              setActiveCompletion((i) => {
+                const next = i + delta
+                if (next < 0) return completions.length - 1
+                if (next >= completions.length) return 0
+                return next
+              })
+              return
+            }
+            if (completionOpen && e.key === 'Enter' && activeCompletion >= 0) {
+              e.preventDefault()
+              const picked = completions[activeCompletion]
+              if (picked) setValue(picked.text)
+              return
+            }
             if (e.key === 'Enter') send(value)
             if (e.key === 'Escape') {
               navRef.current = null
@@ -284,6 +315,15 @@ export function CommandInput() {
           disabled={!isRunning}
           className="min-w-0 flex-1 bg-mcs-bg-subtle pl-7 font-mono text-mcs-xs text-mcs-text-default md:text-mcs-xs"
           aria-label="服务器命令输入"
+          role="combobox"
+          aria-autocomplete="list"
+          aria-expanded={completions.length > 0}
+          aria-controls={completions.length > 0 ? `${completionIdPrefix}-listbox` : undefined}
+          aria-activedescendant={
+            completions.length > 0 && activeCompletion >= 0
+              ? `${completionIdPrefix}-option-${activeCompletion}`
+              : undefined
+          }
         />
         {/* shell 语义前缀：内嵌输入框内 */}
         <span
@@ -317,18 +357,27 @@ export function CommandInput() {
         {/* 补全下拉 */}
         {completions.length > 0 && (
           <div
+            id={`${completionIdPrefix}-listbox`}
             className="absolute bottom-full left-0 right-0 z-(--mcs-z-dropdown) mb-1 max-h-44 overflow-y-auto rounded-mcs-sm border border-mcs-border-default bg-mcs-bg-emphasis p-1 shadow-mcs-raised"
             role="listbox"
             aria-label="命令补全"
           >
-            {completions.map((item) => {
+            {completions.map((item, index) => {
               const Icon = item.kind === 'command' ? iconForCommand(item.name) : ArrowRight
+              const active = index === activeCompletion
               return (
                 <button
                   key={`${item.kind}-${item.text}`}
+                  id={`${completionIdPrefix}-option-${index}`}
                   type="button"
                   role="option"
-                  className="flex w-full items-center gap-2 rounded-mcs-xs px-2 py-1 text-left text-mcs-xs hover:bg-mcs-state-hover"
+                  aria-selected={active}
+                  tabIndex={-1}
+                  className={cn(
+                    'flex w-full items-center gap-2 rounded-mcs-xs px-2 py-1 text-left text-mcs-xs',
+                    active ? 'bg-mcs-state-hover text-mcs-text-default' : 'text-mcs-text-default',
+                  )}
+                  onMouseEnter={() => setActiveCompletion(index)}
                   onClick={() => {
                     setValue(item.text)
                     inputRef.current?.focus()

@@ -20,7 +20,7 @@ export interface PotionDurationOption {
 
 /** 单个效果药水的元数据 */
 export interface PotionEffect {
-  /** 效果 ID（无命名空间），如 "swiftness" */
+  /** 效果 ID（无命名空间，是注册表里的 effect id，如 "speed"；不是药水 id "swiftness"） */
   effectId: string
   /** 中文效果名，如 "迅捷" */
   name: string
@@ -123,7 +123,7 @@ export function potionDisplayName(config: PotionConfig): string {
 export const MINECRAFT_POTIONS: PotionEffect[] = [
   // ── 正向增益效果（原版可酿造）──
   {
-    effectId: 'swiftness',
+    effectId: 'speed',
     name: '迅捷',
     color: 0x7cafc6,
     vanillaMaxLevel: 2,
@@ -295,8 +295,10 @@ export const MINECRAFT_POTIONS: PotionEffect[] = [
     level2Durations: [{ label: '强效 0:21', ticks: 420 }],
   },
   {
-    effectId: 'turtle_master',
-    name: '龟甲',
+    // 原版「龟甲」是抗性提升 + 缓慢的组合；效果组件里只能用一个 effect id，
+    // 取主效果抗性提升（turtle_master 是**药水** id，不是效果 id，写进命令会被服务端拒）
+    effectId: 'resistance',
+    name: '抗性提升',
     color: 0x3a5f4e,
     vanillaMaxLevel: 2,
     isInstant: false,

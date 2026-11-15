@@ -108,6 +108,8 @@ npm run dev -w apps/server           # node --watch 热重载
   圆角档位是 6/8/12/16px（另有 20px `@reserved` 档）。shadcn 的 `--radius-*` **逐档错位**绑定
   （`--radius-sm`←6px、`--radius-md`←8px、`--radius-lg`←12px、`--radius-xl`←16px），
   所以 `rounded-md` 不是卡片档（8px），卡片是 `rounded-mcs-md`／`rounded-lg`（12px）。
+  **表单控件取 12px**（`ui/input`、`ui/textarea`、`ui/button`、`ui/select` 默认档都是
+  `rounded-lg` = 12px），与卡片同档——控件落在卡片上时边缘曲率一致；8px 只给 chip 一类小控件。
   字号只有 6 个**文字档**（22/18/14/14/12/10，逐档配对行高：xl 1.3 / lg 1.4 / md 1.5 /
   sm 1.6 / xs 1.5 / 2xs 1.5），两个 14px 档语义不同——`sm` 是正文基准、`md` 是强调正文
   （同尺寸靠字重与收紧行高区分）；标题层次口径：页面 `xl` / 区块与卡片标题 `lg` / 正文 `sm`，

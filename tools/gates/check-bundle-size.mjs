@@ -31,14 +31,16 @@ import { resolveWebRoot } from './lib/web-root.mjs'
 const distDir = path.join(resolveWebRoot(), 'dist')
 const assetsDir = path.join(distDir, 'assets')
 
-// 预算 = 当前实测值 + 约 8% 余量，取整到 5KB；上调需在 PR 里说明理由
-// 2026-10-01 随依赖升级上调：monaco-editor 0.56→0.57、react 19.2.8→19.3.0、
-// lucide-react 1.34→1.48、vite 8.2.2→8.3.1 等 43 项。三条路由**同步**增长约 11~12 KB，
-// 增量落在共享 vendor（vendor-react 与 index chunk），即每个路由都要付的固定成本，
-// 非某路由误引入的静态依赖（若是，只会抬高单条路由，不会三条齐涨）。
+// 预算 = 当前实测值 + 约 8% 余量，取整到 5KB
+//
+// 三条路由的预算互相独立，判据是「增长落在哪一层」：**同步齐涨**说明增量在共享 vendor
+// （每个路由都要付的固定成本），只有单条涨才说明是该路由自己的代码。
 const BUDGETS = [
   { label: '首屏（index.html 引用闭包）', entry: null, limitKb: 300 },
-  { label: '玩家页路由首访', entry: /^players-page-[\w-]+\.js$/, limitKb: 380 },
+  // 玩家页 383.91：给予物品工作台（目录 + 发放清单 + 197 条贴图 URL 表）计入本路由闭包，
+  // 贴图本体走 assets/ 独立文件、不计入 JS。首屏 280.33、审计页 311.41 与该改动前持平，
+  // 即增量确实只在玩家页，没有被共享依赖（如命令面板）带进首屏。
+  { label: '玩家页路由首访', entry: /^players-page-[\w-]+\.js$/, limitKb: 415 },
   { label: '审计页路由首访', entry: /^audit-page-[\w-]+\.js$/, limitKb: 315 },
 ]
 
