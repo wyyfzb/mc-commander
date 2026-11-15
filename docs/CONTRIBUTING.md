@@ -56,6 +56,8 @@ vite alias 直读 `src`，不重建会让服务端静默使用旧契约（本地
   - `feat(web): 玩家详情新增成就标签页`
   - `fix(server): 实例未运行时白名单操作返回 400 而非 500`
   - scope 可选：`web` / `server` / `ci` / `docs` 等
+- **PR 标题同样要符合 Conventional Commits**（与提交信息同一格式）：仓库只用 squash 合并，
+  PR 标题会成为 `main` 上的那条提交，类型错标会直接改变发版结果
 - PR 目标分支为 `main`；较大变更建议先开 Issue 或 Discussion 对齐
 
 ### CI 与本地检查

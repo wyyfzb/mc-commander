@@ -303,6 +303,9 @@ Conventional Commits（`feat`/`fix`/`refactor`/`docs`/`chore`/`test` + scope）�
 `refactor` / `test` / `build` 单独提交不会产生新版本（但它们带 `!` 时仍会触发）。
 
 改动走**特性分支 + PR** 提交到 `main`。`main` 受规则集 `main-protect` 保护：禁删除、禁强推、
-6 项必需检查且 `strict`（要求分支与 `main` 齐平，合并前须 rebase）。合并统一用 **squash**
-（禁 merge commit）：合并提交正文会让 release-please 把同一条改动记两次。
-直接 push、合并 `main`、打 tag 均须维护者授权。
+6 项必需检查且 `strict`（分支须与 `main` 齐平——这里的 rebase 指把上游合进自己分支，与
+「rebase 合并」是两回事）。合并只用 **squash**（仓库已关闭 merge commit 与 rebase 合并）：
+发版单位是 PR 而非 commit，squash 后 `main` 上每个 PR 恰好一条提交，release-please 才按
+「一个 PR 一条 CHANGELOG」记账。因此 **PR 标题必须符合 Conventional Commits**——squash 后
+它就是 `main` 上的提交信息；rebase 合并则完全不看 PR 标题（保留各提交原始信息）。
+PR 标题由 `pr-title` 检查把关。直接 push、合并 `main`、打 tag 均须维护者授权。
