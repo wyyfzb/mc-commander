@@ -27,7 +27,7 @@
 #     30 4 * * * MCC_BASE_URL=http://192.0.2.10:25566 MCC_API_KEY=... \
 #       /opt/mc-commander/tools/ops/pull-backups.sh /srv/mc-offsite >>/var/log/mc-offsite.log 2>&1
 #
-# ── 安全边界（必读，见 SECURITY.md 与 docs/user-guide.md）────────────────
+# ── 安全边界（必读，另见 docs/user-guide.md）────────────────
 #   备份是**明文、未加密、未签名**的完整副本（含世界数据）。面板的安全假设是
 #   「目录权限即数据边界」——副本离开本机后这条边界不再成立。请限制本机权限，
 #   必要时在落地前自行加密（如 gpg 或加密卷）。

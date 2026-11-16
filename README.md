@@ -70,7 +70,7 @@ rm -f /tmp/deploy-mc-commander.sh && ( curl -fsSL --connect-timeout 10 --max-tim
 
 **换个设备继续用**：手机或另一台电脑打开同一个面板地址，用同一管理员密码登录即可。忘了地址就进「设置 → 连接与外观」，最下方「从其他设备访问」会显示当前地址，可一键复制。
 
-**要给自动化工具用**：浏览器本身用不到 API Key；确实要接脚本时，在「设置 → 连接与外观」里生成，明文只显示一次。
+**要给自动化工具用**：浏览器本身用不到 API Key；确实要接脚本时，在「设置 → 连接与外观」里生成，明文只显示一次。要接的是**别人写的 AI/脚本**、只想给它读数权限时，用「只读监控凭据」（5 个读数端点白名单 + 1 个身份自省）或服务端的作用域化机器凭据（`system:read` / `instance:read` / `player:read` 三档，可单独吊销）——见 [apps/server/README.md](apps/server/README.md) 的「认证」节。这三类都是长期凭据，**泄露等同管理员密码泄露**。
 
 ## 日常操作速查
 
@@ -224,17 +224,7 @@ npm start
 
 ---
 
-## 给贡献者
-
-贡献流程与提交规范见 [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md)，工程纪律与 CI 检查项见 [AGENTS.md](AGENTS.md)。开发只需 Node.js 24+（三个包都声明并强制 `engines`），Java 只在真正跑 MC 实例时需要。
-
-### 提交与分支
-
-- 从 `main` 拉功能分支（`feat/<主题>` / `fix/<主题>` / `docs/<主题>`），改动走 PR 回到 `main`。
-- 提交信息用 Conventional Commits，描述用中文，scope 取 `web` / `server` / `schemas` / `ci` / `docs` 等。
-- PR 必须 6 项检查全绿（格式与门禁、契约包、服务端、前端 lint/test、前端构建与 e2e、生产依赖审计），合并用 squash。
-
-### 技术栈
+## 技术栈
 
 | 层 | 技术 |
 |---|---|
@@ -252,12 +242,11 @@ mc-commander/
 ├── apps/web/       # 前端：React 19 + Vite
 ├── apps/server/    # 服务端：Express + ws + SQLite，同源托管前端产物
 ├── apps/schemas/   # 共享契约包（zod）：src/ + tests/；dist/ 是构建产物、不入库
-├── tools/          # 维护者工具：gates/ · e2e/ · ci/ · dev/ · ops/ · deploy/
-├── docs/           # 用户指南、架构、贡献与安全文档、截图
-└── AGENTS.md       # 工程纪律与提交规范
+├── docs/           # 用户指南、架构文档、截图
+└── tools/          # 维护者工具：gates/ · e2e/ · ci/ · dev/ · ops/ · deploy/
 ```
 
-### 开发与测试
+### 从源码构建与测试
 
 ```bash
 npm ci                         # 仓库根一次装齐三个包
@@ -269,16 +258,10 @@ npm run test:e2e               # Playwright e2e
 bash tools/ci/local-check.sh   # 一键本地检查（格式 + lint + 类型 + 全量测试）
 ```
 
-本地检查脚本支持 `--skip-frontend` 与 `--skip-schemas`，只改一个包时能省掉无关步骤；它和 CI 跑的是同一套检查，本地全绿基本就能过。测试与文档中一律使用虚构数据（`1.2.3.4`、TEST-NET 网段、Steve/Alex），禁止出现真实服务器 IP、API Key 与玩家数据。
+本地检查脚本支持 `--skip-frontend` 与 `--skip-schemas`，只改一个包时能省掉无关步骤；它和 CI 跑的是同一套检查。测试与文档中一律使用虚构数据（`1.2.3.4`、TEST-NET 网段、Steve/Alex），禁止出现真实服务器 IP、API Key 与玩家数据。
 
-架构与设计决策见 [docs/architecture.md](docs/architecture.md)，API 与事件清单见 [apps/server/README.md](apps/server/README.md)，CI 工作流见 [`.github/workflows/ci.yml`](.github/workflows/ci.yml)。
+架构与设计决策见 [docs/architecture.md](docs/architecture.md)，API 与事件清单见 [apps/server/README.md](apps/server/README.md)。
 
 ## License
 
 [AGPL-3.0](LICENSE)（GNU Affero General Public License v3.0）。修改版通过网络提供服务时，同样需要以 AGPL-3.0 开源你的修改。
-
-## 参与贡献
-
-- 贡献流程与开发环境：[docs/CONTRIBUTING.md](docs/CONTRIBUTING.md)
-- 安全问题报告：[docs/SECURITY.md](docs/SECURITY.md)
-- 行为准则：[docs/CODE_OF_CONDUCT.md](docs/CODE_OF_CONDUCT.md)

@@ -8,8 +8,8 @@
  * 顶部注释），校验通过后立即作废：
  *   1. 内存清空——同进程后续请求即失效；
  *   2. .env 移除 SETUP_TOKEN 行——服务重启后从 .env 读不到，同样失效。
- * 未配置 token 时保持原有行为（本机首发场景不受影响）；README/SECURITY.md
- * 说明公网部署必须通过部署脚本生成 token。
+ * 未配置 token 时保持原有行为（本机首发场景不受影响）；公网部署必须通过部署脚本
+ * 生成 token。
  *
  * 比对采用「长度判等 + crypto.timingSafeEqual」的常量时间语义，
  * 与 middleware/auth.js 的 API Key 校验一致，防时序侧信道。

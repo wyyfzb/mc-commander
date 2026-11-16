@@ -87,9 +87,9 @@ if (!config.apiKeyHash) {
 
 // ── 公网监听的所有权证明提示 ────────────
 // 威胁面：HOST 对外可达时，「部署完成 → 管理员设密」窗口内任何发现端口者可抢先
-// 设密并永久接管面板。部署脚本会生成一次性 SETUP_TOKEN（见 SECURITY.md「首访设密
-// 保护」），手工/容器部署容易漏掉，故这里在启动时点名提示（生成与否仍由部署方决定：
-// 手工加一行 `SETUP_TOKEN=<openssl rand -hex 32>` 即可，不改服务端行为）。
+// 设密并永久接管面板。部署脚本会生成一次性 SETUP_TOKEN，手工/容器部署容易漏掉，
+// 故这里在启动时点名提示（生成与否仍由部署方决定：手工加一行
+// `SETUP_TOKEN=<openssl rand -hex 32>` 即可，不改服务端行为）。
 function warnIfPublicBindWithoutSetupToken() {
   if (config.setupToken || !isPublicBind(config.host)) return;
   try {

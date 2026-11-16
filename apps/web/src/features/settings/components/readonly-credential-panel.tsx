@@ -42,7 +42,7 @@ interface ReadonlyCredentialPanelProps {
   authed: boolean
 }
 
-/** 只读凭据的能力边界（与 SECURITY.md「只读机器凭据」表一致，界面只讲结论不抄表） */
+/** 只读凭据的能力边界（界面只讲结论，不抄服务端白名单表） */
 const READONLY_SCOPE_HINT =
   '只读凭据仅能访问 5 个读数端点（概览 / 系统指标 / 实例列表与状态 / 实例玩家列表），' +
   '其余端点一律 403；WebSocket 可连接但只收读数类事件（状态 / 性能 / 天气 / 玩家在线情况），' +

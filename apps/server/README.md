@@ -172,8 +172,8 @@ sqlite3 var/data/mc_commander.db "DELETE FROM admin_account; DELETE FROM admin_s
 - 只删这两张表：实例、备份、定时任务、审计记录都不受影响。
 - **会话必须一并清空**：直接改库不经过改密接口，已有令牌不会自动失效；留着等于旧令牌
   仍能登录。
-- 配置了 `SETUP_TOKEN` 的部署（公网建议配置），重设密码时须先输入该令牌，见
-  [SECURITY.md](../../docs/SECURITY.md) 的信任模型一节。
+- 配置了 `SETUP_TOKEN` 的部署（公网建议配置），重设密码时须先输入该令牌（`Authorization:
+  SetupToken <token>`）。**未配置 = 不校验**，仅适用于本机/可信网络首发场景。
 - 若机器上没有 `sqlite3`，用任意 SQLite 客户端打开同一文件执行同样两条语句即可。
 
 ## API 文档
@@ -196,7 +196,8 @@ Authorization: Bearer <session-token>
   取值 `true`/`false`/`1`/`0`，大小写与首尾空格不敏感，其它取值启动即报错）。
   该 Key 是**单例全局凭据：无 scope、无过期、权限等同于管理员，且无条件绕过两步验证**
   （`middleware/auth.js` 的 API Key 分支直接放行，不要求 `totpCode`——刻意保住无人值守的
-  自动化）。定位与操作纪律见 [SECURITY.md](../../docs/SECURITY.md) 的「API Key 的定位与信任模型」。
+  自动化）。**泄露等同管理员密码泄露**，处置只有立即轮换（旧 Key 立刻失效）或
+  `API_KEY_ENABLED=false` 关闭通道；完全不需要自动化凭据的部署应当直接关闭。
 - **部署能力探测**：`GET /api/v1/auth/capabilities` 返回 `{ apiKeyEnabled }`（认证域内，
   未认证 401）。面板据此隐藏 `rotate-key` 入口；该开关是部署配置，未认证可达的
   `/auth/status` 不回传任何配置面。设置页以**面板地址**为键探测：地址停止输入后落定
@@ -237,9 +238,34 @@ Authorization: Bearer <session-token>
   时该通道不存在**（携带任意值都按无效凭据 401）；`READONLY_API_KEY_ENABLED=false` 时请求侧
   403 `READONLY_API_KEY_DISABLED`(40304)、轮换端点同样 403 且不写 `.env`（哈希保留，设回 `true`
   即恢复）。该开关与 `API_KEY_ENABLED` 相互独立——只关全权 Key 的部署仍可单独保留只读监控凭据。
-  **彻底关闭**：删除 `.env` 的 `READONLY_API_KEY_HASH` 行并重启。权限边界与操作纪律见
-  [SECURITY.md](../../docs/SECURITY.md) 的「只读机器凭据」；需要敏感读时请改用管理员凭据。
+  **彻底关闭**：删除 `.env` 的 `READONLY_API_KEY_HASH` 行并重启。**需要敏感读时请改用
+  管理员凭据**——白名单是刻意收窄的，只读凭据仍含实例地址与玩家名单，按「内部监控账号」
+  而非「公开只读」对待。
 - 两条通道都不可用时返回 401，错误信息同时提示两种凭据形态。
+
+#### 作用域化机器凭据（给用户自己的 AI / 脚本）
+
+`.env` 那两把是部署方自填的固定通道（一把一角色、改值即覆写）。要让外部脚本以**最小权限**
+接入，用台账凭据：每把有名字、作用域、启停位、吊销位，明文前缀 `mcs-`，只存 SHA-256 摘要，
+**明文只在创建那一次响应里出现**。
+
+| 方法 | 端点 | 说明 |
+|---|---|---|
+| GET | `/api/v1/machine-credentials` | 列出凭据（不含明文与摘要） |
+| POST | `/api/v1/machine-credentials` | 新建（明文仅此一次返回） |
+| PUT | `/api/v1/machine-credentials/:id/enabled` | 启停（可逆，保留摘要） |
+| DELETE | `/api/v1/machine-credentials/:id` | 吊销（不可逆，保留台账行用于追溯） |
+| GET | `/api/v1/machine-credentials/self` | **免作用域**身份自省：只回显调用方自己的名字与作用域，不读任何服务端资源 |
+
+- **一期只发放只读三档**：`system:read`、`instance:read`、`player:read`。作用域是并列关系而非
+  包含（持 `instance:read` 打不开玩家端点），且方法参与判定（`GET` 的作用域不能用于同路径 `POST`）。
+  `GRANTABLE_SCOPES` 与 `SCOPES` 刻意分开——将来加写作用域时必须显式决定是否可发放。
+- **默认拒绝**：不在 `SCOPE_ENDPOINTS` 内的端点没有任何作用域可满足，一律 403。新增路由无需登记
+  即自动对机器凭据关闭，漏登记只会更严、不会更松。
+- **不能自我提权**：凭据管理端点本身不在 `SCOPE_ENDPOINTS` 内，持全部只读作用域也调不动它们。
+- **不能握手 WebSocket**：WS 只按 `role` 两档过滤、没有作用域维度，放行会绕过逐档隔离。
+- **数量与命名**：单部署上限 50 把，名字唯一（名字是辨认「吊销哪一把」的唯一线索）。
+  轮换＝新建 + 吊销旧的，审计里留下两条可追溯记录。
 
 ### 两步验证（TOTP）
 
