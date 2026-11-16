@@ -254,7 +254,7 @@ export function AnnouncementCard() {
         onConfirm={confirmSend}
         warning="此公告将立即广播给全体在线玩家"
       >
-        <p className="max-h-40 overflow-y-auto rounded-mcs-sm border border-mcs-border-muted bg-mcs-bg-subtle p-2 text-mcs-xs text-mcs-text-muted whitespace-pre-wrap">
+        <p className="max-h-40 overflow-y-auto rounded-mcs-sm border border-mcs-border-muted bg-mcs-bg-inset p-2 text-mcs-xs text-mcs-text-muted whitespace-pre-wrap">
           {text.trim()}
         </p>
       </ConfirmDialog>

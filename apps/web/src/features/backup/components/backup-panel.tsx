@@ -10,7 +10,7 @@
  *   恢复请求在途 → 全列表恢复按钮禁用；creating/restoring 行
  *   不可删除（服务端互斥状态机拒绝）
  * - 30s 轮询（useBackups 自带）+ useBackupEventRefresh 事件驱动刷新；确认框 ConfirmDialog（danger）
- * - 实底卡片（风格 A：列表/表单实底，禁玻璃）；tone 类 bg-mcs-{tone}-bg-subtle + text-mcs-{tone}-fg
+ * - 实底卡片（列表/表单实底）；tone 类 bg-mcs-{tone}-bg-subtle + text-mcs-{tone}-fg
  *   + border-mcs-{tone}-border（token 唯一来源 src/styles/）
  */
 import { useState } from 'react'

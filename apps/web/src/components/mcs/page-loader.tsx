@@ -2,7 +2,7 @@ import { Loader2 } from 'lucide-react'
 
 /**
  * PageLoader —— 路由懒加载 Suspense fallback
- * 居中转圈占位（实底，玻璃禁区）
+ * 居中转圈占位（实底）
  */
 export function PageLoader() {
   return (

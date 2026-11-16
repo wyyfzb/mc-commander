@@ -2,7 +2,7 @@ import type { CSSProperties, ElementType, ReactNode, Ref } from 'react'
 import { cn } from '@/lib/utils'
 
 /**
- * Card —— 卡片容器基座（卡片容器的类名声明处，配 AGENTS.md「卡片容器」与「间距」的容器档位）
+ * Card —— 卡片容器基座（卡片容器的类名声明处）
  * 只承载「卡片面」本身（圆角 + 描边 + 卡片底色 + 卡阴影）；内距与内部布局由调用点按容器档位给。
  *
  * **内距默认给（opt-out）**：不写 `size` 就是标准卡（`default`）。原因是「忘了给内距」这个
@@ -25,7 +25,7 @@ const CARD_SURFACE = 'rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-mu
  * 卡内的工具条 / 嵌块 / 代码块不是卡片面，它们的内距不归这里管。
  *
  * 命名按角色不按像素：选档时问的是「这张卡多重」，不是「我要几 px」。
- * 间距无门禁（口径＝审查时判，见 AGENTS.md「间距」），本表是规范不是拦截。
+ * 间距无门禁（口径＝审查时判），本表是规范不是拦截。
  */
 export const CARD_SIZE_CLASSES = {
   /** 大面板：AppShell 级区块 */
@@ -94,8 +94,7 @@ export function CardHeader({ className, children }: { className?: string; childr
 /**
  * 卡片标题的角色轴档位表（角色由「这段文字承担什么」决定，与卡片视觉样式无关）：
  * `heading` = 区块/内容标题，占标题档；`label` = 数据卡（KPI/指标卡）的标签行，只占标签档。
- * 单档基座会把真区块标题压到与标签行同级，同屏只剩页头与正文两档可辨（AGENTS.md 标题口径
- * 「区块与卡片标题 lg」）。命名取 variant 而非 role：role 在 JSX 里是 ARIA 属性名，同名会与
+ * 单档基座会把真区块标题压到与标签行同级，同屏只剩页头与正文两档可辨（区块与卡片标题取 lg）。命名取 variant 而非 role：role 在 JSX 里是 ARIA 属性名，同名会与
  * 透传语义混淆。门禁第 23 条从本表读档并按调用点 variant 分类，改表即改口径。
  */
 const CARD_TITLE_TIER = {

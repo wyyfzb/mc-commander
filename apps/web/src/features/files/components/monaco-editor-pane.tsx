@@ -17,7 +17,7 @@
  * 'Package subpath is not defined by "exports"'），此处用 exports 兼容形式
  * "monaco-editor/editor/editor.worker?worker"（等价落到同一文件）。
  */
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import { primaryModifierLabel } from '@/lib/platform'
 import Editor, { loader } from '@monaco-editor/react'
 // 只引入编辑器核心 API + **实际支持的语言**：整包引入 'monaco-editor' 会把 ts/css/html
@@ -35,6 +35,7 @@ import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { InfoHint } from '@/components/mcs/info-hint'
 import { toneClasses } from '@/components/mcs/tone'
+import type { ResolvedTheme } from '@/stores/ui'
 
 // ── Monaco worker 配置（Vite 必需，否则控制台报错 "Could not create web worker"）──
 // self.MonacoEnvironment 由 monaco-editor 的 d.ts 声明为全局（Environment 接口），
@@ -48,9 +49,6 @@ if (typeof self !== 'undefined') {
 }
 // 本地 monaco 包注入 loader：@monaco-editor/react 不再动态 import CDN
 loader.config({ monaco })
-
-/** MCS 暗色主题已注册标记（defineTheme 幂等性由 monaco 保证，此处防重复读取 CSS 变量） */
-let mcsDarkThemeDefined = false
 
 /**
  * CSS 变量 → hex 色值。
@@ -74,34 +72,36 @@ function cssVarToHex(varName: string): string | null {
 }
 
 /**
- * 注册 MCS 暗色编辑器主题：背景对齐 --mcs-bg-subtle（偏蓝深底），
- * 避免内置 vs-dark 中性灰底色与 MCS 面板色相割裂。
+ * 注册 MCS 编辑器主题（暗/亮各一套），背景对齐 --mcs-bg-inset（全站最深档），
+ * 避免内置 vs/vs-dark 的中性底与 MCS 面板色相割裂。
  * 颜色运行时读取 CSS 变量经 canvas 解析为 hex（token 唯一来源，源码无硬编码色值）；
- * 解析失败（jsdom/SSR）跳过，回退 vs-dark 主题继承。
+ * 解析失败（jsdom/SSR）跳过，回退内置主题继承。
+ *
+ * **必须在应用主题的那一刻读，不能在模块加载时读**：CSS 变量随 .dark/.light 切换，
+ * 模块加载时读到的值是当时主题的；把亮色读到的背景写进暗色主题，切档后就成了
+ * 亮底 + vs-dark 浅字（对比度 1.23:1），且守卫会让错误值永久留存。
  */
-function defineMcsDarkTheme() {
-  if (mcsDarkThemeDefined || typeof document === 'undefined') return
-  mcsDarkThemeDefined = true
-  const bgSubtle = cssVarToHex('--mcs-bg-subtle')
+function defineMcsTheme(mode: ResolvedTheme) {
+  if (typeof document === 'undefined') return
+  const bgInset = cssVarToHex('--mcs-bg-inset')
+  if (!bgInset) return
   const bgDefault = cssVarToHex('--mcs-bg-default')
   const borderSubtle = cssVarToHex('--mcs-border-subtle')
   const textMuted = cssVarToHex('--mcs-text-muted')
   const accent = cssVarToHex('--mcs-accent')
-  if (!bgSubtle) return
-  monaco.editor.defineTheme('mcs-dark', {
-    base: 'vs-dark',
+  monaco.editor.defineTheme(mode === 'dark' ? 'mcs-dark' : 'mcs-light', {
+    base: mode === 'dark' ? 'vs-dark' : 'vs',
     inherit: true,
     rules: [],
     colors: {
-      'editor.background': bgSubtle,
-      'editor.lineHighlightBackground': bgDefault || bgSubtle,
+      'editor.background': bgInset,
+      'editor.lineHighlightBackground': bgDefault || bgInset,
       'editor.lineHighlightBorder': borderSubtle || 'transparent',
       ...(textMuted ? { 'editorLineNumber.foreground': textMuted } : {}),
       ...(accent ? { 'editorCursor.foreground': accent } : {}),
     },
   })
 }
-defineMcsDarkTheme()
 
 export interface MonacoEditorPaneProps {
   /** 当前编辑文件路径（'/' 前缀风格；'' = 未选中文件 → 空态） */
@@ -111,7 +111,7 @@ export interface MonacoEditorPaneProps {
   /** 文件编码（服务端探测，头部徽章展示） */
   encoding: 'utf-8' | 'gbk'
   /** 应用明暗主题（映射 Monaco 内置主题 vs / vs-dark） */
-  theme: 'light' | 'dark'
+  theme: ResolvedTheme
   /** 内容加载中（Skeleton 占位，encoding 徽章隐藏） */
   isLoading: boolean
   /** 加载错误文案（非 null 显示错误态 + 重试按钮） */
@@ -189,6 +189,14 @@ export function MonacoEditorPane({
     )
   }
 
+  /* 主题注册必须在染色之后、渲染之前：defineTheme 读的是**当前 DOM 上的** CSS 变量，
+     模块加载时读会把「当时那套主题」的颜色写死进另一套主题名。.dark/.light 类名由
+     ThemeClassSync 在 effect 里改，故这里用 useLayoutEffect 抢在浏览器绘制前重新注册，
+     并把 theme 名作为依赖——切档后 Monaco 拿到的就是新配色。 */
+  useLayoutEffect(() => {
+    defineMcsTheme(theme)
+  }, [theme])
+
   // 编辑器字体跟随 --mcs-font-mono token（Monaco options 需具体字体串，挂载时读取一次；
   // jsdom/SSR 取不到 token 时回退通用等宽栈）
   const monoFont = useMemo(() => {
@@ -202,7 +210,7 @@ export function MonacoEditorPane({
   // 空态：未选中文件
   if (!path) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-2 bg-mcs-bg-subtle">
+      <div className="flex h-full flex-col items-center justify-center gap-2 bg-mcs-bg-inset">
         <FileEdit className="size-6 text-mcs-text-muted" aria-hidden />
         <p className="text-mcs-sm text-mcs-text-muted">选择文件进行编辑</p>
       </div>
@@ -277,7 +285,7 @@ export function MonacoEditorPane({
         <div
           role="status"
           aria-label="正在加载文件内容"
-          className="flex h-full flex-col gap-3 bg-mcs-bg-subtle p-4"
+          className="flex h-full flex-col gap-3 bg-mcs-bg-inset p-4"
         >
           <Skeleton className="h-4 w-1/2" />
           <Skeleton className="h-4 w-3/4" />
@@ -287,7 +295,7 @@ export function MonacoEditorPane({
       ) : loadError ? (
         <div
           role="alert"
-          className="flex h-full flex-col items-center justify-center gap-3 bg-mcs-bg-subtle px-6"
+          className="flex h-full flex-col items-center justify-center gap-3 bg-mcs-bg-inset px-6"
         >
           <X className="size-6 text-mcs-error-fg" aria-hidden />
           <p className="max-w-md text-center text-mcs-sm text-mcs-text-muted">{loadError}</p>
@@ -300,12 +308,12 @@ export function MonacoEditorPane({
           </Button>
         </div>
       ) : (
-        <div className="min-h-0 flex-1 bg-mcs-bg-subtle">
+        <div className="min-h-0 flex-1 bg-mcs-bg-inset">
           <Editor
             path={path}
             language={languageForFile(path)}
             value={content}
-            theme={theme === 'dark' ? 'mcs-dark' : 'vs'}
+            theme={theme === 'dark' ? 'mcs-dark' : 'mcs-light'}
             loading={null}
             options={{
               // 长行横向滚动（Monaco 默认 wordWrap off，此处显式声明契约）

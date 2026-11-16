@@ -137,7 +137,7 @@ export function CmdBody({
               variant="outline"
               size="sm"
               /* 行内小档 h-6 两族之一：size="sm" + 覆盖高度，字号须跟着压到 2xs，
-                 否则 sm 基座的 12px 会落在 10px 档位里（见 AGENTS.md 控件高度档位） */
+                 否则 sm 基座的 12px 会落在 10px 档位里 */
               className="h-6 text-mcs-2xs"
               disabled={!cmd.instanceId || replayingId === cmd.id}
               onClick={() => onReplay?.(cmd)}

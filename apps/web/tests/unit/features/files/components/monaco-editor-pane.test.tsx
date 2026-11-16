@@ -51,6 +51,8 @@ const editorCall = vi.hoisted(() => {
 const monacoMock = vi.hoisted(() => ({
   KeyMod: { CtrlCmd: 2048 },
   KeyCode: { KeyS: 49 },
+  // 组件在 theme 变化时调 defineTheme（jsdom 无 canvas → 内部提前返回，此处只需可调用）
+  editor: { defineTheme: () => {} },
 }))
 
 vi.mock('@monaco-editor/react', async () => {
@@ -324,9 +326,10 @@ describe('编辑器（@monaco-editor/react mock）', () => {
     expect(editorCall.props?.path).toBe(PATH_PROPERTIES)
   })
 
-  it('亮色主题 → vs', () => {
+  /* 亮色也必须走自定义主题名：内置 vs 是纯白底，与同屏空态/卡片用的深嵌档割裂 */
+  it('亮色主题 → mcs-light（自绘调色板，不用内置 vs）', () => {
     render(<MonacoEditorPane {...makeProps({ path: PATH_PROPERTIES, theme: 'light' })} />)
-    expect(editorCall.props?.theme).toBe('vs')
+    expect(editorCall.props?.theme).toBe('mcs-light')
   })
 
   it('切换文件 → language 随新路径重算（.yml → yaml）', () => {

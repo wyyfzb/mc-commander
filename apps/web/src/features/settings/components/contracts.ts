@@ -1,6 +1,6 @@
 /**
  * 设置页组件接口契约
- * 设计纪律：实底卡片（玻璃禁区）+ --mcs-* 语义 token + shadcn 基座；禁硬编码色值
+ * 设计纪律：实底卡片 + --mcs-* 语义 token + shadcn 基座；禁硬编码色值
  */
 
 export interface ConnectionFormProps {

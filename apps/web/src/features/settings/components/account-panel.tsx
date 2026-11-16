@@ -6,7 +6,7 @@
  * - 活跃会话列表：30s 轮询 + current 标记 + 踢单设备（ConfirmDialog）
  * - 登出：删除当前会话 → 清凭据 → 回登录页
  * API Key 直连用户：会话区块显示引导空态（建议改用会话登录），改密仍可用
- * 设计纪律：实底卡（玻璃禁区）+ --mcs-* 语义 token + shadcn 基座
+ * 设计纪律：实底卡 + --mcs-* 语义 token + shadcn 基座
  */
 import { useState } from 'react'
 import { useNavigate } from 'react-router'

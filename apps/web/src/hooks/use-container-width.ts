@@ -12,7 +12,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
  * 调用方按「宽」兜底——降级形态（Sheet 承载 / 裁列 / 转卡片）不该在测量完成前闪出来。
  * ResizeObserver 的投递在 layout 之后、paint 之前，正常浏览器里不会产生可见闪烁。
  *
- * 档位对照与选档规则见 AGENTS.md「响应式切档」；此处只记本 hook 的边界：
+ * 响应式切档按容器实宽而非视口断点；此处只记本 hook 的边界：
  * 阈值取**实测最小可用宽**（不是档位凑整），且 jsdom 不评估容器查询 ⇒ 阈值必须由
  * e2e 在对应视口宽上锁住。
  */

@@ -12,7 +12,7 @@
  * 这与服务端只存哈希的事实一致，不是显示层的刻意隐藏。
  *
  * 启用与关闭都会吊销其它会话（保留当前），故两处成功提示都明确说明「其它设备已登出」。
- * 设计纪律：实底卡（玻璃禁区）+ --mcs-* 语义 token + 危险动作只走 ui/button 的危险变体。
+ * 设计纪律：实底卡 + --mcs-* 语义 token + 危险动作只走 ui/button 的危险变体。
  */
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'

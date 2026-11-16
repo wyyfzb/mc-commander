@@ -89,10 +89,21 @@ export function NoticeBanner({
 }
 
 /**
- * 横幅内动作按钮的唯一配方（重试 / 重连等）。
- * 横幅坐在 tint 面上：透明底按钮会与面融成一片，故面换成实底页面面、悬停留在
- * 中性档（同色悬停会让按钮在横幅上失去轮廓）。各处横幅的动作必须走这里——
- * WS 横幅用描边档、查询失败横幅用 ghost 档会让同屏两个动作两种长相。
+ * 横幅内动作按钮的唯一配方（重试 / 重连 / 查看进度）。
+ * 横幅坐在 tint 面上：透明底按钮会与面融成一片，故面换成实底页面面、悬停留中性。
+ *
+ * 走中性描边档：横幅里的动作是「重试 / 去某页看」，不改变数据、不是危险操作。
+ * 用危险色统一会让「查看进度」与「重连」同屏同级，用户分不出哪个是恢复动作；
+ * 破坏性动作不放横幅里——那需要二次确认，归 ui/dialog。
+ *
+ * 文字色必须显式给：横幅本体带 `text-mcs-{tone}-fg`，按钮不声明就会继承成
+ * 危险红——描边改中性而文字仍红，视觉上还是「危险操作」。
+ *
+ * 面与边界都要带 `!`：outline 基座自带暗色档面 `bg-input/30` 与悬停边界
+ * `hover:border-foreground/25`，两者选择器权重更高、产物里又排在后面。
+ * 面不加 `!` 时暗色档仍是半透明覆盖层（与 banner 的 tint 融成一片）；
+ * 边界不加 `!` 时悬停只剩 25% 前景线，对 error tint 实测 2.15:1（亮色 1.63:1），
+ * 跌破交互边界 3:1——鼠标一放上去按钮就溶解在横幅里。
  */
 export function NoticeBannerAction({
   onClick,
@@ -105,9 +116,9 @@ export function NoticeBannerAction({
 }) {
   return (
     <Button
-      variant="destructive-outline"
+      variant="outline"
       size="xs"
-      className="shrink-0 bg-mcs-bg-default hover:bg-mcs-state-hover"
+      className="shrink-0 border-mcs-border-default! bg-mcs-bg-default! text-mcs-text-default hover:border-mcs-border-default! hover:bg-mcs-state-hover!"
       onClick={onClick}
       disabled={disabled}
     >

@@ -44,6 +44,8 @@ const h = vi.hoisted(() => {
     server,
     serverOn,
     appUse,
+    // helmet 需要读调用参数（CSP 指令）：具名 spy 暴露给用例
+    helmet: vi.fn(() => 'helmet-middleware'),
     wsOpts: null,
     tmpDir: null,
   };
@@ -123,7 +125,7 @@ vi.mock('../src/middleware/error_handler.js', () => ({
   errorHandler: 'error-handler',
 }));
 vi.mock('../src/middleware/cors.js', () => ({ default: vi.fn() }));
-vi.mock('helmet', () => ({ default: vi.fn(() => 'helmet-middleware') }));
+vi.mock('helmet', () => ({ default: h.helmet }));
 vi.mock('../src/routes/index.js', () => ({ setupRoutes: vi.fn() }));
 vi.mock('../src/services/mc_server.js', () => ({
   MCServerManager: class {
@@ -244,6 +246,23 @@ describe('安全响应头中间件（helmet）', () => {
     expect(idxHelmet).toBeGreaterThanOrEqual(0);
     expect(mounted[idxHelmet].path).toBeUndefined();
     expect(idxJson).toBeGreaterThan(idxHelmet);
+  });
+
+  /* CSP 的 script-src 只放行 'self' ⇒ 前端 index.html 里的**任何内联脚本都不会执行**
+     （本地 vite 与 e2e 都不带 CSP，这类失效在测试里完全看不见）。
+     判据放在服务端这边：两处必须同时成立才算一致——① CSP 没有放开内联；
+     ② 前端 HTML 里没有无 src 的 <script>。任一处漂移，先见守护在这里。 */
+  it("CSP 只放行 script-src 'self'，且前端 HTML 不含内联脚本（内联会被浏览器拒绝执行）", async () => {
+    await resetAndImport();
+    const helmetConfig = vi.mocked(h.helmet).mock.calls.at(-1)?.[0];
+    const scriptSrc = helmetConfig?.contentSecurityPolicy?.directives?.scriptSrc;
+    expect(scriptSrc).toEqual(["'self'"]);
+
+    const webHtml = path.join(import.meta.dirname, '..', '..', 'web', 'index.html');
+    const html = fs.readFileSync(webHtml, 'utf-8');
+    // 无 src 的 <script>（含自闭合写法）＝内联脚本
+    const inlineScripts = html.match(/<script(?![^>]*\bsrc=)[^>]*>/g) ?? [];
+    expect(inlineScripts).toEqual([]);
   });
 });
 

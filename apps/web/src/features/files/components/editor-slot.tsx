@@ -8,7 +8,7 @@
  */
 import { getFriendlyErrorText } from '@/api/errors'
 import { Card } from '@/components/mcs/card'
-import type { ThemeMode } from '@/stores/ui'
+import type { ResolvedTheme } from '@/stores/ui'
 import { MonacoEditorPane } from './monaco-editor-pane'
 import { useFileContent } from '../queries'
 
@@ -21,7 +21,7 @@ interface EditorSlotProps {
   /** 编辑器草稿（组件 state，与 query 缓存隔离） */
   draft: string
   /** 编辑器主题（跟随全局 UI 主题） */
-  theme: ThemeMode
+  theme: ResolvedTheme
   isSaving: boolean
   dirty: boolean
   onChange: (v: string) => void

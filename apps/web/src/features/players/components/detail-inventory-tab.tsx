@@ -11,7 +11,7 @@
  * 4. 快照提示条：source='snapshot' →「数据来自上次存档快照，可能非实时」（info 色）
  * 5. partial=true → 截断降级提示（warning 色）
  * 6. 选中槽位高亮 —— Web 简化：hover 边框高亮（不实现槽位详情弹层）
- * 7. 设计纪律：全部 --mcs-* 语义 token；格子实底（玻璃禁区）；不硬编码色值/间距/圆角
+ * 7. 设计纪律：全部 --mcs-* 语义 token；格子实底；不硬编码色值/间距/圆角
  */
 import { useState, type KeyboardEvent } from 'react'
 import {

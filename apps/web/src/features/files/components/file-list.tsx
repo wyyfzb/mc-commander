@@ -442,7 +442,7 @@ export function FileList({
         </NoticeBanner>
       )}
 
-      {/* 文件列表（实底；玻璃禁区）——三态复用 data-states 共享视觉 */}
+      {/* 文件列表（实底）——三态复用 data-states 共享视觉 */}
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
         {isLoading && <ListSkeleton rows={4} />}
         {!isLoading && isError && (

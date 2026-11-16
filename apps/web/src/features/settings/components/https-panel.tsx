@@ -233,7 +233,7 @@ export function HttpsPanel({ baseUrl, apiKey, authed }: HttpsPanelProps) {
                 <p className="mt-1 break-all font-mono text-mcs-2xs text-mcs-text-muted">
                   {status.caFingerprint}
                 </p>
-                <p className="mt-2 text-mcs-2xs text-mcs-text-muted">
+                <p className="mt-2 text-mcs-xs text-mcs-text-muted">
                   导入后可在系统的证书列表里核对这串字符。根证书首次下载走明文，指纹对不上就不要安装。
                 </p>
               </div>

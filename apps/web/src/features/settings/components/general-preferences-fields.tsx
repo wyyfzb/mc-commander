@@ -2,7 +2,7 @@
  * GeneralPreferencesFields —— 「连接与外观」页里的界面偏好字段本体
  * 三项全部是**这个浏览器**的偏好：ui store 的 partialize 白名单只落这三项到 localStorage，
  * 换设备/换浏览器不跟随（与账号、与实例都无关）。
- * - 界面主题：ui store theme/setTheme（深色/浅色即时生效）
+ * - 界面主题：ui store theme/setTheme（暗色/亮色/跟随系统即时生效）
  * - 终端自动滚动 / 命令执行二次确认：浏览器本地开关，改了立即生效、不发请求
  * 实例级配置（内存、JVM 参数、自动重启）不在这里，它们的写入口是 PUT /instances/:id。
  * 只出字段、不出卡片面：容器（区块卡）由调用点给，避免一个页面里两种卡片基座。
@@ -35,13 +35,14 @@ export function GeneralPreferencesFields() {
       <div className="flex items-center gap-3 py-3">
         <div className="min-w-0 flex-1">
           <div className="text-mcs-sm font-semibold text-mcs-text-default">界面主题</div>
-          <div className="mt-0.5 text-mcs-xs text-mcs-text-muted">深色/浅色主题切换</div>
+          <div className="mt-0.5 text-mcs-xs text-mcs-text-muted">跟随系统，或固定为暗色/亮色</div>
         </div>
         <Select value={theme} onValueChange={handleThemeChange}>
-          <SelectTrigger className="w-24" aria-label="界面主题">
+          <SelectTrigger className="w-28" aria-label="界面主题">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
+            <SelectItem value="system">跟随系统</SelectItem>
             <SelectItem value="dark">暗色</SelectItem>
             <SelectItem value="light">亮色</SelectItem>
           </SelectContent>

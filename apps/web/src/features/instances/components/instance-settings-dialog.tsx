@@ -554,7 +554,7 @@ export function InstanceSettingsDialog({
               {/* 实际启动命令：只在展开高级参数时出现，回答「我到底会用什么命令启动它」 */}
               <div className="flex flex-col gap-1.5">
                 <span className="text-mcs-xs font-semibold text-mcs-text-muted">实际启动命令</span>
-                <pre className="w-full overflow-x-auto whitespace-pre-wrap break-all rounded-mcs-sm border border-mcs-border-muted bg-mcs-bg-default p-3 font-mono text-mcs-xs text-mcs-accent-fg">
+                <pre className="w-full overflow-x-auto whitespace-pre-wrap break-all rounded-mcs-sm border border-mcs-border-muted bg-mcs-bg-inset p-3 font-mono text-mcs-xs text-mcs-accent-fg">
                   {startCommandPreview}
                 </pre>
                 <p className="text-mcs-xs text-mcs-text-muted">

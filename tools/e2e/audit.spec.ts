@@ -165,7 +165,7 @@ test.describe('审计页', () => {
     await maybeShot(page, 'audit-filter-active-light.png')
 
     // 同场景暗色
-    await page.getByRole('button', { name: /切换到深色主题/ }).click()
+    await page.getByRole('button', { name: /切换到暗色主题/ }).click()
     await expect(page.locator('html')).toHaveClass(/dark/)
     await page.waitForTimeout(300)
     await maybeShot(page, 'audit-filter-active-dark.png')

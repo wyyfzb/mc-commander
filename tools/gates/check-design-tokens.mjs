@@ -19,7 +19,7 @@
  *  12. 未定义类：源码使用但项目 CSS 未定义、@theme 未注册 → Tailwind 不生成规则（静默无效果）
  *  13. 死类：项目 CSS 定义但全仓 0 使用 → 报错（`@reserved` 注释可豁免）
  *  14. 死 token：semantic.css 定义但全仓 0 消费 → 报错（删除，或加 `@reserved` 注释说明预留原因）
- *  15. 内容面 tint 叠加：同元素出现 ≥2 个 `bg-mcs-*-bg-subtle`，或内容面 tint 与玻璃面同元素 → 报错
+ *  15. 内容面 tint 叠加：同元素出现 ≥2 个 `bg-mcs-*-bg-subtle` → 报错
  *      （含词表间接写法：同一次 cn/clsx 或同一模板串里 `toneClasses()` 与字面量 tint 共存）
  *      ＋ 六档语义色三件套只允许声明在 components/mcs/tone.ts（别处整串写出一档的
  *      border+bg-subtle+fg 即又抄了一份词表；测试与 tone.ts 自身除外），accent 的
@@ -34,7 +34,6 @@
  *      （暗 25% / 亮 30% alpha），现网 12 处合法着色点覆盖六档语义色，收进判定面只会大面积
  *      误报——属宁漏不误报。
  *  16. Z 轴阶梯：禁裸 z-<数字>（类名 / 内联 zIndex / CSS z-index）
- *  17. 玻璃预算：全站各 1 处（顶栏 glass-chrome + 覆盖层 glass-overlay）
  *  18. 危险语义色禁半透明底：bg-destructive/<alpha>
  *  19. 内容面 tint 必须不透明
  *  20. 布局属性动画（transition-all）与数字时长档（duration-<数字>），含 ui/ 基座
@@ -369,14 +368,11 @@ function checkClasses(filePath, lineNum, classes) {
   }
   // 10. 未注册 token 类 / 角色越界 / alpha 越界（语义静默丢失与对比度跌破）
   checkTokenClasses(classes, filePath, lineNum)
-  // 11. 内容面 tint 不得叠加：不透明 tint 叠加无意义（后者覆盖前者），叠玻璃面同理（背景由后写者决定）
+  // 11. 内容面 tint 不得叠加：不透明 tint 叠加无意义（后者覆盖前者）
   const contentTints = classes.match(/\bbg-mcs-[\w-]+-bg-subtle\b/g)
-  if (
-    contentTints &&
-    (contentTints.length > 1 || /\bglass-(chrome|overlay|toast)\b/.test(classes))
-  ) {
+  if (contentTints && contentTints.length > 1) {
     console.log(
-      `${filePath}:${lineNum + 1}: ${contentTints.join(' + ')}${contentTints.length > 1 ? ' 内容面 tint 叠加' : ' 与玻璃面同元素'} → 同一元素只允许一个背景来源（不透明 tint 会互相覆盖）`,
+      `${filePath}:${lineNum + 1}: ${contentTints.join(' + ')} 内容面 tint 叠加 → 同一元素只允许一个背景来源（不透明 tint 会互相覆盖）`,
     )
     violations++
   }
@@ -760,13 +756,13 @@ for (const cssFile of [indexPath]) {
   }
 }
 
-// 项目 CSS 定义的自定义类（.mcs-* / .glass-* / .animate-mcs-*）
+// 项目 CSS 定义的自定义类（.mcs-* / .animate-mcs-*）
 const definedClasses = new Map() // class → { file, line }
 for (const f of G9_FILES) {
   if (!f.endsWith('.css')) continue
   const lines = readFileSync(f, 'utf-8').split('\n')
   lines.forEach((line, i) => {
-    for (const m of line.matchAll(/\.((?:mcs|glass|animate-mcs)-[\w-]+)/g)) {
+    for (const m of line.matchAll(/\.((?:mcs|animate-mcs)-[\w-]+)/g)) {
       if (!definedClasses.has(m[1]))
         definedClasses.set(m[1], {
           file: relative(root, f),
@@ -801,12 +797,12 @@ for (const f of G9_FILES) {
           .replace(/!$/, '')
           .replace(/\/[\d[\].]+$/, '')
         if (!body) continue
-        const dyn = body.match(/^((?:mcs|glass|animate-mcs|[a-z-]*-mcs)-[a-z0-9-]*)\$\{/)
+        const dyn = body.match(/^((?:mcs|animate-mcs|[a-z-]*-mcs)-[a-z0-9-]*)\$\{/)
         if (dyn) {
           usedPrefixes.add(dyn[1])
           continue
         }
-        if (!/^(?:[a-z-]*-)?(?:mcs|glass)-[a-z0-9-]+$/.test(body)) continue
+        if (!/^(?:[a-z-]*-)?mcs-[a-z0-9-]+$/.test(body)) continue
         const info = usedClasses.get(body)
         if (!info) usedClasses.set(body, { file: relFile, classContext })
         else if (classContext) info.classContext = true
@@ -823,7 +819,7 @@ for (const [cls, info] of usedClasses) {
     // 非 ui/ 的 *-mcs-* 工具类已由逐行检查（G2）覆盖，避免重复报
     if (!info.file.replace(/\\/g, '/').includes(EXCLUDE_DIR)) continue
   } else if (!info.classContext) {
-    // 裸 mcs-*/glass-* 标识符（localStorage 键、事件名、测试夹具）不是类名，不进判定
+    // 裸 mcs-* 标识符（localStorage 键、事件名、测试夹具）不是类名，不进判定
     continue
   }
   console.log(
@@ -919,31 +915,6 @@ for (const f of G9_FILES) {
       }
     }
   })
-}
-
-// 17. 玻璃预算：全站各 1 处（顶栏 chrome + 覆盖层 overlay）——「同屏 ≤2 层」的静态口径，
-//     运行时同屏无法静态判定，故收紧为「全站各 1 处」，见 src/styles/glass.css
-//     计数口径：非注释的类名引用次数（.ts/.tsx 均计，跳过 __tests__ 与 .css）
-const GLASS_BUDGET = { chrome: 1, overlay: 1, toast: 0 }
-const glassCount = new Map()
-for (const f of G9_FILES) {
-  if (f.endsWith('.css') || isTestPath(f)) continue
-  for (const line of readFileSync(f, 'utf-8').split('\n')) {
-    const code = codeOnly(line)
-    if (!code) continue
-    for (const m of code.matchAll(/\bglass-(chrome|overlay|toast)\b/g)) {
-      glassCount.set(m[1], (glassCount.get(m[1]) ?? 0) + 1)
-    }
-  }
-}
-for (const [kind, count] of glassCount) {
-  const budget = GLASS_BUDGET[kind] ?? 0
-  if (count > budget) {
-    console.log(
-      `玻璃预算超标：glass-${kind} ${count} 处（预算 ${budget}）→ 预算说明见 src/styles/glass.css`,
-    )
-    violations += count - budget
-  }
 }
 
 // 18. 危险语义色禁止半透明底：bg-destructive/NN 与 bg-destructive/[N] 承载文字，暗色最亮面上 3.39–4.44:1
@@ -1049,7 +1020,7 @@ for (const f of GATE_FILES) {
     CARD_SURFACE_ALLOWLIST.get(rel),
   )) {
     console.log(
-      `${rel}:${lineAt(code, offset)}: 卡片面类名配方（shadow-mcs-card）→ 卡片面只在 components/mcs/card.tsx 声明（AGENTS.md「卡片容器」）；非卡片面的同配方现场须登记豁免额度`,
+      `${rel}:${lineAt(code, offset)}: 卡片面类名配方（shadow-mcs-card）→ 卡片面只在 components/mcs/card.tsx 声明；非卡片面的同配方现场须登记豁免额度`,
     )
     violations++
   }
@@ -1083,7 +1054,7 @@ for (const f of GATE_FILES) {
   if (!LABEL_COMPONENT_SOURCES.has(rel)) {
     for (const m of code.matchAll(LABEL_COMPONENT_DECL)) {
       console.log(
-        `${rel}:${lineAt(code, m.index)}: 新导出标签组件 ${m[1]} → 标签只有 Chip / StatusPill / CountBadge 三件（AGENTS.md「标签与状态展示」）`,
+        `${rel}:${lineAt(code, m.index)}: 新导出标签组件 ${m[1]} → 标签只有 Chip / StatusPill / CountBadge 三件`,
       )
       violations++
     }
@@ -1300,10 +1271,30 @@ for (const f of GATE_FILES) {
   }
 }
 
+// 27. 禁玻璃拟态：全站无 backdrop-filter（层级由面档差 + 阴影承担）。
+//     没有这条时删掉 glass.css 只是「当下没人写」，改回 backdrop-blur-* 全绿通过——
+//     这条纪律得有自己的判据。
+const BACKDROP_HIT = /\bbackdrop-(?:blur|filter)\b|backdrop-filter\s*:/
+for (const f of GATE_FILES) {
+  const rel = GATE_REL(f)
+  readFileSync(f, 'utf-8')
+    .split('\n')
+    .forEach((line, i) => {
+      // 注释行放行：注释里描述这条纪律本身是正常的
+      if (/^\s*(?:\/\/|\*|\/\*)/.test(line)) return
+      const hit = BACKDROP_HIT.exec(line)
+      if (!hit) return
+      console.log(
+        `${rel}:${i + 1}: 玻璃拟态（${hit[0]}）→ 全站禁 backdrop-filter，层级由面档差 + 阴影承担`,
+      )
+      violations++
+    })
+}
+
 if (violations > 0) {
   console.error(`\n✗ 发现 ${violations} 处设计 token 违规`)
   process.exit(1)
 }
 console.log(
-  '✓ 设计 token 完整性检查通过（色板类/dark:/transition-all/duration-数字/rounded-任意值/字号上限/焦点可见性/未注册 token 类/token 角色矩阵/alpha 白名单/未定义类/死类/死 token/内容面 tint 叠加/语义色三件套与选中强调形态声明源/Z 轴阶梯/text-base 额度/玻璃预算/危险半透明底/内容面 tint 不透明/布局属性动画/卡片面声明源/标签组件唯一性/页面页头与标题档/全屏覆盖层来源/行内抢键落点/内联尺寸单位/危险描边只从变体取/焦点环取消须有替换/交互悬浮只走覆盖层）',
+  '✓ 设计 token 完整性检查通过（色板类/dark:/transition-all/duration-数字/rounded-任意值/字号上限/焦点可见性/未注册 token 类/token 角色矩阵/alpha 白名单/未定义类/死类/死 token/内容面 tint 叠加/语义色三件套与选中强调形态声明源/Z 轴阶梯/text-base 额度/危险半透明底/内容面 tint 不透明/布局属性动画/卡片面声明源/标签组件唯一性/页面页头与标题档/全屏覆盖层来源/行内抢键落点/内联尺寸单位/危险描边只从变体取/焦点环取消须有替换/交互悬浮只走覆盖层/禁玻璃拟态）',
 )
