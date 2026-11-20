@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { resolveTheme, useUiStore } from '@/stores/ui'
+import { resolveTheme, useUiStore, type ThemeMode } from '@/stores/ui'
 
 /**
  * 主题偏好三档（dark / light / system）
@@ -72,7 +72,7 @@ describe('resolveTheme', () => {
     expect(resolveTheme('dark')).toBe('dark')
   })
 
-  it('system 跟随操作系统：深色系统 → dark，浅色系统 → light', () => {
+  it('system 跟随操作系统：暗色系统 → dark，亮色系统 → light', () => {
     stubSystemDark(true)
     expect(resolveTheme('system')).toBe('dark')
     stubSystemDark(false)
@@ -89,17 +89,21 @@ describe('resolveTheme', () => {
     })
     expect(resolveTheme('system')).toBe('dark')
   })
+
+  it('脏主题值回退 dark（localStorage 可能被手改）', () => {
+    expect(resolveTheme('sepia' as ThemeMode)).toBe('dark')
+  })
 })
 
 describe('toggleTheme 在 system 档', () => {
-  it('深色系统下点一次得到 light（看得见的变化），并固定到 light', () => {
+  it('暗色系统下点一次得到 light（看得见的变化），并固定到 light', () => {
     stubSystemDark(true)
     useUiStore.setState({ theme: 'system' })
     useUiStore.getState().toggleTheme()
     expect(useUiStore.getState().theme).toBe('light')
   })
 
-  it('浅色系统下点一次得到 dark，并固定到 dark', () => {
+  it('亮色系统下点一次得到 dark，并固定到 dark', () => {
     stubSystemDark(false)
     useUiStore.setState({ theme: 'system' })
     useUiStore.getState().toggleTheme()
@@ -130,14 +134,32 @@ describe('useResolvedTheme', () => {
     expect(result.current).toBe('light')
   })
 
-  it('固定档不订阅操作系统：系统切换不改变返回值', async () => {
-    const { renderHook } = await import('@testing-library/react')
+  it('固定档忽略操作系统切换：系统翻转后返回值不变', async () => {
+    const { renderHook, act } = await import('@testing-library/react')
     const { useResolvedTheme } = await import('@/hooks/use-resolved-theme')
-    stubSystemDark(true)
+    const system = stubSystemDark(true)
     useUiStore.setState({ theme: 'light' })
 
     const { result } = renderHook(() => useResolvedTheme())
     expect(result.current).toBe('light')
+    act(() => system.flip(false))
+    expect(result.current).toBe('light')
+  })
+
+  it('matchMedia 抛错时 system 档回退 dark，渲染与订阅都不炸', async () => {
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      configurable: true,
+      value: () => {
+        throw new Error('matchMedia 不可用')
+      },
+    })
+    const { renderHook } = await import('@testing-library/react')
+    const { useResolvedTheme } = await import('@/hooks/use-resolved-theme')
+    useUiStore.setState({ theme: 'system' })
+
+    const { result } = renderHook(() => useResolvedTheme())
+    expect(result.current).toBe('dark')
   })
 })
 

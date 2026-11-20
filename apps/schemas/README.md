@@ -18,7 +18,7 @@ MC_Commander 的共享接口契约包（zod）：API 请求/响应、WebSocket �
 ## 常用命令
 
 ```bash
-npm ci         # 在**仓库根**执行：workspace 一次装齐三包依赖
+npm ci --ignore-scripts         # 在**仓库根**执行：workspace 一次装齐三包依赖；跳过无需编译的 install 脚本
 npm test       # vitest 全量
 npm run lint   # oxlint（三个包同一把 linter，规则面见 .oxlintrc.json）
 npm run build  # 构建 dist/index.js（rolldown；产物不入库，服务端消费前须先构建）

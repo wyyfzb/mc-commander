@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { render, act } from '@testing-library/react'
 import { ThemeClassSync } from '@/layouts/theme-class-sync'
 import { useUiStore } from '@/stores/ui'
@@ -12,6 +12,10 @@ describe('ThemeClassSync', () => {
     localStorage.clear()
     document.documentElement.className = ''
     useUiStore.setState({ theme: 'dark' })
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
   })
 
   it('初始渲染即同步 store 主题（覆盖 index.html 初始 .dark 假设）', () => {
@@ -31,5 +35,33 @@ describe('ThemeClassSync', () => {
     act(() => useUiStore.getState().setTheme('dark'))
     expect(document.documentElement.classList.contains('dark')).toBe(true)
     expect(document.documentElement.classList.contains('light')).toBe(false)
+  })
+
+  it('system 档跟随操作系统：系统切换后 class 即时换档', () => {
+    let systemDark = true
+    const listeners = new Set<() => void>()
+    vi.spyOn(window, 'matchMedia').mockImplementation(
+      (query: string) =>
+        ({
+          matches: systemDark,
+          media: query,
+          onchange: null,
+          addEventListener: (_: string, cb: () => void) => listeners.add(cb),
+          removeEventListener: (_: string, cb: () => void) => listeners.delete(cb),
+          addListener: () => {},
+          removeListener: () => {},
+          dispatchEvent: () => false,
+        }) as unknown as MediaQueryList,
+    )
+    useUiStore.setState({ theme: 'system' })
+    render(<ThemeClassSync />)
+    expect(document.documentElement.classList.contains('dark')).toBe(true)
+
+    act(() => {
+      systemDark = false
+      for (const cb of listeners) cb()
+    })
+    expect(document.documentElement.classList.contains('light')).toBe(true)
+    expect(document.documentElement.classList.contains('dark')).toBe(false)
   })
 })

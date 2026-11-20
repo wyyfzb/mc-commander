@@ -3,15 +3,25 @@ import { resolveTheme, useUiStore, type ResolvedTheme } from '@/stores/ui'
 
 const SYSTEM_DARK_QUERY = '(prefers-color-scheme: dark)'
 
-/** 订阅操作系统配色变化（只在 'system' 档下有消费者，但订阅本身无副作用） */
+/** 订阅操作系统配色变化（matchMedia 不可用时返回空订阅） */
 function subscribeSystemTheme(onChange: () => void): () => void {
-  const media = window.matchMedia(SYSTEM_DARK_QUERY)
+  let media: MediaQueryList
+  try {
+    media = window.matchMedia(SYSTEM_DARK_QUERY)
+  } catch {
+    return () => {}
+  }
   media.addEventListener('change', onChange)
   return () => media.removeEventListener('change', onChange)
 }
 
+/** matchMedia 不可用时回退 dark（与 resolveTheme 的 catch 一致） */
 function readSystemDark(): boolean {
-  return window.matchMedia(SYSTEM_DARK_QUERY).matches
+  try {
+    return window.matchMedia(SYSTEM_DARK_QUERY).matches
+  } catch {
+    return true
+  }
 }
 
 /**

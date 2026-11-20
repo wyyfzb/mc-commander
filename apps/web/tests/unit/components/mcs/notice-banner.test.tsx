@@ -91,9 +91,14 @@ describe('NoticeBanner', () => {
       </NoticeBanner>,
     )
     const btn = container.querySelector('button')!
-    expect(btn.className).toContain('text-mcs-text-default')
+    const classes = new Set(btn.className.split(/\s+/))
+    expect(classes.has('text-mcs-text-default')).toBe(true)
     expect(btn.className).not.toContain('text-mcs-error-fg')
     // 面必须是实底页面面（横幅底是 tint，透明按钮会与它融成一片）
-    expect(btn.className).toContain('bg-mcs-bg-default!')
+    expect(classes.has('bg-mcs-bg-default!')).toBe(true)
+    // 描边静止/悬停都固定中性档：基座的 hover:border-foreground/25 落到 error tint
+    // 上实测 2.15:1（亮色 1.63:1），跌破交互边界 3:1
+    expect(classes.has('border-mcs-border-default!')).toBe(true)
+    expect(classes.has('hover:border-mcs-border-default!')).toBe(true)
   })
 })

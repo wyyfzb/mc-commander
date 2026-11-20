@@ -9,7 +9,7 @@
  * 4. Monaco 本地化（禁 CDN 外联）：loader.config({ monaco }) 注入本地包 + self.MonacoEnvironment
  *    配置 Vite ?worker（editor 通用 worker + json 语言按需）
  * 5. 语言映射（.log：Monaco 无 accesslog 语言 → plaintext 降级）
- * 6. 设计纪律：全部 --mcs-* 语义 token；编辑区实底（Monaco vs / vs-dark 自带主题底色）；
+ * 6. 设计纪律：全部 --mcs-* 语义 token；编辑区实底（自绘 mcs-dark / mcs-light，base 继承 vs / vs-dark）；
  *    Monaco 在 jsdom 不可渲染，测试 mock @monaco-editor/react（见 __tests__/monaco-editor-pane.test.tsx）
  *
  * 注意：monaco-editor 0.56 的 exports map 为 "./*": "./esm/vs/*.js"，官方 README 的
@@ -54,6 +54,7 @@ loader.config({ monaco })
  * CSS 变量 → hex 色值。
  * Monaco 的 theme colors 不支持 CSS 颜色函数（"Illegal value for token color"），
  * 用 canvas 2D 把计算后的颜色解析为 hex；jsdom 无 canvas（getContext 返回 null）返回 null。
+ * alpha 不丢：弱线 token 是低透明度 rgba，丢掉后会被 Monaco 画成实色线。
  */
 function cssVarToHex(varName: string): string | null {
   const value = getComputedStyle(document.documentElement).getPropertyValue(varName).trim()
@@ -68,14 +69,17 @@ function cssVarToHex(varName: string): string | null {
   const data = ctx.getImageData(0, 0, 1, 1).data
   if (!data || data[3] === 0) return null
   const hex = (n: number) => n.toString(16).padStart(2, '0')
-  return `#${hex(data[0]!)}${hex(data[1]!)}${hex(data[2]!)}`
+  const alpha = data[3]!
+  // #RRGGBBAA：Monaco 的 parseHex 支持 8 位形式，alpha 交给它合成
+  return `#${hex(data[0]!)}${hex(data[1]!)}${hex(data[2]!)}${alpha < 255 ? hex(alpha) : ''}`
 }
 
 /**
  * 注册 MCS 编辑器主题（暗/亮各一套），背景对齐 --mcs-bg-inset（全站最深档），
  * 避免内置 vs/vs-dark 的中性底与 MCS 面板色相割裂。
- * 颜色运行时读取 CSS 变量经 canvas 解析为 hex（token 唯一来源，源码无硬编码色值）；
- * 解析失败（jsdom/SSR）跳过，回退内置主题继承。
+ * 颜色运行时读取 CSS 变量经 canvas 解析为 hex（保留 alpha；token 唯一来源，源码无硬编码色值）。
+ * 取不到 CSS 变量时仍注册 base-only 主题：Monaco 对未注册主题回退到内置 vs（亮色底），
+ * 暗色 UI 下会闪出亮底编辑器，所以不能跳过注册。
  *
  * **必须在应用主题的那一刻读，不能在模块加载时读**：CSS 变量随 .dark/.light 切换，
  * 模块加载时读到的值是当时主题的；把亮色读到的背景写进暗色主题，切档后就成了
@@ -84,22 +88,24 @@ function cssVarToHex(varName: string): string | null {
 function defineMcsTheme(mode: ResolvedTheme) {
   if (typeof document === 'undefined') return
   const bgInset = cssVarToHex('--mcs-bg-inset')
-  if (!bgInset) return
   const bgDefault = cssVarToHex('--mcs-bg-default')
   const borderSubtle = cssVarToHex('--mcs-border-subtle')
   const textMuted = cssVarToHex('--mcs-text-muted')
-  const accent = cssVarToHex('--mcs-accent')
+  // 光标取 accent-fg 而非 accent：亮色档的 accent 是浅绿，对深嵌底仅 1.16:1，
+  // 光标几乎不可见；accent-fg 为深绿 5.91:1
+  const accentFg = cssVarToHex('--mcs-accent-fg')
+  const colors: Record<string, string> = {
+    ...(bgInset ? { 'editor.background': bgInset } : {}),
+    ...(bgDefault || bgInset ? { 'editor.lineHighlightBackground': (bgDefault || bgInset)! } : {}),
+    ...(borderSubtle ? { 'editor.lineHighlightBorder': borderSubtle } : {}),
+    ...(textMuted ? { 'editorLineNumber.foreground': textMuted } : {}),
+    ...(accentFg ? { 'editorCursor.foreground': accentFg } : {}),
+  }
   monaco.editor.defineTheme(mode === 'dark' ? 'mcs-dark' : 'mcs-light', {
     base: mode === 'dark' ? 'vs-dark' : 'vs',
     inherit: true,
     rules: [],
-    colors: {
-      'editor.background': bgInset,
-      'editor.lineHighlightBackground': bgDefault || bgInset,
-      'editor.lineHighlightBorder': borderSubtle || 'transparent',
-      ...(textMuted ? { 'editorLineNumber.foreground': textMuted } : {}),
-      ...(accent ? { 'editorCursor.foreground': accent } : {}),
-    },
+    colors,
   })
 }
 
@@ -110,7 +116,7 @@ export interface MonacoEditorPaneProps {
   content: string
   /** 文件编码（服务端探测，头部徽章展示） */
   encoding: 'utf-8' | 'gbk'
-  /** 应用明暗主题（映射 Monaco 内置主题 vs / vs-dark） */
+  /** 应用明暗主题（自绘 mcs-dark / mcs-light，base 继承 vs / vs-dark） */
   theme: ResolvedTheme
   /** 内容加载中（Skeleton 占位，encoding 徽章隐藏） */
   isLoading: boolean

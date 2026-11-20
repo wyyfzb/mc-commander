@@ -160,7 +160,7 @@
     --radius-4xl: var(--mcs-radius-lg);
 }
 
-/* 深色优先（P4）：html 默认 .dark；切亮色时替换为 .light（见 useTheme） */
+/* 深色优先（P4）：html 默认 .dark；切亮色时替换为 .light（见 theme-class-sync.tsx） */
 :root {
   color-scheme: dark;
 }

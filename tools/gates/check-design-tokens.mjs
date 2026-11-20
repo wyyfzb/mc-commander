@@ -37,7 +37,7 @@
  *  18. 危险语义色禁半透明底：bg-destructive/<alpha>
  *  19. 内容面 tint 必须不透明
  *  20. 布局属性动画（transition-all）与数字时长档（duration-<数字>），含 ui/ 基座
- * 门禁（第 21–27 条，J23/t27；扫描 src/ 全量，排除项在各条内声明）：
+ * 门禁（第 21–34 条，J23/t27；扫描 src/ 全量，排除项在各条内声明）：
  *  21. 卡片面类名（配方）只允许声明在 components/mcs/card.tsx——非卡片面但共用
  *      `shadow-mcs-card` 标记的现场按「登记额度」豁免（额度外的第 N 处即报，豁免的是现场
  *      而非整个文件）
@@ -67,6 +67,12 @@
  *      destructive-outline 变体，基座破例会被调用点逐字照抄（曾扩散到 4 处）。
  *      实现分两支：主遍历 walkDir 按 EXCLUDE_DIR 跳过 components/ui/，故另起 walkUiDir
  *      只扫 ui/（见「30b」段）——只挂主遍历的判定看不见 ui/，别再以为一条就够。
+ *  31. 自造 ARIA 交互组件：手写 role=switch/tablist/listbox 等 → 改用 ui/ 基座
+ *      （手写版缺 aria-controls、roving tabindex、aria-selected 等关键语义）
+ *  32. 指针目标 ≥24×24 CSS px（WCAG 2.2 SC 2.5.8）
+ *  33. 焦点样式必须用 focus-visible:（focus: 会在鼠标点击时也出环，稀释键盘焦点信号）
+ *  34. 禁玻璃拟态：源码与样式表不出现 backdrop 滤镜族（类名 / 内联样式 / CSS 属性；
+ *      层级由面档差 + 阴影承担；其它规则都不覆盖这条纪律）。扫描面＝src/ 与 tools/e2e/。
  * 类名提取覆盖 className="..."、className={cn(...)}、模板字面量、对象映射值（如 tone: 'bg-...'），
  * 不留「只在 className 字面属性里才检查」的盲区。
  * 发现违规 → 输出 文件:行号 → 非零退出码（阻止合并）
@@ -712,7 +718,7 @@ function utilitiesOfRegistration(reg) {
   return []
 }
 
-/** 收集 G9 扫描文件（含 ui/ 与 e2e/） */
+/** 收集 G9 扫描文件（含 ui/ 与 tools/e2e/） */
 function collectG9Files() {
   const out = []
   const walkAll = (dir) => {
@@ -728,8 +734,20 @@ function collectG9Files() {
     }
   }
   walkAll(srcDir)
-  const e2eDir = join(root, 'e2e')
-  if (existsSync(e2eDir)) walkAll(e2eDir)
+  // root 是 apps/web（判定对象）；仓库根在其上两级，e2e 住 tools/e2e/
+  const repoRoot = join(root, '..', '..')
+  const e2eDir = join(repoRoot, 'tools', 'e2e')
+  // 目录缺失或为空即失败：路径漂移会让判定面静默退化为只扫 src/
+  if (!existsSync(e2eDir)) {
+    console.error(`✗ e2e 扫描目录不存在：${relative(repoRoot, e2eDir)}`)
+    process.exit(1)
+  }
+  const before = out.length
+  walkAll(e2eDir)
+  if (out.length === before) {
+    console.error(`✗ e2e 扫描目录为空：${relative(repoRoot, e2eDir)}`)
+    process.exit(1)
+  }
   return out
 }
 
@@ -1271,24 +1289,23 @@ for (const f of GATE_FILES) {
   }
 }
 
-// 27. 禁玻璃拟态：全站无 backdrop-filter（层级由面档差 + 阴影承担）。
-//     没有这条时删掉 glass.css 只是「当下没人写」，改回 backdrop-blur-* 全绿通过——
-//     这条纪律得有自己的判据。
-const BACKDROP_HIT = /\bbackdrop-(?:blur|filter)\b|backdrop-filter\s*:/
-for (const f of GATE_FILES) {
+// 34. 禁玻璃拟态：全站无 backdrop-filter（层级由面档差 + 阴影承担）。
+//     其它规则都不覆盖 backdrop-filter，这条是该纪律的唯一机械判据。
+//     按 stripComments 后的正文判：JSX 注释与行尾注释里的说明不算现场，
+//     内联 style（backdropFilter）与 CSS 属性（含 -webkit- 前缀）都算。
+const BACKDROP_HIT =
+  /\bbackdrop-(?:blur|brightness|contrast|filter|grayscale|hue-rotate|invert|opacity|saturate|sepia)\b|\b(?:webkit)?backdropFilter\b|(?:-webkit-)?backdrop-filter\s*:/i
+for (const f of G9_FILES) {
   const rel = GATE_REL(f)
-  readFileSync(f, 'utf-8')
-    .split('\n')
-    .forEach((line, i) => {
-      // 注释行放行：注释里描述这条纪律本身是正常的
-      if (/^\s*(?:\/\/|\*|\/\*)/.test(line)) return
-      const hit = BACKDROP_HIT.exec(line)
-      if (!hit) return
-      console.log(
-        `${rel}:${i + 1}: 玻璃拟态（${hit[0]}）→ 全站禁 backdrop-filter，层级由面档差 + 阴影承担`,
-      )
-      violations++
-    })
+  const code = stripComments(readFileSync(f, 'utf-8'))
+  code.split('\n').forEach((line, i) => {
+    const hit = BACKDROP_HIT.exec(line)
+    if (!hit) return
+    console.log(
+      `${rel}:${i + 1}: 玻璃拟态（${hit[0]}）→ 全站禁 backdrop-filter，层级由面档差 + 阴影承担`,
+    )
+    violations++
+  })
 }
 
 if (violations > 0) {

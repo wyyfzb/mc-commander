@@ -19,14 +19,16 @@ export type ResolvedTheme = 'dark' | 'light'
 
 const SYSTEM_DARK_QUERY = '(prefers-color-scheme: dark)'
 
-/** 把主题偏好解析成实际配色；'system' 读操作系统偏好 */
+/** 把主题偏好解析成实际配色；'system' 读操作系统偏好，脏值回退 dark（与首帧脚本一致） */
 export function resolveTheme(mode: ThemeMode): ResolvedTheme {
-  if (mode !== 'system') return mode
-  try {
-    return window.matchMedia(SYSTEM_DARK_QUERY).matches ? 'dark' : 'light'
-  } catch {
-    return 'dark'
+  if (mode === 'system') {
+    try {
+      return window.matchMedia(SYSTEM_DARK_QUERY).matches ? 'dark' : 'light'
+    } catch {
+      return 'dark'
+    }
   }
+  return mode === 'light' ? 'light' : 'dark'
 }
 
 interface UiState {

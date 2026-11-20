@@ -52,9 +52,9 @@ E2E 与门禁不在本包内：住仓库 `tools/e2e/`（Playwright 配置 + spec
 
 ## 设计纪律
 
-设计纪律的单一事实源是 `tools/gates/check-design-tokens.mjs`（硬编码色值另由
-`tests/unit/token-integrity.test.ts` 拦）——脚本头部逐条列出了全部规则，本节只记 Web 端
-特有的落地口径，避免双轨漂移。
+设计纪律中**可机械判定的部分**以 `tools/gates/check-design-tokens.mjs` 为准（脚本头部逐条列出规则；
+硬编码色值另由 `tests/unit/token-integrity.test.ts` 拦）；无法机械判定的口径（如 2xs 的句子边界、
+间距与容器档位）由审查把关。本节只记 Web 端特有的落地口径，避免双轨漂移。
 
 - 组件禁止硬编码色值/圆角/间距，一律消费 `--mcs-*` 语义 token（`text-mcs-*`/`bg-mcs-*` 工具类）；
   `npm run check:design-tokens` 拦截硬编码色值、裸 `z-<数字>` 与越界用法

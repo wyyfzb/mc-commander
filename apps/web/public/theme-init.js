@@ -11,7 +11,12 @@
 ;(function () {
   try {
     var raw = localStorage.getItem('mcs-ui-preferences')
-    var mode = raw ? JSON.parse(raw).state.theme : 'dark'
+    var mode = raw ? JSON.parse(raw).state.theme : null
+    // 旧版把主题单独存在 mcs-theme；新 key 未写入时用它，避免升级后首帧暗闪
+    if (mode == null) {
+      var legacy = localStorage.getItem('mcs-theme')
+      mode = legacy === 'light' ? 'light' : 'dark'
+    }
     var dark =
       mode === 'system'
         ? window.matchMedia('(prefers-color-scheme: dark)').matches

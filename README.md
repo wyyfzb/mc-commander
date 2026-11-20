@@ -70,7 +70,7 @@ rm -f /tmp/deploy-mc-commander.sh && ( curl -fsSL --connect-timeout 10 --max-tim
 
 **换个设备继续用**：手机或另一台电脑打开同一个面板地址，用同一管理员密码登录即可。忘了地址就进「设置 → 连接与外观」，最下方「从其他设备访问」会显示当前地址，可一键复制。
 
-**要给自动化工具用**：浏览器本身用不到 API Key；确实要接脚本时，在「设置 → 连接与外观」里生成，明文只显示一次。要接的是**别人写的 AI/脚本**、只想给它读数权限时，用「只读监控凭据」（5 个读数端点白名单 + 1 个身份自省）或服务端的作用域化机器凭据（`system:read` / `instance:read` / `player:read` 三档，可单独吊销）——见 [apps/server/README.md](apps/server/README.md) 的「认证」节。这三类都是长期凭据，**泄露等同管理员密码泄露**。
+**要给自动化工具用**：浏览器本身用不到 API Key；确实要接脚本时，在「设置 → 连接与外观」里生成，明文只显示一次。要接的是**别人写的 AI/脚本**、只想给它读数权限时，用「只读监控凭据」（5 个读数端点白名单 + 1 个身份自省）或服务端的作用域化机器凭据（`system:read` / `instance:read` / `player:read` 三档，可单独吊销）——见 [apps/server/README.md](apps/server/README.md) 的「认证」节。这三类都是长期凭据：**全局 API Key 泄露等同管理员密码泄露**；只读与作用域凭据按最小权限发放、可单独吊销，但仍属敏感凭据。
 
 ## 日常操作速查
 
@@ -149,7 +149,7 @@ sudo systemctl start mc-commander
 MC 1.21.9 及更新版本由面板在启动前自动开启实时推送，更旧的版本走 30 秒轮询。若在实例设置里关过「实时推送」，重新打开后重启实例生效。
 
 **面板数据丢了 / 换机器**
-面板自身每天快照到 `var/backups/panel/`：停服务 → 把目标快照复制为 `var/data/mc_commander.db` → 删掉 `-wal` / `-shm` 残留 → 启动。实例世界数据用实例备份恢复，两者相互独立。
+面板自身每天快照到 `var/backups/panel/`：停服务 → 把目标快照复制为 `var/data/mc_commander.db`、同名 `.env` 副本复制回 `apps/server/.env` → 删掉 `-wal` / `-shm` 残留 → 启动。快照含 `.env` 伴生副本（认证凭据），请按敏感数据处置；实例世界数据用实例备份恢复，两者相互独立。
 
 ## 进阶部署
 
@@ -204,7 +204,8 @@ Caddy 两行就够：`mc.example.com { reverse_proxy 127.0.0.1:25566 }`（自动
 
 ```bash
 git clone https://github.com/wyyfzb/mc-commander.git && cd mc-commander
-npm ci
+npm ci --ignore-scripts
+node -e "new (require('better-sqlite3'))(':memory:').close()"   # 验原生模块可加载
 npm run build -w apps/schemas && npm run build -w apps/web
 mkdir -p apps/server/public && cp -r apps/web/dist/. apps/server/public/
 cd apps/server && cp .env.example .env
@@ -249,7 +250,7 @@ mc-commander/
 ### 从源码构建与测试
 
 ```bash
-npm ci                         # 仓库根一次装齐三个包
+npm ci --ignore-scripts         # 仓库根一次装齐三个包；跳过无需编译的 install 脚本
 npm run build -w apps/schemas  # 服务端消费契约包产物，先构建
 npm test -w apps/server        # 服务端用例
 npm run dev -w apps/web        # 前端开发服务器（5173，代理到 25566）
@@ -258,7 +259,7 @@ npm run test:e2e               # Playwright e2e
 bash tools/ci/local-check.sh   # 一键本地检查（格式 + lint + 类型 + 全量测试）
 ```
 
-本地检查脚本支持 `--skip-frontend` 与 `--skip-schemas`，只改一个包时能省掉无关步骤；它和 CI 跑的是同一套检查。测试与文档中一律使用虚构数据（`1.2.3.4`、TEST-NET 网段、Steve/Alex），禁止出现真实服务器 IP、API Key 与玩家数据。
+本地检查脚本支持 `--skip-frontend` 与 `--skip-schemas`，只改一个包时能省掉无关步骤；它覆盖格式、lint、类型、单测与依赖审计，e2e、构建、体积与覆盖率仍在 CI 跑。测试与文档中一律使用虚构数据（`1.2.3.4`、TEST-NET 网段、Steve/Alex），禁止出现真实服务器 IP、API Key 与玩家数据。
 
 架构与设计决策见 [docs/architecture.md](docs/architecture.md)，API 与事件清单见 [apps/server/README.md](apps/server/README.md)。
 

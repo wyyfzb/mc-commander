@@ -44,6 +44,26 @@ describe('静态托管 + SPA fallback', () => {
     expect(js.headers['cache-control']).toMatch(/max-age=604800/);
   });
 
+  it('无内容哈希的入口不吃 7 天缓存：index.html / 首帧脚本 / SW 注册 / manifest', async () => {
+    fs.writeFileSync(path.join(publicDir, 'index.html'), '<html><body>spa</body></html>');
+    fs.writeFileSync(path.join(publicDir, 'theme-init.js'), ';(function () {})();');
+    fs.writeFileSync(path.join(publicDir, 'registerSW.js'), '/* sw */');
+    fs.writeFileSync(path.join(publicDir, 'manifest.webmanifest'), '{}');
+
+    const app = buildApp();
+    for (const p of [
+      '/',
+      '/index.html',
+      '/theme-init.js',
+      '/registerSW.js',
+      '/manifest.webmanifest',
+    ]) {
+      const res = await request(app).get(p);
+      expect(res.status, p).toBe(200);
+      expect(res.headers['cache-control'], p).toBe('no-cache');
+    }
+  });
+
   it('SPA 深链接：GET /players?q=x 回退到 index.html', async () => {
     fs.writeFileSync(path.join(publicDir, 'index.html'), '<html><body>spa</body></html>');
 

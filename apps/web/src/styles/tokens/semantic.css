@@ -6,7 +6,7 @@
  */
 :root {
   /* ── 背景（明度层级词表）── */
-  --mcs-bg-inset: var(--ref-dark-inset);        /* 深嵌底：编辑器/代码块（全站最深；只落在卡片面内） */
+  --mcs-bg-inset: var(--ref-dark-inset);        /* 深嵌底：编辑器/代码块（全站最深；只落在浮起面内） */
   --mcs-bg-default: var(--ref-dark-canvas);     /* 页面底（v2 深空画布） */
   --mcs-bg-muted: var(--ref-dark-card);         /* 卡片/容器 */
   --mcs-bg-subtle: var(--ref-dark-base);        /* 次级面（比画布亮一档） */
@@ -178,7 +178,7 @@
      六个面必须彼此可区分：暗色靠「越浮起越亮」形成阶梯，亮色靠「越浮起越白」，
      而画布必须比卡片暗，否则 bg-default 与 bg-muted 同值 ⇒ 组件无法表达层级。
      深嵌档 inset 比画布再深一档，编辑器/代码块落在它上面才看得出凹陷。 */
-  --mcs-bg-inset: var(--ref-light-inset); /* 深嵌底：比画布再深一档；只落在卡片面内 */
+  --mcs-bg-inset: var(--ref-light-inset); /* 深嵌底：比画布再深一档；只落在浮起面（卡片/弹层）内 */
   --mcs-bg-default: var(--ref-light-bg); /* 画布 */
   /* 涟漪在亮色面上升档：同一 0.6 在亮色面上合成后只有 2.63:1（图形口径要 ≥3:1） */
   --mcs-ripple-opacity: 0.75;
