@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.0](https://github.com/wyyfzb/mc-commander/compare/v0.14.0...v0.15.0) (2026-11-20)
+
+
+### Features
+
+* **web:** 移除玻璃拟态，新增跟随系统主题与 inset 面档 ([#717](https://github.com/wyyfzb/mc-commander/issues/717)) ([003ad7f](https://github.com/wyyfzb/mc-commander/commit/003ad7f2c5519499f0251b0f690e1f20ab61833d))
+
 ## [0.14.0](https://github.com/wyyfzb/mc-commander/compare/v0.13.3...v0.14.0) (2026-11-15)
 
 
