@@ -37,6 +37,7 @@ import {
   CommandShortcut,
 } from '@/components/ui/command'
 import { useUiStore } from '@/stores/ui'
+import { useResolvedTheme } from '@/hooks/use-resolved-theme'
 import { queryFailed } from '@/lib/query-phase'
 import { useCommandBus } from '@/stores/command-bus'
 import { useServerStore } from '@/stores/server'
@@ -73,7 +74,7 @@ interface PaletteAction {
 export function CommandPalette() {
   const open = useUiStore((s) => s.commandPaletteOpen)
   const setOpen = useUiStore((s) => s.setCommandPaletteOpen)
-  const theme = useUiStore((s) => s.theme)
+  const theme = useResolvedTheme()
   const toggleTheme = useUiStore((s) => s.toggleTheme)
   const navigate = useNavigate()
   // 双槽消费：仪表盘终端回显优先，否则全局执行器
@@ -253,7 +254,7 @@ export function CommandPalette() {
   ]
 
   const themeAction: PaletteAction = {
-    label: theme === 'dark' ? '切换到亮色主题' : '切换到深色主题',
+    label: theme === 'dark' ? '切换到亮色主题' : '切换到暗色主题',
     icon: theme === 'dark' ? Sun : Moon,
     keywords: 'theme 主题 暗色 亮色 dark light',
     run: () => {

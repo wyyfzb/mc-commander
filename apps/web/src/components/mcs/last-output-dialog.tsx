@@ -68,7 +68,6 @@ export function LastOutputDialog() {
         }
       }}
     >
-      {/* 普通弹窗外观：玻璃效果预算仅限抽屉与确认弹窗（token-integrity 守卫） */}
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -103,7 +102,7 @@ export function LastOutputDialog() {
           ) : truncated ? (
             <pre
               data-testid="last-output-content"
-              className="max-h-72 overflow-auto whitespace-pre-wrap break-all rounded-mcs-sm border border-mcs-border-muted bg-mcs-bg-default p-3 font-mono text-mcs-xs leading-relaxed text-mcs-text-default"
+              className="max-h-72 overflow-auto whitespace-pre-wrap break-all rounded-mcs-sm border border-mcs-border-muted bg-mcs-bg-inset p-3 font-mono text-mcs-xs leading-relaxed text-mcs-text-default"
               aria-label="服务器末尾日志内容"
             >
               {truncated}

@@ -8,7 +8,28 @@ import { migrateFromLegacyKeys, STORAGE_KEY } from '@/lib/migrate-ui-keys'
  * 侧栏折叠 / 命令面板 / 通知抽屉 / 移动端导航 —— 纯会话态，不持久化
  */
 
-export type ThemeMode = 'dark' | 'light'
+/**
+ * 主题偏好：'system' 跟随操作系统的 prefers-color-scheme。
+ * 它是**偏好**而不是第四种配色——实际落到哪一档由 useResolvedTheme 决定。
+ */
+export type ThemeMode = 'dark' | 'light' | 'system'
+
+/** 实际生效的配色（DOM 上只有这两种类名） */
+export type ResolvedTheme = 'dark' | 'light'
+
+const SYSTEM_DARK_QUERY = '(prefers-color-scheme: dark)'
+
+/** 把主题偏好解析成实际配色；'system' 读操作系统偏好，脏值回退 dark（与首帧脚本一致） */
+export function resolveTheme(mode: ThemeMode): ResolvedTheme {
+  if (mode === 'system') {
+    try {
+      return window.matchMedia(SYSTEM_DARK_QUERY).matches ? 'dark' : 'light'
+    } catch {
+      return 'dark'
+    }
+  }
+  return mode === 'light' ? 'light' : 'dark'
+}
 
 interface UiState {
   theme: ThemeMode
@@ -65,7 +86,10 @@ export const useUiStore = create<UiState>()(
       terminalAutoScroll: true,
       confirmCommands: false,
       setTheme: (theme) => set({ theme }),
-      toggleTheme: () => set((s) => ({ theme: s.theme === 'dark' ? 'light' : 'dark' })),
+      // 快捷切换按**当前实际配色**取反：在 system 档下点一次要得到看得见的变化，
+      // 之后固定在反色档（切回 system 走设置页）。按偏好值取反会让 system 永远变成 light。
+      toggleTheme: () =>
+        set((s) => ({ theme: resolveTheme(s.theme) === 'dark' ? 'light' : 'dark' })),
       toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
       setCommandPaletteOpen: (open) => set({ commandPaletteOpen: open }),
       setNotificationsOpen: (open) => set({ notificationsOpen: open }),

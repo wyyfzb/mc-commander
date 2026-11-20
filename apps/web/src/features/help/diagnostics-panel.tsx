@@ -755,7 +755,7 @@ function PanelErrorsCard() {
                     <pre
                       tabIndex={0}
                       aria-label="面板错误正文"
-                      className="max-h-40 overflow-auto rounded-mcs-sm bg-mcs-bg-subtle p-2 text-mcs-xs whitespace-pre-wrap text-mcs-text-default focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-mcs-focus-ring"
+                      className="max-h-40 overflow-auto rounded-mcs-sm bg-mcs-bg-inset p-2 text-mcs-xs whitespace-pre-wrap text-mcs-text-default focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-mcs-focus-ring"
                     >
                       {entry.message}
                     </pre>

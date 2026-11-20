@@ -1,7 +1,7 @@
 /**
  * 世界信息卡
  * 只读 9 行信息 + 刷新按钮；isLoading 显示骨架行；world 为 null 显示空态
- * 视觉纪律：实底卡（数据区禁玻璃）+ --mcs-* 语义 token；StatusPill 走状态色三元组
+ * 视觉纪律：实底卡 + --mcs-* 语义 token；StatusPill 走状态色三元组
  * （--mcs-*-fg / --mcs-*-border / --mcs-*-bg-subtle），无任何硬编码色值
  */
 import type { ReactNode } from 'react'

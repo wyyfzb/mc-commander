@@ -1,19 +1,20 @@
 /**
  * Semantic 层 —— --mcs-* 语义 token
  * 命名公式：[category]-[semantic]-[variant]（Primer 法）
- * 层级词表固定：default / muted / subtle / emphasis，禁同义词混用
+ * 层级词表固定：inset / default / muted / subtle / emphasis / secondary，禁同义词混用
  * 组件代码只允许消费本层；深色为默认（P4 深色优先），.light 为亮色覆盖
  */
 :root {
   /* ── 背景（明度层级词表）── */
+  --mcs-bg-inset: var(--ref-dark-inset);        /* 深嵌底：编辑器/代码块（全站最深；只落在浮起面内） */
   --mcs-bg-default: var(--ref-dark-canvas);     /* 页面底（v2 深空画布） */
   --mcs-bg-muted: var(--ref-dark-card);         /* 卡片/容器 */
-  --mcs-bg-subtle: var(--ref-dark-base);        /* 深嵌区（终端/代码块） */
+  --mcs-bg-subtle: var(--ref-dark-base);        /* 次级面（比画布亮一档） */
   --mcs-bg-emphasis: var(--ref-dark-popover);   /* 弹窗/下拉 */
   --mcs-bg-secondary: var(--ref-dark-secondary); /* 次级面：chip/进度轨道/交替行（暗色比卡片亮一档、亮色比卡片压灰一档） */
 
   /* ── 文字（两级：default 主 / muted 次；单一「次要文字」档取高余量值，
-        全程 ≥6:1，宿主面（玻璃/tint/密集表格）变化不会跌破 AA）── */
+        全程 ≥6:1，宿主面（tint/密集表格）变化不会跌破 AA）── */
   --mcs-text-default: var(--ref-dark-text-default);
   --mcs-text-muted: var(--ref-dark-text-muted);
 
@@ -95,7 +96,7 @@
   --mcs-z-toast: 80;     /* 通知/跳转链接（永远最上） */
 
   /* ── 状态指示器涟漪起始不透明度（消费写法 opacity-(--mcs-ripple-opacity)）
-        亮色档单独提高的理由：顶层玻璃面在亮色下亮得多，同一档位合成后只有 2.63:1，
+        亮色档单独提高的理由：同一档位在亮色面上合成后只有 2.63:1，
         达不到非文字图形 3:1；两档的达标值由 check-contrast 的「pulse 涟漪」断言守住 ── */
   --mcs-ripple-opacity: 0.6;
 
@@ -114,7 +115,7 @@
   --mcs-gradient-accent: linear-gradient(135deg, var(--ref-accent-hover), var(--ref-accent) 55%, color-mix(in oklch, var(--ref-accent) 90%, var(--ref-dark-base)));
 
   /* 间距不设 token：统一走 Tailwind 默认 4px 刻度（--spacing 0.25rem），
-     结构间距必须 4px 倍数、组件内微节奏允许 2px 档（纪律见 AGENTS.md） */
+     结构间距必须 4px 倍数、组件内微节奏允许 2px 档 */
 
   /* ── 圆角（5 档：6 / 8 / 12 / 16 / 20）
         档位与消费点的实际对应（shadcn 的 --radius-* 逐档错位绑定，故 `rounded-lg` 落在
@@ -140,7 +141,7 @@
   /* mono 栈必须带项目 CJK 族（排在 JetBrains Mono 之后，只接中文与标点）：
      缺了它，落进 mono 上下文的中文逐字回退到系统字体，同一屏出现两套字形与字重 */
   --mcs-font-mono: 'JetBrains Mono', 'Noto Sans SC Subset', 'PingFang SC', 'Microsoft YaHei', ui-monospace, 'Cascadia Mono', Consolas, monospace;
-  --mcs-font-size-2xs: 10px;  /* 角标/单位/短标签/mono 元数据；句子最低 xs——适用面见 AGENTS.md「设计 token」 */
+  --mcs-font-size-2xs: 10px;  /* 角标/单位/短标签/mono 元数据；含分句标点或中文 ≥15 字者按句子，最低 xs */
   --mcs-font-size-xs: 12px;   /* 辅助 */
   --mcs-font-size-sm: 14px;   /* 正文基准（唯一行高 1.6 的档） */
   --mcs-font-size-md: 14px;   /* 强调正文：与正文同尺寸，靠字重 + 收紧行高（1.5）区分 */
@@ -174,15 +175,15 @@
 
 .light {
   /* 亮色主题独立映射（换档不换色，明暗独立验证）
-     五个面必须彼此可区分：暗色靠「越浮起越亮」形成阶梯，亮色靠「越浮起越白」，
-     而画布与深嵌区必须比卡片暗，否则 bg-default 与 bg-subtle 同值 ⇒ 组件无法表达
-     「深嵌」这一层级（终端/代码块/进度轨道全部退化成与页面底同色）。 */
+     六个面必须彼此可区分：暗色靠「越浮起越亮」形成阶梯，亮色靠「越浮起越白」，
+     而画布必须比卡片暗，否则 bg-default 与 bg-muted 同值 ⇒ 组件无法表达层级。
+     深嵌档 inset 比画布再深一档，编辑器/代码块落在它上面才看得出凹陷。 */
+  --mcs-bg-inset: var(--ref-light-inset); /* 深嵌底：比画布再深一档；只落在浮起面（卡片/弹层）内 */
   --mcs-bg-default: var(--ref-light-bg); /* 画布 */
-  /* 涟漪在亮色面上升档：同一 0.6 在亮色玻璃面上合成后只有 2.63:1（图形口径要 ≥3:1） */
+  /* 涟漪在亮色面上升档：同一 0.6 在亮色面上合成后只有 2.63:1（图形口径要 ≥3:1） */
   --mcs-ripple-opacity: 0.75;
   --mcs-bg-muted: var(--ref-light-card); /* 卡片 */
-  /* 深嵌区：比画布再深一档。终端等真正深嵌场景由 --mcs-terminal-* 承担 */
-  --mcs-bg-subtle: var(--ref-light-secondary);
+  --mcs-bg-subtle: var(--ref-light-secondary); /* 次级面：比画布深一档 */
   --mcs-bg-emphasis: var(--ref-light-popover); /* 弹层（靠 shadow + ring 与卡片区分） */
   --mcs-bg-secondary: var(--ref-light-secondary-soft); /* 次级面：介于画布与卡片之间 */
 

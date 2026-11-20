@@ -6,7 +6,7 @@
  * - TASK_TYPE_TONES：restart→warning / backup→info / command→purple /
  *   stop→error / start→success；色值统一取自 components/mcs/tone（token 唯一来源 src/styles/）
  * - 时间行 formatTaskDate（MM-DD HH:mm 本地时区；null → '从未'）
- * - 容器：实底卡（风格 A 列表实底，禁 backdrop-blur）+ 行分隔；空态含新建任务按钮；加载骨架行
+ * - 容器：实底卡（禁 backdrop-blur）+ 行分隔；空态含新建任务按钮；加载骨架行
  */
 import { AlertCircle, Clock, Hourglass, Pencil, Play, Terminal, Timer, Trash2 } from 'lucide-react'
 import { IconButton } from '@/components/mcs/icon-button'

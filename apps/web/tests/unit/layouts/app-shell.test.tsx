@@ -113,7 +113,7 @@ describe('AppShell', () => {
   it('顶栏主题按钮切换 store 状态（html class 联动由根级 ThemeClassSync 负责）', () => {
     renderShell()
     fireEvent.click(screen.getByRole('button', { name: /切换到亮色主题/ }))
-    expect(screen.getByRole('button', { name: /切换到深色主题/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /切换到暗色主题/ })).toBeInTheDocument()
     expect(useUiStore.getState().theme).toBe('light')
   })
 

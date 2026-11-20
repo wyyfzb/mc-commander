@@ -7,7 +7,7 @@
 import { describe, expect, it } from 'vitest'
 import { render } from '@testing-library/react'
 import { Loader2 } from 'lucide-react'
-import { NoticeBanner } from '@/components/mcs/notice-banner'
+import { NoticeBanner, NoticeBannerAction } from '@/components/mcs/notice-banner'
 
 const VARIANTS = ['info', 'warning', 'error', 'success'] as const
 
@@ -80,5 +80,25 @@ describe('NoticeBanner', () => {
     expect(icon?.getAttribute('class')).toContain('animate-spin')
     // 根节点不得带上它：动画落在整条横幅上会连边框一起脉冲
     expect(root.className).not.toContain('animate-spin')
+  })
+
+  it('横幅内动作按钮自带中性文字色，不继承横幅的语义前景', () => {
+    // 横幅根节点带 text-mcs-{tone}-fg；按钮不声明文字色就会继承成危险红，
+    // 描边改中性也没用——用户仍会把「重试」读成危险操作。
+    const { container } = render(
+      <NoticeBanner variant="error">
+        <NoticeBannerAction onClick={() => {}}>重试</NoticeBannerAction>
+      </NoticeBanner>,
+    )
+    const btn = container.querySelector('button')!
+    const classes = new Set(btn.className.split(/\s+/))
+    expect(classes.has('text-mcs-text-default')).toBe(true)
+    expect(btn.className).not.toContain('text-mcs-error-fg')
+    // 面必须是实底页面面（横幅底是 tint，透明按钮会与它融成一片）
+    expect(classes.has('bg-mcs-bg-default!')).toBe(true)
+    // 描边静止/悬停都固定中性档：基座的 hover:border-foreground/25 落到 error tint
+    // 上实测 2.15:1（亮色 1.63:1），跌破交互边界 3:1
+    expect(classes.has('border-mcs-border-default!')).toBe(true)
+    expect(classes.has('hover:border-mcs-border-default!')).toBe(true)
   })
 })

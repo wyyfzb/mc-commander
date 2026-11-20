@@ -131,7 +131,7 @@ function CommandBlock({ command, ariaLabel }: { command: string; ariaLabel: stri
   }
   return (
     <div className="flex items-start gap-2">
-      <code className="min-w-0 flex-1 break-all rounded-mcs-sm border border-mcs-border-muted bg-mcs-bg-subtle px-2.5 py-2 font-mono text-mcs-xs text-mcs-text-default">
+      <code className="min-w-0 flex-1 break-all rounded-mcs-sm border border-mcs-border-muted bg-mcs-bg-inset px-2.5 py-2 font-mono text-mcs-xs text-mcs-text-default">
         {command}
       </code>
       <button

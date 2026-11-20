@@ -372,7 +372,7 @@ test.describe('设置页', () => {
     const giteeLink = dialog.getByRole('link', { name: /Gitee 镜像仓库/ })
     await expect(giteeLink).toHaveAttribute('href', /gitee\.com\/wyyfzb\/mc-commander/)
     await expect(giteeLink).toHaveAttribute('target', '_blank')
-    await expect(dialog.getByText('© 2026 MC_Commander · 社区开源项目')).toBeVisible()
+    await expect(dialog.getByText('© 2026 MC_Commander · AGPL-3.0')).toBeVisible()
     await maybeShot(page, 'settings-about-dialog-dark.png')
   })
 })

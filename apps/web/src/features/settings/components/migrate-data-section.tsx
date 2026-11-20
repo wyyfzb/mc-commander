@@ -110,7 +110,7 @@ export function MigrateDataSection({ items, loading }: Props) {
             disabled={busy}
             aria-invalid={error ? true : undefined}
           />
-          <p className="text-mcs-2xs text-mcs-text-muted">
+          <p className="text-mcs-xs text-mcs-text-muted">
             写数据盘上的完整路径。该目录不存在时会自动创建；已存在且非空会拒绝，避免两份数据混在一起。
           </p>
         </div>

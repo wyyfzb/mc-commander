@@ -750,7 +750,7 @@ export default function WebhookPage() {
                               {sentSummary ? (
                                 <pre
                                   data-testid={`delivery-payload-${d.id}`}
-                                  className="max-h-40 whitespace-pre-wrap break-all overflow-y-auto rounded-mcs-xs bg-mcs-bg-subtle px-2 py-1.5 font-mono text-mcs-2xs text-mcs-text-muted"
+                                  className="max-h-40 whitespace-pre-wrap break-all overflow-y-auto rounded-mcs-xs bg-mcs-bg-inset px-2 py-1.5 font-mono text-mcs-2xs text-mcs-text-muted"
                                 >
                                   {sentSummary}
                                 </pre>
@@ -768,7 +768,7 @@ export default function WebhookPage() {
                               {summary ? (
                                 <pre
                                   data-testid={`delivery-response-${d.id}`}
-                                  className="whitespace-pre-wrap break-all rounded-mcs-xs bg-mcs-bg-subtle px-2 py-1.5 font-mono text-mcs-2xs text-mcs-text-muted"
+                                  className="whitespace-pre-wrap break-all rounded-mcs-xs bg-mcs-bg-inset px-2 py-1.5 font-mono text-mcs-2xs text-mcs-text-muted"
                                 >
                                   {summary}
                                 </pre>

@@ -34,6 +34,7 @@ import { formatLogFileName } from '@/lib/format'
 import { primaryModifierLabel } from '@/lib/platform'
 import { copyText } from '@/lib/clipboard'
 import { useUiStore } from '@/stores/ui'
+import { useResolvedTheme } from '@/hooks/use-resolved-theme'
 import type { LogEntry } from '@/api/types'
 import type { LogLevel, TerminalLogEntry } from '@/lib/terminal-log'
 
@@ -125,7 +126,7 @@ export function ServerTerminal({
   const renderedCountRef = useRef(0)
   const autoScrollRef = useRef(true)
   const srLiveRef = useRef<HTMLDivElement>(null)
-  const theme = useUiStore((s) => s.theme)
+  const theme = useResolvedTheme()
   const autoScrollEnabled = useUiStore((s) => s.terminalAutoScroll)
   // onScroll 注册于 mount effect，闭包捕获首渲染值——ref 同步最新偏好
   const autoScrollEnabledRef = useRef(autoScrollEnabled)
@@ -406,7 +407,7 @@ export function ServerTerminal({
       className="@container animate-mcs-fade-up mcs-delay-4 flex min-h-[60vh] flex-1 flex-col overflow-hidden rounded-mcs-md border border-mcs-border-muted shadow-mcs-card @5xl:min-h-0"
       style={{ background: 'var(--mcs-terminal-bg)' }}
     >
-      {/* 工具栏（实底，玻璃禁区内）。固定 h-10 且不换行 ⇒ 内联内容必须自己压成单行，
+      {/* 工具栏（实底）。固定 h-10 且不换行 ⇒ 内联内容必须自己压成单行，
           故 e2e 需要能直接量到这条工具条的盒子（testid 只为那条几何断言存在） */}
       <div
         data-testid="terminal-toolbar"
@@ -562,7 +563,7 @@ export function ServerTerminal({
           短暂为 false 的竞态会让「运行中」实例永久残留停止标记（实测） */}
       {!isRunning && buffer.length > 0 && (
         <div
-          className="shrink-0 border-t border-mcs-border-muted bg-mcs-bg-muted px-3 py-1.5 text-center text-mcs-2xs italic text-mcs-text-muted"
+          className="shrink-0 border-t border-mcs-border-muted bg-mcs-bg-muted px-3 py-1.5 text-center text-mcs-xs text-mcs-text-muted"
           role="status"
         >
           —— 实例已停止，以上为最后日志 ——

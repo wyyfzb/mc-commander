@@ -6,6 +6,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="dark light" />
     <title>MC Commander</title>
+    <!-- 首帧定色：必须是同源外链——服务端 CSP 只放行 script-src 'self'，内联脚本在生产会被拒绝执行 -->
+    <script src="/theme-init.js"></script>
   </head>
   <body>
     <div id="root"></div>

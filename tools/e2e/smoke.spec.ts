@@ -87,6 +87,24 @@ test.describe('冒烟', () => {
     await expect(page.locator('html')).toHaveClass(/light/)
   })
 
+  /* 跟随系统：偏好存 'system' 时配色由 prefers-color-scheme 决定，且系统切换后要即时换档
+     （只读一次会让面板停在旧配色）。jsdom 的 matchMedia 是常量桩，这条只有真浏览器能锁。 */
+  test('主题跟随系统：按 prefers-color-scheme 定色，系统切换后即时换档', async ({ page }) => {
+    await page.emulateMedia({ colorScheme: 'light' })
+    await page.addInitScript(() => {
+      localStorage.setItem(
+        'mcs-ui-preferences',
+        JSON.stringify({ state: { theme: 'system' }, version: 0 }),
+      )
+    })
+    await setupConnection(page)
+    await page.goto('/')
+    await expect(page.locator('html')).toHaveClass(/light/)
+
+    await page.emulateMedia({ colorScheme: 'dark' })
+    await expect(page.locator('html')).toHaveClass(/dark/)
+  })
+
   test('视觉截图：暗色仪表盘 / 命令面板 / 亮色仪表盘', async ({ page }) => {
     await setupConnection(page)
     await page.setViewportSize({ width: 1440, height: 900 })

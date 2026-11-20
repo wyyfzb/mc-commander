@@ -10,17 +10,16 @@ import { toneClasses, toneOutlineClasses } from './tone'
  * - variant="status"（默认）：带 bg-subtle 填充，用于突出状态
  * - variant="outline"：仅边框，用于低优先级标签/标识
  *
- * 中性两档视觉相同：default 是「未指定 tone」的兜底、muted 是「刻意弱化」，
- * 语义不同故都保留；语义六色统一取自 mcs/tone，勿在本文件再抄一份色值
+ * 中性两档在 `status` 变体下同形（共用 NEUTRAL_STATUS_CLASSES）；`outline` 变体仍按
+ * default/muted 分两档（文字取 default 还是 muted）。语义六色统一取自 mcs/tone，
+ * 勿在本文件再抄一份色值。
  */
 
-const NEUTRAL_STATUS_CLASSES: Record<'default' | 'muted', string> = {
-  default: 'border-mcs-border-muted bg-mcs-bg-subtle text-mcs-text-muted',
-  muted: 'border-mcs-border-muted bg-mcs-bg-subtle text-mcs-text-muted',
-}
+const NEUTRAL_STATUS_CLASSES = 'border-mcs-border-muted bg-mcs-bg-subtle text-mcs-text-muted'
 
 const STATUS_CLASSES: Record<ChipTone, string> = {
-  ...NEUTRAL_STATUS_CLASSES,
+  default: NEUTRAL_STATUS_CLASSES,
+  muted: NEUTRAL_STATUS_CLASSES,
   accent: toneClasses('accent'),
   success: toneClasses('success'),
   warning: toneClasses('warning'),

@@ -214,7 +214,7 @@ describe('POST /auth/setup × SETUP_TOKEN（四路径）', () => {
   it('已作废 token 的重放（账号未配置的恢复场景）：不再认可旧 token，按未配置态处理', async () => {
     // 场景：设密成功后 DB 回滚/恢复到未设密快照（生产可达：恢复面板备份），
     // 已消费 token 不得复用——token 状态为空 = 未配置，本次请求按既有开放行为处理；
-    // 需要重新保护时在 .env 重新生成 SETUP_TOKEN（README/SECURITY.md 说明）
+    // 需要重新保护时在 .env 重新生成 SETUP_TOKEN
     _setSetupToken(TOKEN_A);
     await request(app)
       .post('/api/v1/auth/setup')

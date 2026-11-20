@@ -3,7 +3,7 @@
  * - 左子导航 200px（实底卡片）+ 右内容区 Outlet（子路由 device|account|notifications|integration|data）
  * - 菜单激活态：accent-bg-subtle 底 + accent-border + accent 文字
  * - 「关于」不在子导航里：它是纯静态信息，用弹窗承载（入口在导航底部）
- * - 设计纪律：设置页内容区实底（风格 A 玻璃禁区）；子侧栏同实底卡
+ * - 设计纪律：设置页内容区实底；子侧栏同实底卡
  */
 import { Suspense, lazy, useState } from 'react'
 import { Link, Outlet, useLocation } from 'react-router'

@@ -22,9 +22,15 @@ MC_Commander 由两部分组成：**服务端**（Node.js，部署在 Minecraft 
 - **入口**：`src/index.js`（Express + ws），同源托管 `public/` 下的前端产物
 - **传输层**：同一端口上按连接首字节分流明文与 TLS（`services/tls/`），证书由面板
   自签（本地 CA，100 年，`var/data/tls/`）；HTTP 通道始终保留且从不重定向，
-  未导入根证书的设备照常可用。理由见 SECURITY.md 的「传输层加密」一节
+  未导入根证书的设备照常可用（公网 CA 的验证方式都要占 80/443 或域名，续期失败
+  直接让面板打不开，本地面板走不到那条路）
 - **认证**：双通道 —— 管理员会话（`Authorization: Bearer`，面板默认路径）与全局 API Key
-  （`X-API-Key` 头，脚本/集成），+ 双级速率限制（见 SECURITY.md 信任模型）
+  （`X-API-Key` 头，脚本/集成），+ 双级速率限制（认证前按 IP、认证后按 API Key；
+  无 Key 的会话请求回退 IP 计数；登录失败另由 credential lockout 锁定）
+- **机器凭据**：全局 API Key（admin 等价：无 scope、无过期、绕过两步验证，不做端点白名单）／
+  只读凭据（5 个读数端点 + 1 个身份自省，其余 403，WS 只投递读数事件）／作用域凭据（台账化、
+  只读三档、可单独吊销）。后两种按作用域判定默认拒绝：不在白名单内的端点一律 403，新增端点
+  自动关闭（唯一声明源是 `utils/scopes.js` 的 `SCOPE_ENDPOINTS`，只读白名单由它推导）
 - **实例管理**：`services/mc_server.js` —— 子进程生命周期（spawn/崩溃检测/自动重启）、
   RCON 双向通道（命令下发 + 响应读取）、日志/性能指标采集、旧版与 26.x 新版
   目录结构兼容（如 `world_gen_settings.dat` 拆分）

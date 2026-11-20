@@ -21,9 +21,9 @@ npm run test           # Vitest 单测/组件测试（jsdom）
 以下命令均**在仓库根**执行：
 
 ```bash
-npm run test:e2e               # Playwright E2E（19 spec / 150 用例）
-npm run check:contrast         # token 对比度批量校验（258 组合，exit 非 0 阻止合并）
-npm run check:design-tokens    # 设计 token 门禁（硬编码色值 / z 轴 / 玻璃预算等）
+npm run test:e2e               # Playwright E2E（全量；spec 在 tools/e2e/）
+npm run check:contrast         # token 对比度批量校验（组合数见脚本尾行，exit 非 0 阻止合并）
+npm run check:design-tokens    # 设计 token 门禁（硬编码色值 / z 轴 / 焦点环 / 卡片面等；逐条清单看脚本通过行）
 npm run check:size             # 构建体积预算（gzip 口径，对入口 + 路由 chunk 闭包求和）
 npm run check:tokens           # OKLCH 色值生成器（设计 token 色值的来源）
 ```
@@ -38,7 +38,7 @@ src/                  # 纯源码：不含测试与测试基建
 │                   #           audit/ settings/ onboarding/ auth/
 ├── layouts/        # AppShell（顶栏/侧栏/Ctrl/⌘+K 命令面板）
 ├── stores/         # zustand：auth / connection / ui + server / deploy / notifications / terminal / upgrade / command-bus
-├── styles/         # token 三层：tokens/reference.css → semantic.css（--mcs-*）→ theme.css + glass/density/fonts
+├── styles/         # token 三层：tokens/reference.css → semantic.css（--mcs-*）→ theme.css，另有 fonts/effects
 ├── routes.tsx      # react-router v8 data mode 路由表
 └── main.tsx        # 入口（QueryClient + Tooltip + Router + Toaster）
 tests/                # 镜像 src/ 的单元与组件测试（vitest）
@@ -52,15 +52,18 @@ E2E 与门禁不在本包内：住仓库 `tools/e2e/`（Playwright 配置 + spec
 
 ## 设计纪律
 
-工程纪律的单一事实源是仓库根 `AGENTS.md` 的「工程纪律」节（token 角色矩阵、tint 两类、间距刻度、
-z 轴阶梯、玻璃预算、焦点可见、测试数据禁真实信息）。本节只记 Web 端特有的落地口径，避免双轨漂移。
+设计纪律中**可机械判定的部分**以 `tools/gates/check-design-tokens.mjs` 为准（脚本头部逐条列出规则；
+硬编码色值另由 `tests/unit/token-integrity.test.ts` 拦）；无法机械判定的口径（如 2xs 的句子边界、
+间距与容器档位）由审查把关。本节只记 Web 端特有的落地口径，避免双轨漂移。
 
 - 组件禁止硬编码色值/圆角/间距，一律消费 `--mcs-*` 语义 token（`text-mcs-*`/`bg-mcs-*` 工具类）；
-  `npm run check:design-tokens` 拦截硬编码色值、裸 `z-<数字>` 与玻璃超预算
+  `npm run check:design-tokens` 拦截硬编码色值、裸 `z-<数字>` 与越界用法
+- 卡片面只在 `components/mcs/card.tsx` 声明；标签只有 `StatusPill` / `Chip` / `CountBadge` 三件；
+  语义色只从 `components/mcs/tone.ts` 取；语义提示只走 `components/mcs/notice-banner.tsx`
 - token 三层单向依赖：reference（原始值，组件禁用）← semantic（`--mcs-*`，组件唯一合法来源）← theme（shadcn 映射）
-- 深色优先：`index.html` 默认 `.dark`，`.light` 为亮色覆盖（见 `useTheme`）
-- 玻璃同屏 ≤2 层：常驻仅顶栏、覆盖层仅确认弹窗；侧栏/通知抽屉/toast 一律实底
+- 深色优先：`index.html` 默认 `.dark`，`.light` 为亮色覆盖（见 `theme-class-sync.tsx`）
 - 新页面/大改须过对比度脚本（`npm run check:contrast`）与独立审查；页面级变更不得自审自过
+- 测试与文档一律用虚构数据（`1.2.3.4`、TEST-NET 网段、Steve/Alex），禁止真实 IP / API Key / 玩家数据
 
 ## 连接配置
 

@@ -36,7 +36,7 @@ const GITEE_REPO_URL = 'https://gitee.com/wyyfzb/mc-commander'
 const LINKS = [
   {
     title: 'GitHub 仓库',
-    subtitle: '查看源代码并参与贡献',
+    subtitle: '查看源代码与版本记录',
     href: REPO_URL,
     icon: Code,
     iconClass: 'bg-mcs-bg-emphasis',
@@ -130,7 +130,7 @@ export function AboutDialog({ open, onOpenChange }: AboutDialogProps) {
           </Card>
 
           <p className="text-center text-mcs-xs text-mcs-text-muted">
-            © 2026 MC_Commander · 社区开源项目
+            © 2026 MC_Commander · AGPL-3.0
           </p>
           <p className="text-center text-mcs-xs text-mcs-text-muted">
             作者{' '}

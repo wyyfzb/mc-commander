@@ -29,6 +29,7 @@ import { StatusIndicator, type IndicatorStatus } from '@/components/mcs/status-i
 import { toneClasses } from '@/components/mcs/tone'
 import { NotificationDrawer } from '@/layouts/notification-drawer'
 import { useUiStore } from '@/stores/ui'
+import { useResolvedTheme } from '@/hooks/use-resolved-theme'
 import { useServerStore } from '@/stores/server'
 import { useInstanceStatus } from '@/api/queries'
 import { useInstanceSwitch } from '@/hooks/use-instance-switch'
@@ -51,7 +52,7 @@ import { instanceHueFillClass } from '@/lib/instance-hue'
  */
 export function AppTopBar() {
   const navigate = useNavigate()
-  const theme = useUiStore((s) => s.theme)
+  const theme = useResolvedTheme()
   const toggleTheme = useUiStore((s) => s.toggleTheme)
   const toggleMobileNav = useUiStore((s) => s.toggleMobileNav)
   const setCommandPaletteOpen = useUiStore((s) => s.setCommandPaletteOpen)
@@ -160,7 +161,7 @@ export function AppTopBar() {
   ) : null
 
   return (
-    <header className="glass-chrome flex h-12 shrink-0 items-center gap-2 border-b border-mcs-border-muted px-3">
+    <header className="flex h-12 shrink-0 items-center gap-2 border-b border-mcs-border-muted bg-mcs-bg-default px-3">
       {/* 移动端导航抽屉开关（桌面侧栏开合在侧栏 Logo 上，见 app-sidebar） */}
       <IconButton onClick={toggleMobileNav} aria-label="打开导航菜单" className="md:hidden">
         <Menu aria-hidden />
@@ -369,10 +370,10 @@ export function AppTopBar() {
       {/* 主题切换 */}
       <IconButton
         className="hidden xs:inline-flex"
-        tooltip={theme === 'dark' ? '切换到亮色主题' : '切换到深色主题'}
+        tooltip={theme === 'dark' ? '切换到亮色主题' : '切换到暗色主题'}
         tooltipSide="bottom"
         onClick={toggleTheme}
-        aria-label={theme === 'dark' ? '切换到亮色主题' : '切换到深色主题'}
+        aria-label={theme === 'dark' ? '切换到亮色主题' : '切换到暗色主题'}
       >
         {theme === 'dark' ? <Sun aria-hidden /> : <Moon aria-hidden />}
       </IconButton>

@@ -114,4 +114,12 @@ describe('GeneralPreferencesFields 主题切换', () => {
     await user.click(await screen.findByRole('option', { name: '暗色' }))
     expect(useUiStore.getState().theme).toBe('dark')
   })
+
+  it('选「跟随系统」→ theme 变 system（UI 入口与 store 契约）', async () => {
+    const user = userEvent.setup()
+    renderPanel()
+    await user.click(screen.getByRole('combobox', { name: '界面主题' }))
+    await user.click(await screen.findByRole('option', { name: '跟随系统' }))
+    expect(useUiStore.getState().theme).toBe('system')
+  })
 })

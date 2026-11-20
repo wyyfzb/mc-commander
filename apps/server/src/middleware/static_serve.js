@@ -11,8 +11,24 @@ export function setupStaticServe(app, publicDir) {
   // 未部署前端：整体不挂载，保持纯后端行为
   if (!fs.existsSync(indexHtml)) return;
 
-  // 静态资源 7 天浏览器缓存；index.html 由 SPA fallback 单独设 no-cache
-  app.use(express.static(publicDir, { maxAge: '7d' }));
+  // 静态资源 7 天浏览器缓存。入口文件的 URL 不含内容哈希：升级后必须立刻取到新版，
+  // 否则旧 index.html 会引用已删除的 hash 资产、旧首帧脚本会继续执行。
+  const NO_CACHE_ENTRIES = new Set([
+    'index.html',
+    'theme-init.js',
+    'registerSW.js',
+    'manifest.webmanifest',
+  ]);
+  app.use(
+    express.static(publicDir, {
+      maxAge: '7d',
+      setHeaders(res, filePath) {
+        if (NO_CACHE_ENTRIES.has(path.basename(filePath))) {
+          res.setHeader('Cache-Control', 'no-cache');
+        }
+      },
+    }),
+  );
 
   // SPA 深链接兜底：仅普通 GET；/api /ws 与现有非 API 路由 /health 交回原有链路。
   // /health 是 deploy 脚本就绪探测依赖（JSON 语义），不可被 fallback 换成 HTML。

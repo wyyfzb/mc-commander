@@ -3,7 +3,7 @@
  * 用法：node tools/gates/check-contrast.mjs（判定对象 apps/web）
  * 标准：正文 ≥4.5:1 / 边框与焦点 ≥3:1 / 图形 ≥3:1（WCAG 实测不取整）
  *       明暗主题独立验证；任一组合不达标 → exit 1（阻止合并）
- * 面口径（G3）：5 个语义底色 + 3 个玻璃面近似（按 glass.css alpha 叠在卡片/弹窗底上取最差合成）
+ * 面口径（G3）：6 个语义底色
  *       内容面 tint（*-bg-subtle）必须不透明，否则有效色随宿主面漂移
  */
 import { readFileSync } from 'node:fs'
@@ -110,31 +110,7 @@ const refVars = extractVars(reference)
 const semanticScopes = resolveScopes(semantic)
 
 const STATUS_KEYS = ['success', 'warning', 'error', 'info', 'purple']
-const BG_KEYS = ['bg-default', 'bg-muted', 'bg-subtle', 'bg-emphasis', 'bg-secondary']
-
-/**
- * 玻璃面规格直接从 glass.css 读取（单一事实源）：{ name, token, alpha }
- * .light 规则覆盖同名基础规则；模态玻璃（overlay/toast）的底是「scrim 之后的背景」
- */
-const MODAL_GLASS = new Set(['glass-overlay'])
-function readGlassSpecs(isLight) {
-  const css = readFileSync(join(root, 'src/styles/glass.css'), 'utf-8')
-  const base = new Map()
-  const light = new Map()
-  for (const m of css.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
-    const selector = m[1].trim()
-    const name = selector.match(/\.glass-([\w-]+)/)?.[1]
-    if (!name) continue
-    const bg = m[2].match(/background:\s*color-mix\(in oklch,\s*var\((--mcs-[\w-]+)\)\s+([\d.]+)%/)
-    if (!bg) continue
-    const spec = { name: `glass-${name}`, token: bg[1], alpha: Number(bg[2]) / 100 }
-    if (selector.includes('.light')) light.set(spec.name, spec)
-    else if (!base.has(spec.name)) base.set(spec.name, spec)
-  }
-  const merged = new Map(base)
-  if (isLight) for (const [k, v] of light) merged.set(k, v)
-  return [...merged.values()]
-}
+const BG_KEYS = ['bg-inset', 'bg-default', 'bg-muted', 'bg-subtle', 'bg-emphasis', 'bg-secondary']
 
 let failures = 0
 let checks = 0
@@ -166,23 +142,12 @@ const scopeEntries = [
 for (const [scopeName, vars] of scopeEntries) {
   console.log(`\n════ ${scopeName}主题 ════`)
 
-  // 面集合：5 个语义底色 + 玻璃面（glass.css 规格 × scrim 后的卡片/弹窗底，取最差合成）
-  const scrim = parseColor(vars.get('--mcs-scrim'), vars, refVars)
-  const glassSurfaces = readGlassSpecs(scopeName === '亮色').map((spec) => {
-    const glass = parseColor(vars.get(spec.token), vars, refVars)
-    const candidates = ['bg-muted', 'bg-emphasis'].map((bk) => {
-      const backdrop = parseColor(vars.get(`--mcs-${bk}`), vars, refVars)
-      const behind = MODAL_GLASS.has(spec.name)
-        ? composite(scrim.color, backdrop.color, scrim.alpha)
-        : backdrop.color
-      return composite(glass.color, behind, spec.alpha)
-    })
-    return [spec.name, candidates]
-  })
-  const surfaces = [
-    ...BG_KEYS.map((k) => [`${k}`, [parseColor(vars.get(`--mcs-${k}`), vars, refVars).color]]),
-    ...glassSurfaces,
-  ]
+  // 面集合：6 个语义底色（全站已无玻璃面）
+  /** @type {Array<[string, any[]]>} */
+  const surfaces = BG_KEYS.map((k) => [
+    `${k}`,
+    [parseColor(vars.get(`--mcs-${k}`), vars, refVars).color],
+  ])
   // 面 × 前景：取该面上所有候选底的最差对比度
   const worstOn = (fgColor, candidates) =>
     Math.min(...candidates.map((bg) => wcagContrast(fgColor, bg)))
@@ -278,27 +243,22 @@ for (const [scopeName, vars] of scopeEntries) {
       check(`identity-${slot} on ${name}`, worstOn(fg.color, candidates), 3.0)
   }
 
-  // 8c. 状态指示器 ping 涟漪（顶栏）：状态色按 --mcs-ripple-opacity 叠在顶栏玻璃面上。
+  // 8c. 状态指示器 ping 涟漪（顶栏）：状态色按 --mcs-ripple-opacity 叠在顶栏实底上。
   //     涟漪承担可感知性（无它只剩 8px 圆点），按非文字图形 ≥3:1 口径；
   //     不透明度与状态色都从 token 读——改了任一项却没重算对比度，这里会红。
   //    pulse 状态取自 status-indicator 的 STATUS_CONFIG（当前只有 connecting=info）
   {
     const alpha = Number(vars.get('--mcs-ripple-opacity'))
-    const chromeSpec = readGlassSpecs(scopeName === '亮色').find((s) => s.name === 'glass-chrome')
-    if (!Number.isFinite(alpha) || !chromeSpec) {
-      console.log(
-        `✗ 涟漪检查缺少输入：--mcs-ripple-opacity=${vars.get('--mcs-ripple-opacity')} glass-chrome=${!!chromeSpec}`,
-      )
+    if (!Number.isFinite(alpha)) {
+      console.log(`✗ 涟漪检查缺少输入：--mcs-ripple-opacity=${vars.get('--mcs-ripple-opacity')}`)
       failures++
       checks++
     } else {
-      const glass = parseColor(vars.get(chromeSpec.token), vars, refVars)
-      const page = parseColor(vars.get('--mcs-bg-default'), vars, refVars)
-      const chrome = composite(glass.color, page.color, chromeSpec.alpha)
+      const chrome = parseColor(vars.get('--mcs-bg-default'), vars, refVars).color
       for (const status of ['info']) {
         const fg = parseColor(vars.get(`--mcs-${status}-fg`), vars, refVars)
         check(
-          `pulse 涟漪 ${status}-fg @${alpha} on glass-chrome`,
+          `pulse 涟漪 ${status}-fg @${alpha} on bg-default`,
           wcagContrast(composite(fg.color, chrome, alpha), chrome),
           3.0,
         )

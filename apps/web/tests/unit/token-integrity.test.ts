@@ -16,7 +16,7 @@ import { join, relative } from 'node:path'
  * 1. semantic.css 引用的所有 --ref-* 必须已在 reference.css 定义
  * 2. theme.css / @theme inline 引用的所有 --mcs-* 必须已在 semantic.css 定义
  * 3. 组件源码（styles/、components/ui/ 除外）禁止硬编码色值
- * 4. 玻璃预算：全站各 1 处（顶栏 chrome + 确认弹窗 overlay），防视觉异质回潮
+ * 4. 玻璃拟态不得回潮：源码不出现 glass-* 类名
  */
 
 const srcDir = join(import.meta.dirname, '..', '..', 'src')
@@ -140,22 +140,16 @@ describe('组件源码禁硬编码色值', () => {
     return out
   }
 
-  it('玻璃预算：全站各 1 处（顶栏 chrome + 确认弹窗 overlay）', () => {
-    // 审计 S26 收尾：侧栏/通知抽屉/toast 一律实底。
-    // 计数口径与 check-design-tokens.mjs 第 17 条一致：按「类名引用次数」而非文件数
-    // （同一文件出现两次同样超标；该脚本的扫描范围更宽，含 .ts 与 e2e/）
-    const refsOf = (cls: string): string[] =>
-      collectTsxTs(srcDir)
-        .filter((f) => /\.tsx?$/.test(f))
-        .flatMap((f) =>
-          Array<string>(readFileSync(f, 'utf-8').match(new RegExp(cls, 'g'))?.length ?? 0).fill(f),
-        )
-    const chrome = refsOf('glass-chrome')
-    const overlay = refsOf('glass-overlay')
-    expect(chrome).toHaveLength(1)
-    expect(chrome[0]).toContain('app-topbar')
-    expect(overlay).toHaveLength(1)
-    expect(overlay[0]).toContain('confirm-dialog')
+  it('玻璃拟态不得回潮：源码不出现 glass-* 类名', () => {
+    // 顶栏是 flex 兄弟节点，内容滚动发生在独立容器里，模糊没有可模糊的对象；
+    // 弹窗自身含滚动容器，模糊每帧都要重算。层级由面档差 + 阴影承担。
+    const refs = collectTsxTs(srcDir)
+      .filter((f) => /\.tsx?$/.test(f))
+      .flatMap((f) => {
+        const src = readFileSync(f, 'utf-8')
+        return [...src.matchAll(/\bglass-(?:chrome|overlay|toast)\b/g)].map(() => f)
+      })
+    expect(refs).toEqual([])
   })
 
   it('业务/布局组件与 mcs 组件无 hex/rgb/oklch 硬编码（允许 var(--mcs-*) 与 shadcn 组件变量）', () => {

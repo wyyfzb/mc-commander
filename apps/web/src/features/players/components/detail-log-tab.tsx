@@ -265,7 +265,7 @@ function SessionRow({
       {!collapsed && (
         <div className="ml-4 border-l border-mcs-border-muted pl-3 pb-1">
           {events.length === 0 ? (
-            <p className="py-1 text-mcs-xs italic text-mcs-text-muted">（无事件记录）</p>
+            <p className="py-1 text-mcs-xs text-mcs-text-muted">（无事件记录）</p>
           ) : (
             events.map((e, i) => <EventRow key={i} event={e} />)
           )}

@@ -7,7 +7,6 @@
 @import './styles/tokens/semantic.css';
 @import './styles/tokens/theme.css';
 @import './styles/fonts.css';
-@import './styles/glass.css';
 @import './styles/effects.css';
 
 @custom-variant dark (&:is(.dark *));
@@ -21,6 +20,7 @@
    （inline：变量值随 .light/.dark 动态解析） */
 @theme inline {
     --color-mcs-bg-default: var(--mcs-bg-default);
+    --color-mcs-bg-inset: var(--mcs-bg-inset);
     --color-mcs-bg-muted: var(--mcs-bg-muted);
     --color-mcs-bg-subtle: var(--mcs-bg-subtle);
     --color-mcs-bg-emphasis: var(--mcs-bg-emphasis);
@@ -160,7 +160,7 @@
     --radius-4xl: var(--mcs-radius-lg);
 }
 
-/* 深色优先（P4）：html 默认 .dark；切亮色时替换为 .light（见 useTheme） */
+/* 深色优先（P4）：html 默认 .dark；切亮色时替换为 .light（见 theme-class-sync.tsx） */
 :root {
   color-scheme: dark;
 }
@@ -195,7 +195,9 @@
     font-style: normal;
   }
 
-  /* 全局滚动条：细 + 圆角 + 融底（Windows 原生粗滚动条是廉价感来源）；hover 亮起 */
+  /* 全局滚动条：细 + 低对比拇指（Windows 原生粗滚动条是廉价感来源）。
+     只用标准属性：scrollbar-width 非 auto 时 Chromium 会忽略 ::-webkit-scrollbar 全套，
+     两者并存等于自绘那套从未生效 */
   * {
     scrollbar-width: thin;
     scrollbar-color: color-mix(in oklch, var(--mcs-text-default) 18%, transparent) transparent;
@@ -208,23 +210,6 @@
      xterm 6 运行时内联写 display（blink 机制），须 !important 覆盖 */
   .xterm .xterm-cursor {
     display: none !important;
-  }
-  ::-webkit-scrollbar {
-    width: 10px;
-    height: 10px;
-  }
-  ::-webkit-scrollbar-thumb {
-    border-radius: 999px;
-    border: 3px solid transparent;
-    background-clip: padding-box;
-    background-color: color-mix(in oklch, var(--mcs-text-default) 18%, transparent);
-  }
-  ::-webkit-scrollbar-thumb:hover {
-    background-color: color-mix(in oklch, var(--mcs-text-default) 30%, transparent);
-  }
-  ::-webkit-scrollbar-track,
-  ::-webkit-scrollbar-corner {
-    background: transparent;
   }
 }
 

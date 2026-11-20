@@ -51,6 +51,12 @@ const editorCall = vi.hoisted(() => {
 const monacoMock = vi.hoisted(() => ({
   KeyMod: { CtrlCmd: 2048 },
   KeyCode: { KeyS: 49 },
+  // 组件在 theme 变化时调 defineTheme；jsdom 默认无 canvas（内部提前返回），
+  // 需要断言的用例自行把 canvas / getComputedStyle 桩成可返回色值
+  editor: {
+    defineTheme:
+      vi.fn<(name: string, data: { base?: string; colors: Record<string, string> }) => void>(),
+  },
 }))
 
 vi.mock('@monaco-editor/react', async () => {
@@ -324,9 +330,86 @@ describe('编辑器（@monaco-editor/react mock）', () => {
     expect(editorCall.props?.path).toBe(PATH_PROPERTIES)
   })
 
-  it('亮色主题 → vs', () => {
+  /* 亮色也必须走自定义主题名：内置 vs 是纯白底，与同屏空态/卡片用的深嵌档割裂 */
+  it('亮色主题 → mcs-light（自绘调色板，不用内置 vs）', () => {
     render(<MonacoEditorPane {...makeProps({ path: PATH_PROPERTIES, theme: 'light' })} />)
-    expect(editorCall.props?.theme).toBe('vs')
+    expect(editorCall.props?.theme).toBe('mcs-light')
+  })
+
+  /* 调色板必须在**应用主题的那一刻**读 CSS 变量：模块加载时读会把当时那套颜色
+     写进另一套主题名，切档后停在旧底色（亮底 + vs-dark 浅字，实测 1.23:1）。
+     这里把 canvas/getComputedStyle 桩成可返回色值，锁住「每次切档重新注册」。 */
+  it('切档时按当前 CSS 变量重新注册主题（不是模块加载时）', () => {
+    const defineTheme = vi.mocked(monacoMock.editor.defineTheme)
+    defineTheme.mockClear()
+
+    const realGetComputedStyle = window.getComputedStyle
+    let light = false
+    const fakeStyle = {
+      getPropertyValue: (name: string) => {
+        if (name === '--mcs-bg-inset') return light ? '#e7eaee' : '#03050e'
+        // 光标取 accent-fg：亮色 accent（#86EFAC）对深嵌底仅 1.16:1
+        if (name === '--mcs-accent-fg') return light ? '#166534' : '#4ade80'
+        // 弱线带 alpha：丢掉会变成 2px 实色描边
+        if (name === '--mcs-border-subtle') return light ? '#0206170d' : '#ffffff0a'
+        return '#808080'
+      },
+    } as CSSStyleDeclaration
+    vi.spyOn(window, 'getComputedStyle').mockImplementation((el) =>
+      el === document.documentElement ? fakeStyle : realGetComputedStyle.call(window, el),
+    )
+    const ctx = {
+      fillStyle: '',
+      fillRect: vi.fn(),
+      getImageData: () => {
+        const m = /^#([0-9a-f]{6})([0-9a-f]{2})?$/i.exec(String(ctx.fillStyle))
+        if (!m) return { data: new Uint8ClampedArray([0, 0, 0, 0]) }
+        const value = Number.parseInt(m[1]!, 16)
+        const alpha = m[2] ? Number.parseInt(m[2], 16) : 255
+        return {
+          data: new Uint8ClampedArray([
+            (value >> 16) & 255,
+            (value >> 8) & 255,
+            value & 255,
+            alpha,
+          ]),
+        }
+      },
+    }
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(ctx as never)
+
+    const { rerender } = render(
+      <MonacoEditorPane {...makeProps({ path: PATH_PROPERTIES, theme: 'dark' })} />,
+    )
+    expect(defineTheme).toHaveBeenCalledTimes(1)
+    expect(defineTheme.mock.calls[0]?.[0]).toBe('mcs-dark')
+    expect(defineTheme.mock.calls[0]?.[1].colors['editor.background']).toBe('#03050e')
+    expect(defineTheme.mock.calls[0]?.[1].colors['editorCursor.foreground']).toBe('#4ade80')
+    // alpha 保留为 #RRGGBBAA（弱线不能被画成 2px 实色）
+    expect(defineTheme.mock.calls[0]?.[1].colors['editor.lineHighlightBorder']).toBe('#ffffff0a')
+
+    light = true
+    rerender(<MonacoEditorPane {...makeProps({ path: PATH_PROPERTIES, theme: 'light' })} />)
+    expect(defineTheme).toHaveBeenCalledTimes(2)
+    expect(defineTheme.mock.calls[1]?.[0]).toBe('mcs-light')
+    expect(defineTheme.mock.calls[1]?.[1].colors['editor.background']).toBe('#e7eaee')
+    expect(defineTheme.mock.calls[1]?.[1].colors['editorCursor.foreground']).toBe('#166534')
+    expect(defineTheme.mock.calls[1]?.[1].colors['editor.lineHighlightBorder']).toBe('#0206170d')
+  })
+
+  it('取不到 CSS 变量时仍注册 base 主题（未注册主题会回退到亮色 vs）', () => {
+    const defineTheme = vi.mocked(monacoMock.editor.defineTheme)
+    defineTheme.mockClear()
+    const realGetComputedStyle = window.getComputedStyle
+    vi.spyOn(window, 'getComputedStyle').mockImplementation((el) =>
+      el === document.documentElement
+        ? ({ getPropertyValue: () => '' } as unknown as CSSStyleDeclaration)
+        : realGetComputedStyle.call(window, el),
+    )
+    render(<MonacoEditorPane {...makeProps({ path: PATH_PROPERTIES, theme: 'dark' })} />)
+    expect(defineTheme).toHaveBeenCalledTimes(1)
+    expect(defineTheme.mock.calls[0]?.[1].base).toBe('vs-dark')
+    expect(defineTheme.mock.calls[0]?.[1].colors).toEqual({})
   })
 
   it('切换文件 → language 随新路径重算（.yml → yaml）', () => {

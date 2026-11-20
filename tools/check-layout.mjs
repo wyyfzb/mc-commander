@@ -36,7 +36,6 @@ const ROOT = findRepoRoot(SCRIPT_DIR)
 
 // 顶层白名单：文件按名登记，目录按名登记；新增一项就要在这里加一行（否则门禁会拦下来）
 const TOP_LEVEL_FILES = new Set([
-  'AGENTS.md',
   'README.md',
   'CHANGELOG.md',
   'LICENSE',

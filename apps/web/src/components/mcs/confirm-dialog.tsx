@@ -55,7 +55,7 @@ export function ConfirmDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="glass-overlay sm:max-w-sm"
+        className="sm:max-w-sm"
         onInteractOutside={(e) => {
           // 强制显式确认：阻止点击遮罩关闭
           if (!loading) e.preventDefault()

@@ -73,7 +73,7 @@ describe('AboutDialog 相关链接', () => {
     renderDialog()
     const links = screen.getAllByRole('link').filter((l) => l.getAttribute('href') !== AUTHOR_URL)
     expect(within(links[0]!).getByText('GitHub 仓库')).toBeInTheDocument()
-    expect(within(links[0]!).getByText('查看源代码并参与贡献')).toBeInTheDocument()
+    expect(within(links[0]!).getByText('查看源代码与版本记录')).toBeInTheDocument()
     expect(within(links[1]!).getByText('Gitee 镜像仓库')).toBeInTheDocument()
     expect(within(links[1]!).getByText('国内访问 · 自动同步')).toBeInTheDocument()
     expect(within(links[2]!).getByText('项目 Releases')).toBeInTheDocument()
@@ -94,7 +94,7 @@ describe('AboutDialog 作者与版权', () => {
 
   it('版权文案（居中 subtle）', () => {
     renderDialog()
-    const copyright = screen.getByText('© 2026 MC_Commander · 社区开源项目')
+    const copyright = screen.getByText('© 2026 MC_Commander · AGPL-3.0')
     expect(copyright.classList.contains('text-center')).toBe(true)
     expect(copyright.classList.contains('text-mcs-text-muted')).toBe(true)
   })

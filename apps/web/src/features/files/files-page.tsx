@@ -14,7 +14,7 @@ import { Card } from '@/components/mcs/card'
 import { useUnsavedGuard } from '@/hooks/use-unsaved-guard'
 import { useContainerWidth } from '@/hooks/use-container-width'
 import { useServerStore } from '@/stores/server'
-import { useUiStore } from '@/stores/ui'
+import { useResolvedTheme } from '@/hooks/use-resolved-theme'
 import type { FileEntry } from '@/api/types'
 import { FileList } from './components/file-list'
 import { EditorSlot } from './components/editor-slot'
@@ -56,7 +56,7 @@ const EDITOR_INLINE_MIN_CONTENT = 672
 
 export function FilesPage() {
   const instanceId = useServerStore((s) => s.instanceId)
-  const theme = useUiStore((s) => s.theme)
+  const theme = useResolvedTheme()
   const queryClient = useQueryClient()
   const [searchParams, setSearchParams] = useSearchParams()
 

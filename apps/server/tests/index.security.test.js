@@ -44,6 +44,8 @@ const h = vi.hoisted(() => {
     server,
     serverOn,
     appUse,
+    // helmet 需要读调用参数（CSP 指令）：具名 spy 暴露给用例
+    helmet: vi.fn(() => 'helmet-middleware'),
     wsOpts: null,
     tmpDir: null,
   };
@@ -123,7 +125,7 @@ vi.mock('../src/middleware/error_handler.js', () => ({
   errorHandler: 'error-handler',
 }));
 vi.mock('../src/middleware/cors.js', () => ({ default: vi.fn() }));
-vi.mock('helmet', () => ({ default: vi.fn(() => 'helmet-middleware') }));
+vi.mock('helmet', () => ({ default: h.helmet }));
 vi.mock('../src/routes/index.js', () => ({ setupRoutes: vi.fn() }));
 vi.mock('../src/services/mc_server.js', () => ({
   MCServerManager: class {
@@ -244,6 +246,36 @@ describe('安全响应头中间件（helmet）', () => {
     expect(idxHelmet).toBeGreaterThanOrEqual(0);
     expect(mounted[idxHelmet].path).toBeUndefined();
     expect(idxJson).toBeGreaterThan(idxHelmet);
+  });
+
+  /* CSP 的 script-src 只放行 'self' ⇒ 前端 index.html 里的**任何内联脚本都不会执行**
+     （本地 vite 与 e2e 都不带 CSP，这类失效在测试里完全看不见）。
+     判据放在服务端这边：三处必须同时成立才算一致——① CSP 的所有 script 指令都没有
+     放开内联；② 前端 HTML 里没有无 src 的 <script>；③ 首帧外链脚本确实存在且被引用。 */
+  it("CSP 只放行 script-src 'self'，前端无内联脚本且首帧脚本被引用", async () => {
+    await resetAndImport();
+    const directives = vi.mocked(h.helmet).mock.calls.at(-1)?.[0]
+      ?.contentSecurityPolicy?.directives;
+    // script-src-elem / script-src-attr 会覆盖 script-src 的同类校验：
+    // 只查 script-src 会漏掉「另开一条指令放开内联」的放宽方式
+    for (const key of ['scriptSrc', 'scriptSrcElem', 'scriptSrcAttr']) {
+      const value = directives?.[key];
+      if (value === undefined) continue; // 未声明时按 CSP 回落到 script-src
+      expect(value, `${key} 不得放开内联/求值`).not.toContain("'unsafe-inline'");
+      expect(value, `${key} 不得放开内联/求值`).not.toContain("'unsafe-eval'");
+    }
+    expect(directives?.scriptSrc).toEqual(["'self'"]);
+
+    const webRoot = path.join(import.meta.dirname, '..', '..', 'web');
+    const html = fs
+      .readFileSync(path.join(webRoot, 'index.html'), 'utf-8')
+      .replace(/<!--[\s\S]*?-->/g, ''); // 注释里的示例脚本不会执行
+    // 无 src 的 <script>（含自闭合写法、大写标签、src = 带空格）＝内联脚本
+    const inlineScripts = html.match(/<script(?![^>]*\bsrc\s*=)[^>]*>/gi) ?? [];
+    expect(inlineScripts).toEqual([]);
+    // 首帧脚本被删或改名时 CSP 仍合法，暗闪回归没有别处可拦
+    expect(fs.existsSync(path.join(webRoot, 'public', 'theme-init.js'))).toBe(true);
+    expect(html).toMatch(/<script[^>]*\bsrc=["']\/theme-init\.js["']/i);
   });
 });
 
