@@ -2,7 +2,7 @@
 
 自托管 Minecraft 服务器管理 API。
 
-**版本**: 0.14.0 <!-- x-release-please-version -->
+**版本**: 0.15.0 <!-- x-release-please-version -->
 
 ## 功能特性
 
