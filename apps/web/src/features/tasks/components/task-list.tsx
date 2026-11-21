@@ -6,6 +6,8 @@
  * - TASK_TYPE_TONES：restart→warning / backup→info / command→purple /
  *   stop→error / start→success；色值统一取自 components/mcs/tone（token 唯一来源 src/styles/）
  * - 时间行 formatTaskDate（MM-DD HH:mm 本地时区；null → '从未'）
+ * - 卡内摘要头：启用中 X/Y · 下次执行（最早启用任务）· 最近执行（含结果标记）；
+ *   摘要取集合而非首行——列表按创建序排，最早到期/最近执行的任务不一定在第一行
  * - 容器：实底卡（禁 backdrop-blur）+ 行分隔；空态含新建任务按钮；加载骨架行
  */
 import { AlertCircle, Clock, Hourglass, Pencil, Play, Terminal, Timer, Trash2 } from 'lucide-react'
@@ -61,6 +63,26 @@ const LAST_RUN_STATUS: Record<
   never: null,
 }
 
+/** 按时间挑一条任务：下次执行取最早、最近执行取最晚，方向不能共用 */
+function pickTask(
+  tasks: ScheduledTask[],
+  pick: (task: ScheduledTask) => string | null,
+  mode: 'earliest' | 'latest',
+): ScheduledTask | null {
+  let best: ScheduledTask | null = null
+  let bestAt = mode === 'earliest' ? Number.POSITIVE_INFINITY : Number.NEGATIVE_INFINITY
+  for (const task of tasks) {
+    const iso = pick(task)
+    if (iso === null) continue
+    const at = Date.parse(iso)
+    if (Number.isNaN(at)) continue
+    if (mode === 'earliest' ? at >= bestAt : at <= bestAt) continue
+    best = task
+    bestAt = at
+  }
+  return best
+}
+
 export function TaskList({
   tasks,
   isLoading,
@@ -73,6 +95,21 @@ export function TaskList({
 }: TaskListProps) {
   // 列表级单一倒计时时钟（每行独立 useNow 会每行一个 60s 定时器）
   const now = useNow()
+  const enabledCount = tasks.reduce((n, task) => n + (task.isEnabled ? 1 : 0), 0)
+  const nextTask = pickTask(
+    tasks.filter((task) => task.isEnabled),
+    (task) => task.nextRunAt,
+    'earliest',
+  )
+  const lastTask = pickTask(tasks, (task) => task.lastRunAt, 'latest')
+  const nextRunCountdown = nextTask ? formatNextRunCountdown(nextTask.nextRunAt, now) : null
+  // 启用任务可能没有可解析的下次执行时间；「无启用任务」只在启用数为 0 时成立
+  const nextRunLabel = nextTask
+    ? (nextRunCountdown ?? formatTaskDate(nextTask.nextRunAt))
+    : enabledCount > 0
+      ? '未排期'
+      : '无启用任务'
+  const lastRunMeta = lastTask ? LAST_RUN_STATUS[lastTask.lastRunStatus] : null
   return (
     <Card as="div" size="flush" className="overflow-hidden">
       {isLoading ? (
@@ -98,20 +135,54 @@ export function TaskList({
           actionVariant="greenFilled"
         />
       ) : (
-        <div className="divide-y divide-mcs-border-subtle">
-          {tasks.map((task) => (
-            <TaskRow
-              key={task.id}
-              task={task}
-              now={now}
-              running={runningTaskId === task.id}
-              onToggle={onToggle}
-              onRunNow={onRunNow}
-              onEdit={onEdit}
-              onDelete={onDelete}
-            />
-          ))}
-        </div>
+        <>
+          <div
+            data-testid="task-summary"
+            className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-b border-mcs-border-subtle px-4 py-2.5"
+          >
+            <span className="flex items-baseline gap-1.5">
+              <span className="text-mcs-2xs text-mcs-text-muted">启用中</span>
+              <span className="text-mcs-sm font-semibold text-mcs-text-default tabular-nums">
+                {enabledCount}/{tasks.length}
+              </span>
+            </span>
+            <span className="flex items-baseline gap-1.5">
+              <span className="text-mcs-2xs text-mcs-text-muted">下次执行</span>
+              <span className="text-mcs-sm font-medium text-mcs-text-default">{nextRunLabel}</span>
+            </span>
+            <span className="flex items-baseline gap-1.5">
+              <span className="text-mcs-2xs text-mcs-text-muted">最近执行</span>
+              <span className="text-mcs-sm font-medium text-mcs-text-default">
+                {lastTask ? formatTaskDate(lastTask.lastRunAt) : '从未'}
+              </span>
+              {lastRunMeta && (
+                <span
+                  className={cn(
+                    'inline-flex items-center gap-1 text-mcs-2xs font-medium',
+                    lastRunMeta.text,
+                  )}
+                >
+                  <span className={cn('size-1.5 rounded-full', lastRunMeta.dot)} aria-hidden />
+                  {lastRunMeta.label}
+                </span>
+              )}
+            </span>
+          </div>
+          <div className="divide-y divide-mcs-border-subtle">
+            {tasks.map((task) => (
+              <TaskRow
+                key={task.id}
+                task={task}
+                now={now}
+                running={runningTaskId === task.id}
+                onToggle={onToggle}
+                onRunNow={onRunNow}
+                onEdit={onEdit}
+                onDelete={onDelete}
+              />
+            ))}
+          </div>
+        </>
       )}
     </Card>
   )

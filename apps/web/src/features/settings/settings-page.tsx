@@ -65,7 +65,7 @@ export function SettingsPage() {
           把宽度让给表单（528px 内容宽下表单可得 464px，比展态的 312px 宽 152px） */}
       <nav
         aria-label="设置子导航"
-        className="flex w-12 shrink-0 flex-col gap-1 self-start rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted p-2 shadow-mcs-card @3xl:w-50"
+        className="flex w-12 shrink-0 flex-col gap-1 self-start rounded-mcs-md border border-mcs-border-container bg-mcs-bg-muted p-2 shadow-mcs-card @3xl:w-50"
       >
         <p className="hidden px-2 py-1.5 text-mcs-2xs font-semibold text-mcs-text-muted @3xl:block">
           设置

@@ -68,6 +68,16 @@ describe('危险按钮变体（唯一声明源）', () => {
     expect(solid).not.toContain('border-mcs-error-border')
   })
 
+  it('主 CTA：平涂 + hover 换底色，悬停不得抹掉常驻高光', () => {
+    const cls = tokens(buttonVariants({ variant: 'default' }))
+    expect(cls).toContain('bg-mcs-accent')
+    expect(cls).toContain('hover:bg-mcs-accent-hover')
+    expect(cls).toContain('shadow-mcs-accent-button')
+    expect(cls).not.toContain('mcs-bg-accent-gradient')
+    // hover 不得改写整段 box-shadow（会连常驻顶高光一起抹掉）
+    expect(cls.some((c) => c.startsWith('hover:shadow-'))).toBe(false)
+  })
+
   it('渲染时 data-variant 落到 DOM（结构可断言，不依赖色值计算）', () => {
     render(<Button variant="destructive-outline">删除</Button>)
     const btn = screen.getByRole('button', { name: '删除' })

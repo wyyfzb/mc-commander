@@ -9,6 +9,7 @@ import { RecentBackupsCard } from './components/recent-backups-card'
 import { AnnouncementCard } from './components/announcement-card'
 import { AlertBanner } from './components/alert-banner'
 import { CrashPointerNotice } from './components/crash-report-card'
+import { Card } from '@/components/mcs/card'
 import { queryKeys, useInstanceStatus, useSystemErrors, useSystemStats } from '@/api/queries'
 import { useServerStore } from '@/stores/server'
 import { useNotificationStore } from '@/stores/notifications'
@@ -19,7 +20,7 @@ import { queryFailed } from '@/lib/query-phase'
 
 /**
  * 仪表盘驾驶舱
- * 顶部三卡（在线玩家 / 资源使用 / 实例信息）→ 终端主体 + 右栏卡（MC 时钟·世界控制 / 最近备份 / 公告发送）
+ * 顶部三卡（在线玩家 / 资源使用 / 实例信息）→ 终端主体 + 右栏面板（MC 时钟 / 最近备份 / 公告发送三分区）
  * 数据流：Query 轮询（实例与系统资源同为保底 30s，见 queries.ts 常量）→ server store → WS 事件即时合并
  */
 export function DashboardPage() {
@@ -127,10 +128,10 @@ export function DashboardPage() {
         <RuntimeInfoCard isLoading={statusLoading} />
       </div>
 
-      {/* 终端主体 + 右栏卡。
+      {/* 终端主体 + 右栏面板。
           单列窄屏（<@5xl）主栅格必须按内容高度排布：外层是定高 flex 列，`min-h-0 flex-1`
           会让这一行被压到几像素，行内 flex-1 的终端与右栏 <aside> 一并塌陷（
-          375 下右栏只剩 3.6px 高、三张卡用户完全够不到）。
+          375 下右栏只剩 3.6px 高、三个分区用户完全够不到）。
           分栏与顶卡三列同档（@5xl=1024px）：分栏后终端吃满剩余高度，而剩余高度取决于
           顶卡占几行——两档必须同时翻，否则顶卡占两行时会把终端压到读不了几行。
           @5xl 起恢复 min-h-0 flex-1，终端保底约 672px，右栏自身滚动。 */}
@@ -149,10 +150,18 @@ export function DashboardPage() {
           data-testid="dashboard-aside"
           className="flex flex-col gap-4 overflow-y-auto pr-1 @5xl:min-h-0"
         >
-          <McClockCard />
-          {/* 状态 → 数据安全 → 主动操作：备份卡排在公告发送之前（蓝本同序） */}
-          <RecentBackupsCard />
-          <AnnouncementCard />
+          {/* 运行侧栏是一张面板：三块状态用分隔线分区，而不是三张并列卡片。
+              面与圆角只由外层 Card 声明一次，分区用 surface="plain" 避免卡套卡。 */}
+          <Card
+            as="div"
+            size="flush"
+            className="flex flex-col divide-y divide-mcs-border-muted overflow-hidden"
+          >
+            <McClockCard embedded />
+            {/* 状态 → 数据安全 → 主动操作：备份卡排在公告发送之前（蓝本同序） */}
+            <RecentBackupsCard embedded />
+            <AnnouncementCard embedded />
+          </Card>
         </aside>
       </div>
     </div>

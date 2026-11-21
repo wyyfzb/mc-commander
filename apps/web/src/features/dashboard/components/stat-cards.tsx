@@ -260,7 +260,7 @@ function ResourceRow({
   )
 }
 
-// ── 右栏卡：在线玩家（Flutter 版两列布局 + Web 版交互）──────────
+// ── 在线玩家卡（Flutter 版两列布局 + Web 版交互）──────────
 /** 每列最多显示玩家数（Flutter 版 maxDisplay=3 同源），超出以 +N 汇总 */
 const MAX_COLUMN_ROWS = 3
 

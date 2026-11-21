@@ -655,13 +655,12 @@ export function InstanceSettingsDialog({
               pushStateQuery.isError ? (
                 <span className="shrink-0 text-mcs-xs text-mcs-text-muted">状态未知</span>
               ) : pushStateQuery.isLoading ? (
-                /* 圆角取基座给的 `rounded-mcs-md`：cn 未登记 `rounded-mcs-*` 词汇表，这里再压一个
-                   `rounded-full` 会两类并存、胜负交给样式表顺序（写了也不生效）。20px 高的盒子上
-                   12px 档被浏览器收敛为半高，视觉与 ui/switch 的胶囊一致，加载完不跳形 */
+                /* 加载占位与 ui/switch 同形：同宽高 + 胶囊圆角；cn 已登记圆角词汇表，
+                   调用点的 rounded-full 会覆盖基座 12px 档 */
                 <Skeleton
                   role="status"
                   aria-label="正在读取实时推送状态"
-                  className="h-5 w-9 shrink-0"
+                  className="h-5 w-9 shrink-0 rounded-full"
                 />
               ) : (
                 pushStateQuery.data && (

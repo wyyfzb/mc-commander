@@ -81,7 +81,7 @@ function StrengthBar({ score, label }: { score: number; label: string }) {
           />
         ))}
       </div>
-      <p className={cn('text-mcs-2xs font-medium', STRENGTH_TEXT_STYLES[score])}>
+      <p className={cn('text-mcs-xs font-medium', STRENGTH_TEXT_STYLES[score])}>
         密码强度：{label}
         {score > 0 && score < 3 && '（建议混合大小写字母、数字与符号）'}
       </p>
@@ -551,7 +551,7 @@ export function LoginPage() {
 
       {/* 底部辅助链接 */}
       <footer className="animate-mcs-fade-up mcs-delay-2 relative z-(--mcs-z-local) mt-6 flex flex-col items-center gap-1.5 text-center">
-        <p className="text-mcs-2xs text-mcs-text-muted">
+        <p className="text-mcs-xs text-mcs-text-muted">
           使用 API Key 直连（自动化 / 运维场景）？{' '}
           <Link
             to="/onboarding"

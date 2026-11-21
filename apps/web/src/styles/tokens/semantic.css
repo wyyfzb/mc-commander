@@ -6,7 +6,7 @@
  */
 :root {
   /* ── 背景（明度层级词表）── */
-  --mcs-bg-inset: var(--ref-dark-inset);        /* 深嵌底：编辑器/代码块（全站最深；只落在浮起面内） */
+  --mcs-bg-inset: var(--ref-dark-inset);        /* 深嵌底：编辑器/代码块/输入控件（全站最深；只落在浮起面内） */
   --mcs-bg-default: var(--ref-dark-canvas);     /* 页面底（v2 深空画布） */
   --mcs-bg-muted: var(--ref-dark-card);         /* 卡片/容器 */
   --mcs-bg-subtle: var(--ref-dark-base);        /* 次级面（比画布亮一档） */
@@ -18,15 +18,17 @@
   --mcs-text-default: var(--ref-dark-text-default);
   --mcs-text-muted: var(--ref-dark-text-muted);
 
-  /* ── 边框 ── */
+  /* ── 边框（三档分工：default=交互控件边界 ≥3:1；container=容器外沿（≥1.3 轮廓）；
+        muted/subtle=分隔线与装饰，不承担可辨识信息）── */
   --mcs-border-default: var(--ref-border-interactive);    /* 交互组件边界（≥3:1） */
+  --mcs-border-container: var(--ref-border-container);    /* 容器外沿（卡片/壳体/弹层） */
   --mcs-border-muted: var(--ref-border-hairline);         /* 装饰发丝线（豁免） */
   --mcs-border-subtle: var(--ref-border-hairline-subtle); /* 装饰弱线（豁免） */
 
   /* ── 状态六色（fg = 文字/描边/图标；bg-subtle = 不透明容器底，承载文字；border = 25% alpha）
        铁律：亮色只做文字/描边/图标，容器底一律该色深底，严禁亮色实底+白字。
-       bg-subtle 不透明：半透明 tint 的有效色随宿主面变化，最亮浮层（弹窗 L=0.325）上
-       状态文字会跌破 4.5:1（实测 error 3.82 / purple 3.80）；锚定基面后与宿主面无关 ── */
+       bg-subtle 不透明：半透明 tint 的有效色随宿主面变化，状态文字会跌破 4.5:1；
+       锚定基面后与宿主面无关 ── */
   --mcs-success-fg: var(--ref-success);
   --mcs-success-bg-subtle: color-mix(in oklch, var(--ref-success) 12%, var(--ref-dark-base));
   --mcs-success-border: color-mix(in oklch, var(--ref-success) 25%, transparent);
@@ -46,6 +48,7 @@
 
   /* ── 品牌 accent（P6 品牌克制：全界面彩色像素 <5%，只给 CTA/激活态/品牌元素）── */
   --mcs-accent: var(--ref-accent);
+  --mcs-accent-hover: var(--ref-accent-hover);       /* CTA hover 底色（同色相提亮 5%） */
   --mcs-on-accent: var(--ref-on-accent-dark);        /* accent 实底上的文字 */
   --mcs-accent-fg: var(--ref-accent);                /* accent 做文字/图标 */
   --mcs-accent-bg-subtle: color-mix(in oklch, var(--ref-accent) 12%, var(--ref-dark-base)); /* 激活态容器底（不透明，同状态色族） */
@@ -100,37 +103,31 @@
         达不到非文字图形 3:1；两档的达标值由 check-contrast 的「pulse 涟漪」断言守住 ── */
   --mcs-ripple-opacity: 0.6;
 
-  /* ── 光影（v2 深空工作台：投影墨 + 顶部内高光构成「受光面」；
-        card=平面卡 / raised=悬浮下拉 / overlay=弹窗浮层；辉光仅限 CTA/激活/危险场景）── */
-  --mcs-shadow-card: inset 0 1px 0 var(--ref-highlight-top), 0 1px 3px var(--ref-shadow-ink-soft), 0 10px 32px -8px var(--ref-shadow-ink);
+  /* ── 光影（深底上外阴影几乎不可见：卡片层级由 1px 容器边 + 顶高光承担，
+        阴影只留给浮层；CTA 不发光，避免暗底上的霓虹边）── */
+  --mcs-shadow-card: inset 0 1px 0 var(--ref-highlight-top);
   --mcs-shadow-raised: inset 0 1px 0 var(--ref-highlight-top), 0 2px 6px var(--ref-shadow-ink-soft), 0 12px 32px -8px var(--ref-shadow-ink);
   --mcs-shadow-overlay: inset 0 1px 0 var(--ref-highlight-top-strong), 0 16px 48px -12px var(--ref-shadow-ink), 0 32px 96px -24px var(--ref-shadow-ink);
   --mcs-shadow-thumb: 0 1px 2px var(--ref-shadow-ink-soft);   /* 小控件浮起（开关柄/滑块柄） */
-  --mcs-shadow-accent-button: inset 0 1px 0 var(--ref-highlight-on-accent), 0 1px 2px var(--ref-shadow-ink-soft), 0 4px 16px -4px color-mix(in oklch, var(--ref-accent) 25%, transparent);
-  --mcs-glow-accent: 0 0 16px color-mix(in oklch, var(--ref-accent) 30%, transparent);
-  --mcs-glow-accent-strong: 0 0 28px color-mix(in oklch, var(--ref-accent) 30%, transparent);
+  --mcs-shadow-accent-button: inset 0 1px 0 var(--ref-highlight-on-accent), 0 1px 2px var(--ref-shadow-ink-soft);
   --mcs-glow-error: 0 0 16px color-mix(in oklch, var(--ref-error) 28%, transparent);
-
-  /* ── 品牌 accent 渐变（CTA 实底：同色相明度渐变，135deg 亮左上）── */
-  --mcs-gradient-accent: linear-gradient(135deg, var(--ref-accent-hover), var(--ref-accent) 55%, color-mix(in oklch, var(--ref-accent) 90%, var(--ref-dark-base)));
 
   /* 间距不设 token：统一走 Tailwind 默认 4px 刻度（--spacing 0.25rem），
      结构间距必须 4px 倍数、组件内微节奏允许 2px 档 */
 
-  /* ── 圆角（5 档：6 / 8 / 12 / 16 / 20）
-        档位与消费点的实际对应（shadcn 的 --radius-* 逐档错位绑定，故 `rounded-lg` 落在
-        --radius-lg ← --mcs-radius-md = 12px，见 index.css 的映射表）：
-          6px  内嵌小块（chip 内层、角标、行内小按钮）
-          8px  小控件（chip、状态胶囊、紧凑按钮）
-          12px 表单控件与卡片（ui/input、ui/textarea、ui/button、ui/select 的默认档，Card）
-          16px 弹窗与抽屉（ui/dialog、ui/sheet、命令预览条）
-          20px @reserved（当前 0 消费）
-        表单控件取 12px 而不是 8px：与卡片同档，控件落在卡片上时边缘曲率一致。 */
+  /* ── 圆角（4 档：6 / 8 / 12 / 16）
+        档位按「离内容多近」取，不按组件名硬记（shadcn 的 --radius-* 逐档错位绑定，
+        `rounded-lg` 落在 --radius-lg ← --mcs-radius-md = 12px，见 index.css 的映射表）：
+          6px  内嵌微件（chip 内层、角标、行内小按钮）
+          8px  控件（ui/input、ui/textarea、ui/button、ui/select、chip、导航项）
+          12px 容器与小浮层（Card/面板/popover/dropdown/select）
+          16px 全屏浮层（ui/dialog、ui/sheet、命令面板）
+        嵌套：贴边共享外沿的等半径是正确形态（命令面板 16 贴对话框 16）；有内距的容器
+        再收一档，控件按 8 档、不与卡片同档——同半径容器嵌套会让两圈角线互相挤压。 */
   --mcs-radius-xs: 6px;
   --mcs-radius-sm: 8px;
   --mcs-radius-md: 12px;
   --mcs-radius-lg: 16px;
-  --mcs-radius-xl: 20px; /* @reserved 全应用上限档（当前 0 消费，保留档位语义） */
 
   /* ── 字体（CJK 规范：正文行高 1.6；字重走 Tailwind font-medium/semibold、行高覆盖走 leading-*）
         文字档 6 档 = 22 / 18 / 14 / 14 / 12 / 10；两个 14px 档语义不同（正文基准 vs 强调正文），
@@ -151,7 +148,7 @@
   --mcs-line-height-body: 1.6;
 
   /* ── 终端专用（ServerTerminal 独立深底，与基面同阶，主题无关）── */
-  --mcs-terminal-bg: oklch(0.1663 0.0262 269.37);     /* 基面深底（亮暗同值） */
+  --mcs-terminal-bg: oklch(0.1663 0.0262 269.37);     /* 终端专用深底（主题无关；与暗色基面解耦） */
   --mcs-terminal-fg: var(--ref-dark-text-muted);
   --mcs-terminal-fg-bright: var(--ref-dark-text-default);
   --mcs-terminal-subtle: var(--ref-dark-text-subtle);
@@ -178,7 +175,7 @@
      六个面必须彼此可区分：暗色靠「越浮起越亮」形成阶梯，亮色靠「越浮起越白」，
      而画布必须比卡片暗，否则 bg-default 与 bg-muted 同值 ⇒ 组件无法表达层级。
      深嵌档 inset 比画布再深一档，编辑器/代码块落在它上面才看得出凹陷。 */
-  --mcs-bg-inset: var(--ref-light-inset); /* 深嵌底：比画布再深一档；只落在浮起面（卡片/弹层）内 */
+  --mcs-bg-inset: var(--ref-light-inset); /* 深嵌底：比画布再深一档，编辑器/代码块/输入控件落在浮起面内 */
   --mcs-bg-default: var(--ref-light-bg); /* 画布 */
   /* 涟漪在亮色面上升档：同一 0.6 在亮色面上合成后只有 2.63:1（图形口径要 ≥3:1） */
   --mcs-ripple-opacity: 0.75;
@@ -191,6 +188,7 @@
   --mcs-text-muted: var(--ref-light-text-muted);
 
   --mcs-border-default: var(--ref-border-interactive-light);
+  --mcs-border-container: var(--ref-border-container-light);
   --mcs-border-muted: var(--ref-border-hairline-light);
   --mcs-border-subtle: var(--ref-border-hairline-light-subtle);
 
@@ -212,6 +210,7 @@
   --mcs-purple-border: color-mix(in oklch, var(--ref-purple-light) 25%, transparent);
 
   --mcs-accent: var(--ref-accent-light);
+  --mcs-accent-hover: color-mix(in oklch, var(--ref-accent-light) 88%, var(--ref-success-light)); /* CTA hover 底色（同色相压深） */
   --mcs-on-accent: var(--ref-on-accent);           /* 深绿黑字（10.6:1） */
   --mcs-accent-fg: var(--ref-success-light);       /* 绿做文字时换深档（5.0:1） */
   --mcs-accent-bg-subtle: color-mix(in oklch, var(--ref-accent-light) 15%, var(--ref-light-card)); /* 不透明容器底 */
@@ -243,15 +242,12 @@
   /* 亮色同族升温：state-hover 6% 的 2×（理由见暗色档声明处） */
   --mcs-state-hover-error: color-mix(in oklch, var(--ref-error-light) 12%, transparent);
 
-  /* 亮色光影：暗底的「内高光」手法不适用，改低强度冷灰投影；辉光同源 accent-light */
+  /* 亮色光影：暗底的「内高光」手法不适用，改低强度冷灰投影 */
   --mcs-shadow-card: 0 1px 2px var(--ref-shadow-ink-light-soft), 0 4px 12px -4px var(--ref-shadow-ink-light);
   --mcs-shadow-raised: 0 2px 4px var(--ref-shadow-ink-light-soft), 0 8px 24px -6px var(--ref-shadow-ink-light);
   --mcs-shadow-overlay: 0 12px 32px -8px var(--ref-shadow-ink-light), 0 24px 64px -16px var(--ref-shadow-ink-light);
   --mcs-shadow-thumb: 0 1px 2px var(--ref-shadow-ink-light-soft);
-  --mcs-shadow-accent-button: inset 0 1px 0 var(--ref-highlight-on-accent), 0 1px 2px var(--ref-shadow-ink-light-soft), 0 4px 16px -4px color-mix(in oklch, var(--ref-accent-light) 28%, transparent);
-  --mcs-glow-accent: 0 0 16px color-mix(in oklch, var(--ref-accent-light) 38%, transparent);
-  --mcs-glow-accent-strong: 0 0 28px color-mix(in oklch, var(--ref-accent-light) 35%, transparent);
+  --mcs-shadow-accent-button: inset 0 1px 0 var(--ref-highlight-on-accent), 0 1px 2px var(--ref-shadow-ink-light-soft);
   --mcs-glow-error: 0 0 16px color-mix(in oklch, var(--ref-error-light) 28%, transparent);
-  --mcs-gradient-accent: linear-gradient(135deg, var(--ref-accent-light), color-mix(in oklch, var(--ref-accent-light) 92%, var(--ref-success-light)));
 }
 

@@ -1,26 +1,27 @@
 /**
  * Reference 层 —— 原始值
- * 全部色值由 scripts/gen-token-colors.mjs 生成（OKLCH 精确转换 + WCAG 相对亮度区间二分）
+ * 全部色值由 tools/dev/gen-token-colors.mjs 输出对照表（OKLCH 精确转换 + WCAG 相对亮度）
  * ⚠️ 本层永不直接在组件中使用，组件只允许消费 semantic 层（--mcs-*）
  *
- * 明度阶梯（暗色，H=269.37 / C=0.0262 固定）：
- *   inset 0.115 → canvas 0.152 → base 0.1663 → card 0.235 → secondary 0.28 → popover 0.325
- *   （"明度 N"指 OKLCH L 非 WCAG 相对亮度；此阶梯下文字对弹窗 10.9:1）
+ * 明度阶梯（暗色，H=269.37 / C=0.035~0.046）：
+ *   inset 0.09 → canvas 0.13 → base 0.15 → card 0.205 → secondary 0.245 → popover 0.285
+ *   （"明度 N"指 OKLCH L 非 WCAG 相对亮度；此阶梯下文字对弹窗 12.79:1）
  */
 :root {
   /* ── 暗色中性（深色优先 P4）──
-     明度阶梯（越浮起越亮）：inset 0.115 < canvas 0.152 < base 0.1663 < card 0.235
-     < secondary 0.28 < popover 0.325。
+     明度阶梯（越浮起越亮）：inset 0.09 < canvas 0.13 < base 0.15 < card 0.205
+     < secondary 0.245 < popover 0.285。
+     色度取 0.035~0.046（而非近中性）：深蓝是品牌底色，低色度在暗部会读成灰。
      inset 只给「凹进去」的面（编辑器 / 代码块），且**不得落在画布或亮色次级面上**：
-     对 canvas 仅 1.04:1、对亮色 secondary 仅 1.08:1，看不出层级；宿主须是卡片/弹层
-     （对卡片 1.22:1、对弹层 1.64:1），凹陷靠与宿主面的差读出来。 */
-  --ref-dark-inset: oklch(0.115 0.0262 269.37);      /* #03050E 深嵌底（编辑器/代码块） */
-  --ref-dark-canvas: oklch(0.152 0.0262 269.37);     /* #070B14 页面底（v2 深空画布，比基面再深一档，卡片浮起感来源） */
-  --ref-dark-base: oklch(0.1663 0.0262 269.37);      /* #0A0E1A 基面 */
+     对 canvas 仅 1.03:1、对亮色 secondary 仅 1.08:1，看不出层级；宿主须是卡片/弹层
+     （对卡片 1.15:1、对弹层 1.44:1），凹陷靠与宿主面的差读出来。 */
+  --ref-dark-inset: oklch(0.09 0.035 269.37);        /* #01020C 深嵌底（编辑器/代码块） */
+  --ref-dark-canvas: oklch(0.13 0.038 269.37);       /* #030616 页面底（深空画布） */
+  --ref-dark-base: oklch(0.15 0.04 269.37);          /* #050A1C 基面（chip / 状态 tint 的锚点） */
   --ref-dark-bg: oklch(0.19 0.0262 269.37);          /* 旧页面底档（保留作悬浮渐变参考） */
-  --ref-dark-card: oklch(0.235 0.0262 269.37);       /* 卡片（L=0.235） */
-  --ref-dark-secondary: oklch(0.28 0.0262 269.37);   /* 次级面（L=0.28：chip/轨道/交替行） */
-  --ref-dark-popover: oklch(0.325 0.0262 269.37);    /* 弹窗（L=0.325） */
+  --ref-dark-card: oklch(0.205 0.042 269.37);        /* #0F162A 卡片（L=0.205） */
+  --ref-dark-secondary: oklch(0.245 0.044 269.37);   /* #181F35 次级面（L=0.245：chip/轨道/交替行） */
+  --ref-dark-popover: oklch(0.285 0.046 269.37);     /* #212941 弹窗（L=0.285，文字 12.79:1） */
   --ref-dark-border: oklch(0.37 0.0262 269.37);      /* 装饰线参考（L=0.37，见 --ref-border-interactive） */
 
   /* ── 暗色文字参考档（default/muted 两级对全部背景 ≥4.5:1；subtle 仅供终端深底）── */
@@ -28,12 +29,12 @@
   --ref-dark-text-muted: oklch(0.816 0.0261 255.58);     /* #B8C4D4 */
   --ref-dark-text-subtle: oklch(0.695 0.0407 257.42);    /* 终端次级文字（--mcs-terminal-subtle 专用） */
 
-  /* ── 状态六色（暗底全部 ≥4.5:1 实测）── */
-  --ref-success: oklch(0.8003 0.1821 151.71);   /* #4ADE80 品牌翠绿 11.1:1 */
-  --ref-warning: oklch(0.8369 0.1644 84.43);    /* #FBBF24 11.5:1 */
-  --ref-error: oklch(0.7106 0.1661 22.22);      /* #F87171 7.0:1 */
-  --ref-info: oklch(0.7535 0.139 232.66);       /* #38BDF8 9.0:1 */
-  --ref-purple: oklch(0.709 0.1592 293.54);     /* #A78BFA 7.1:1 */
+  /* ── 状态六色（暗底基面/卡片/弹层全部 ≥4.5:1 实测；下列数字对基面）── */
+  --ref-success: oklch(0.8003 0.1821 151.71);   /* #4ADE80 品牌翠绿 11.3:1 */
+  --ref-warning: oklch(0.8369 0.1644 84.43);    /* #FBBF24 11.8:1 */
+  --ref-error: oklch(0.7106 0.1661 22.22);      /* #F87171 7.1:1 */
+  --ref-info: oklch(0.7535 0.139 232.66);       /* #38BDF8 9.2:1 */
+  --ref-purple: oklch(0.709 0.1592 293.54);     /* #A78BFA 7.2:1 */
 
   /* ── 亮色中性（独立映射，不镜像暗色）──
      越浮起越白：inset 0.935 < secondary 0.9608 < secondary-soft 0.9706 < bg 0.9814 < 卡片/弹层 1.0
@@ -61,17 +62,18 @@
    * WCAG AA 对比度实测（2026-09-01，OKLCH→sRGB→WCAG 相对亮度公式）：
    *   暗色：on-accent-dark(#090D1A) ON accent(#4ADE80) = 11.05:1 ✅
    *   亮色：on-accent(#052E16) ON accent-light(#86EFAC) = 10.62:1 ✅
-   *   亮色 hover：on-accent(#052E16) ON accent-hover(#97F1B6) = 11.08:1 ✅
+   *   暗色 hover：on-accent-dark(#090D1A) ON accent-hover(#67EB92) = 12.80:1 ✅
+   *   亮色 hover：on-accent(#052E16) ON accent-hover(#79DD9C) = 8.97:1 ✅
    *   注：亮色模式按钮文字用 --ref-on-accent（深绿黑），非白色；白色 ON accent-light 仅 1.40:1 不达标
    *   独立复核（2026-09-01，oklch→linear-sRGB→gamma→luminance 独立计算）：
    *   亮色 CTA（on-accent ON accent-light）= 11.30:1 ✅，暗色 CTA = 7.36:1 ✅
    *   MC 时钟弧线用 --mcs-warning-fg / --mcs-info-fg，非 accent，亮暗观感已记录（mc-clock-card.tsx）
    * ── */
-  --ref-accent: var(--ref-success);               /* #4ADE80 亮暗同值（M3 Fixed 法） */
+  --ref-accent: var(--ref-success);               /* #4ADE80 亮暗同值（M3 Fixed 法）；与 success 同值是有意，别拆色 */
   --ref-accent-hover: oklch(0.8437 0.1702 151.71);/* 亮 5% */
   --ref-accent-light: oklch(0.8712 0.1363 154.45);/* #86EFAC 亮色底 */
   --ref-on-accent: oklch(0.2664 0.0628 152.93);   /* #052E16 深绿黑（亮色 accent 上的文字） */
-  --ref-on-accent-dark: oklch(0.1663 0.0262 269.37); /* 暗色 accent 上的文字 = 基面 */
+  --ref-on-accent-dark: oklch(0.1663 0.0262 269.37); /* 暗色 accent 上的文字（深色墨；主题无关） */
 
   /* ── 维度三色（Flutter 玩家页维度语义色 #4EC9B0/#F48771/#C586C0 的 OKLCH 等价；
         8px 色点小图形用途，暗底 ≥3:1）── */
@@ -102,8 +104,12 @@
   --ref-border-hairline-light: rgba(2, 6, 23, 0.08);
   --ref-border-hairline-light-subtle: rgba(2, 6, 23, 0.05);
 
+  /* ── 容器边（卡片/壳体/弹层外沿；强于发丝线、弱于交互边，承担容器轮廓）── */
+  --ref-border-container: rgba(255, 255, 255, 0.11);          /* 暗色：对 card 1.36:1 */
+  --ref-border-container-light: rgba(2, 6, 23, 0.12);         /* 亮色：对白 1.30:1 */
+
   /* ── 交互边框（WCAG 1.4.11 ≥3:1：输入框/按钮等组件边界；对卡片底实测达标）── */
-  --ref-border-interactive: rgba(255, 255, 255, 0.4);       /* 暗色：对 card 3.17:1 */
+  --ref-border-interactive: rgba(255, 255, 255, 0.36);      /* 暗色：对 card 3.32:1（最差 3.18，对弹层） */
   --ref-border-interactive-light: oklch(0.5544 0.0407 257.42); /* 亮色 #64748B：对白 4.57:1 */
 
   /* ── 状态层（M3 State Layer，与主色解耦）── */

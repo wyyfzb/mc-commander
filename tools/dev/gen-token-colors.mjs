@@ -1,14 +1,24 @@
 /**
  * token 色彩生成脚本
  * 用法：node tools/dev/gen-token-colors.mjs
- * 职责：hex → OKLCH 精确值；暗色中性层级以 WCAG 相对亮度区间二分生成
- *      （固定 H/C 只步进 L）；状态色容器底 12% alpha 混合；全部输出对照表。
- * 只打印对照表（不写文件）；人工核对后写入 apps/web/src/styles/tokens/reference.css。
+ * 职责：hex → OKLCH 精确值；暗色中性阶梯按定值 L/C 输出对照表；
+ *      状态色容器底 12% 混合对照。只打印，不写文件；人工核对后写入
+ *      apps/web/src/styles/tokens/reference.css。
  */
 import { oklch, wcagLuminance, wcagContrast } from 'culori'
 
 // ── 色值定值 ────────────────────────────────────────────────
-const DARK_BASE = '#0A0E1A' // 暗色基面（H≈220，偏蓝非纯黑）
+const DARK_BASE = '#050A1C' // 暗色基面（状态 tint 锚点）
+const DARK_H = 269.37
+// 暗色中性阶梯：L 逐档上行，C 随明度同步略升（低色度在暗部会读成灰）
+const DARK_TIERS = {
+  inset: { l: 0.09, c: 0.035 },
+  canvas: { l: 0.13, c: 0.038 },
+  base: { l: 0.15, c: 0.04 },
+  card: { l: 0.205, c: 0.042 },
+  secondary: { l: 0.245, c: 0.044 },
+  popover: { l: 0.285, c: 0.046 },
+}
 // 文字三级（2026-08-14 对比度校验驱动修正：default 提亮保弹窗 ≥4.5；muted 提亮保全层 ≥3:1）
 const TEXT_DARK = ['#EDF2F7', '#B8C4D4', '#64748B'] // default / muted / subtle
 const STATUS = {
@@ -19,16 +29,6 @@ const STATUS = {
   purple: '#A78BFA',
   orange: '#FB923C',
 }
-// 中性台阶：OKLCH L 步进（"明度 5-6% 基面"指 OKLCH L，非 WCAG 相对亮度）
-// 基面 L=0.166 → 背景 0.19 → 卡片 0.235 → 悬浮 0.28 → 弹窗 0.325（固定 H/C，等距上行）
-const TIER_L = {
-  background: 0.19,
-  card: 0.235,
-  hover: 0.28,
-  popover: 0.325,
-}
-// 装饰线参考 L 0.37（在卡片与弹窗之外，供 border 弱对比参考）
-const BORDER_L = 0.37
 
 const fmt = (c) => {
   const { l, c: cc, h } = oklch(c)
@@ -36,25 +36,17 @@ const fmt = (c) => {
   return `oklch(${l.toFixed(4)} ${cc.toFixed(4)} ${hh})`
 }
 
-// ── 暗色中性层级（OKLCH L 步进）───────────────────────────────
-const base = oklch(DARK_BASE)
-console.log('== 暗色中性层级（H/C 固定 =', base.h.toFixed(2), base.c.toFixed(4), '）==')
-console.log(
-  `base       ${DARK_BASE} -> ${fmt(DARK_BASE)}  相对亮度=${wcagLuminance(DARK_BASE).toFixed(4)}`,
-)
-const tierOklch = {}
-for (const [key, l] of Object.entries(TIER_L)) {
-  const color = { mode: 'oklch', l, c: base.c, h: base.h }
-  tierOklch[key] = color
-  console.log(`${key.padEnd(10)} ${fmt(color)}  L=${l} 相对亮度=${wcagLuminance(color).toFixed(4)}`)
+// ── 暗色中性阶梯 ────────────────────────────────────────────
+console.log('\n== 暗色中性阶梯（H=269.37，C 随 L 上行）==')
+for (const [key, { l, c }] of Object.entries(DARK_TIERS)) {
+  const color = { mode: 'oklch', l, c, h: DARK_H }
+  console.log(
+    `${key.padEnd(10)} ${fmt(color)}  L=${l} C=${c} 相对亮度=${wcagLuminance(color).toFixed(4)}`,
+  )
 }
-const border = { mode: 'oklch', l: BORDER_L, c: base.c, h: base.h }
-console.log(
-  `border      ${fmt(border)}  相对亮度=${wcagLuminance(border).toFixed(4)}（装饰线参考）`,
-)
 
 // ── 文字三级（暗底对比度实测）─────────────────────────────────
-console.log('\n== 文字三级（相对暗底 #0A0E1A 对比度）==')
+console.log(`\n== 文字三级（相对暗底 ${DARK_BASE} 对比度）==`)
 for (const [i, hex] of TEXT_DARK.entries()) {
   const name = ['default', 'muted', 'subtle(禁用/占位)'][i]
   console.log(
@@ -64,21 +56,19 @@ for (const [i, hex] of TEXT_DARK.entries()) {
 
 // ── 状态六色 ────────────────────────────────────────────────
 console.log('\n== 状态六色（相对暗底对比度 + 12% 容器底）==')
+const base = oklch(DARK_BASE)
 for (const [name, hex] of Object.entries(STATUS)) {
+  const s = oklch(hex)
   const contrast = wcagContrast(hex, DARK_BASE)
-  const mix = { mode: 'oklch', ...oklch(hex), alpha: 0.12 }
-  // 12% alpha 叠在基面上的等效实色（用于参考）
-  const layered = {
+  const dh = ((s.h - base.h + 540) % 360) - 180
+  const tint = {
     mode: 'oklch',
-    l: base.l * (1 - 0.12) + oklch(hex).l * 0.12 * 0.12,
-    c: oklch(hex).c * 0.12 * 0.4,
-    h: oklch(hex).h,
+    l: 0.12 * s.l + 0.88 * base.l,
+    c: 0.12 * s.c + 0.88 * base.c,
+    h: (base.h + dh * 0.12 + 360) % 360,
   }
   console.log(`${name.padEnd(10)} ${hex} -> ${fmt(hex)}  对比度=${contrast.toFixed(2)}:1`)
-  console.log(
-    `          容器底 oklch(${mix.l.toFixed(4)} ${mix.c.toFixed(4)} ${mix.h.toFixed(2)} / 0.12)`,
-  )
-  void layered
+  console.log(`          容器底 ${fmt(tint)}（色 12% 混基面）`)
 }
 
 // ── 亮色主题（独立映射，H=220 同色系）─────────────────────────

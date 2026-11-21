@@ -1,11 +1,11 @@
 /**
  * cn（tailwind-merge 配置）契约：字号 token 与语义色 token 同串时**都不得被吞**，
- * 已写出的行高类也不得被字号类静默删除。
+ * 已写出的行高类也不得被字号类静默删除；圆角 token 的基座/覆盖同理。
  *
  * 背景：twMerge 默认按前缀猜分组，`text-mcs-*-fg`（颜色）与 `text-mcs-xs`（字号）
  * 被它归入同一组，后写者挤掉前者（元素回落继承字号）。本用例是承重防线——
- * 它是唯一发现「新增字号档忘了登记进 utils.ts」的地方，故用真实 index.css
- * 里注册的 --text-mcs-* 驱动，避免用例与配置各写一份清单。
+ * 它是唯一发现「新增字号/圆角档忘了登记进 utils.ts」的地方，故用真实 index.css
+ * 里注册的 --text-mcs-* / --radius-mcs-* 驱动，避免用例与配置各写一份清单。
  */
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -32,6 +32,27 @@ function parseFontSizeClasses(css: string): string[] {
 const REGISTERED_FONT_SIZE_CLASSES = parseFontSizeClasses(INDEX_CSS)
 /** 语义色类取自词表，新增颜色档时守卫自动覆盖 */
 const COLOR_CLASSES = SEMANTIC_TONES.map((tone) => SEMANTIC_TONE_CLASSES[tone].text)
+
+const RADIUS_DECLARATION = /--radius-(mcs-[a-z0-9-]+)\s*:/g
+const REGISTERED_RADIUS_CLASSES = [...INDEX_CSS.matchAll(RADIUS_DECLARATION)].map(
+  (m) => `rounded-${m[1]}`,
+)
+
+describe('cn 圆角档不发散', () => {
+  it('解析到 index.css 注册的圆角 token（守卫本身有效）', () => {
+    expect(REGISTERED_RADIUS_CLASSES).toEqual([
+      'rounded-mcs-xs',
+      'rounded-mcs-sm',
+      'rounded-mcs-md',
+      'rounded-mcs-lg',
+    ])
+  })
+
+  it.each(REGISTERED_RADIUS_CLASSES)('%s 后写圆角覆盖时基座类被删掉', (radiusClass) => {
+    // 未登记词汇表时两个类并存，实际圆角由样式表顺序决定，调用点覆盖静默失效
+    expect(cn(radiusClass, 'rounded-mcs-xs')).toBe('rounded-mcs-xs')
+  })
+})
 
 describe('cn 字号/颜色不再互吞', () => {
   it('解析到 index.css 注册的字号 token（守卫本身有效）', () => {

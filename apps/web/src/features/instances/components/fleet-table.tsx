@@ -11,6 +11,7 @@
  * 摘要行是省略式状态行（以单位收尾），故 2xs 合规。
  */
 import { useNavigate } from 'react-router'
+import { Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { DataTableShell } from '@/components/mcs/data-table-shell'
 import { StatusPill } from '@/components/mcs/status-pill'
@@ -240,7 +241,8 @@ function FleetRowView({
             {label}
           </button>
           {isCurrent && (
-            <StatusPill tone="accent" className="shrink-0 text-mcs-2xs font-semibold">
+            <StatusPill tone="accent" className="shrink-0 gap-1 text-mcs-2xs font-semibold">
+              <Check className="size-3" aria-hidden />
               当前
             </StatusPill>
           )}

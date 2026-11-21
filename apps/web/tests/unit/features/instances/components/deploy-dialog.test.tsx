@@ -183,8 +183,8 @@ describe('DeployDialog', () => {
     const autoStartBanner = screen
       .getByText('已发送启动指令，服务器正在启动（状态可在仪表盘查看）')
       .closest('[role="status"]') as HTMLElement
-    expect(autoStartBanner.className).toContain('border-mcs-success-border')
-    expect(autoStartBanner.className).not.toContain('text-mcs-info-fg')
+    expect(autoStartBanner.className).toContain('border-l-mcs-success-fg')
+    expect(autoStartBanner.className).not.toContain('border-l-mcs-info-fg')
     expect(deployMock.lastBody?.eula).toBe(true)
     expect(eulaMock.calls).toBe(0)
     // 启动由服务端在部署收尾时完成，前端不得再发一次：

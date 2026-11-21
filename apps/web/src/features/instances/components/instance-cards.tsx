@@ -313,7 +313,7 @@ function InstanceCard({
         // （卡内名字虽有 truncate，但外层不松绑就轮不到它截断），窄屏下表现为卡片与引导块被挤出视口
         'mcs-edge-top relative flex min-w-0 flex-col gap-3 p-4',
         className,
-        isCurrent ? 'border-mcs-accent-border' : 'border-mcs-border-muted',
+        isCurrent ? 'border-mcs-accent-border' : 'border-mcs-border-container',
         detail?.circuitBreakerTripped && 'border-mcs-error-border',
       )}
     >
@@ -342,7 +342,8 @@ function InstanceCard({
           {name}
         </span>
         {isCurrent && (
-          <StatusPill tone="accent" className="text-mcs-2xs font-semibold">
+          <StatusPill tone="accent" className="gap-1 text-mcs-2xs font-semibold">
+            <CircleCheck className="size-3" aria-hidden />
             当前
           </StatusPill>
         )}

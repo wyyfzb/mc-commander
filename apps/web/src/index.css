@@ -28,6 +28,7 @@
     --color-mcs-text-default: var(--mcs-text-default);
     --color-mcs-text-muted: var(--mcs-text-muted);
     --color-mcs-border-default: var(--mcs-border-default);
+    --color-mcs-border-container: var(--mcs-border-container);
     --color-mcs-border-muted: var(--mcs-border-muted);
     --color-mcs-border-subtle: var(--mcs-border-subtle);
     --color-mcs-success-fg: var(--mcs-success-fg);
@@ -47,6 +48,7 @@
     --color-mcs-purple-bg-subtle: var(--mcs-purple-bg-subtle);
     --color-mcs-purple-border: var(--mcs-purple-border);
     --color-mcs-accent: var(--mcs-accent);
+    --color-mcs-accent-hover: var(--mcs-accent-hover);
     --color-mcs-on-accent: var(--mcs-on-accent);
     --color-mcs-accent-fg: var(--mcs-accent-fg);
     --color-mcs-accent-bg-subtle: var(--mcs-accent-bg-subtle);
@@ -85,7 +87,6 @@
     --radius-mcs-sm: var(--mcs-radius-sm);
     --radius-mcs-md: var(--mcs-radius-md);
     --radius-mcs-lg: var(--mcs-radius-lg);
-    --radius-mcs-xl: var(--mcs-radius-xl);
     /* 字号档（6 个文字档 + 1 个非文字数字档）：逐档配对行高，小档不再吃正文 1.6——
        配对写法见 Tailwind v4 `--text-<档>--line-height`；display 不配对（其消费点自身写
        leading-none，且字号类与 leading-* 的互斥已在 lib/utils.ts 解除） */
@@ -113,8 +114,6 @@
     --shadow-mcs-overlay: var(--mcs-shadow-overlay);
     --shadow-mcs-thumb: var(--mcs-shadow-thumb);
     --shadow-mcs-accent-button: var(--mcs-shadow-accent-button);
-    --shadow-mcs-glow-accent: var(--mcs-glow-accent);
-    --shadow-mcs-glow-accent-strong: var(--mcs-glow-accent-strong);
     --shadow-mcs-glow-error: var(--mcs-glow-error);
 }
 
@@ -149,8 +148,8 @@
     --color-card: var(--card);
     --color-foreground: var(--foreground);
     --color-background: var(--background);
-    /* 单轨：shadcn 派生档直接绑 MCS 圆角档位。原 calc 派生（7.2/9.6/16.8/31.2px）
-       无一落在 6/8/12/16/20 档上，且 2xl 以上随 --radius 无上限放大 → 统一封到 lg */
+    /* 单轨：shadcn 派生档直接绑 MCS 圆角档位（6/8/12/16）；2xl 以上统一封到 lg，
+       不再随 --radius 无上限放大 */
     --radius-sm: var(--mcs-radius-xs);   /* 6px */
     --radius-md: var(--mcs-radius-sm);   /* 8px */
     --radius-lg: var(--mcs-radius-md);   /* 12px */

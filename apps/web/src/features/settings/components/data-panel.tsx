@@ -102,7 +102,7 @@ export function DataPanel() {
   }
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-4">
       <MigrateDataSection items={dataQuery.data?.items ?? []} loading={dataQuery.isLoading} />
       <DangerZonePanel
         items={dataQuery.data?.items ?? []}

@@ -1,7 +1,8 @@
 /**
  * NoticeBanner —— 提示条的唯一容器（快照/截断/降级/告警/在途等非阻断提示）
- * 变体走 --mcs-* token：四档语义色是不透明 tint 容器底 + 同档文字；neutral 是无语义档
- * （边框/底/文字全取中性面），用于「在途」这类既非成功也非失败的状态。
+ * 容器面固定中性（容器描边 + 卡片底色），语义色只落在左缘 2px 导轨与图标上：
+ * 满宽四档 tint 会把整条横幅变成一块色斑，同屏多条时反而降低告警辨识。
+ * neutral 更彻底：连导轨也不给，用于「在途」这类既非成功也非失败的状态。
  * 级别：状态持续存在 ⇒ 常驻；一次性结果 ⇒ toast。
  *
  * 两形态由 `form` 选（条＝行内流 / 卡＝块级内容）。块级内容不得各自手写
@@ -10,10 +11,11 @@
  * 图标垂直对齐由形态决定：条是行内流、居中即可；卡会折行、必须贴首行。
  */
 import type { LucideIcon } from 'lucide-react'
+import { CircleAlert, CircleCheck, Info, TriangleAlert } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import { toneClasses, type SemanticTone } from '@/components/mcs/tone'
+import type { SemanticTone } from '@/components/mcs/tone'
 
 type NoticeTone = Extract<SemanticTone, 'info' | 'warning' | 'error' | 'success'>
 
@@ -24,13 +26,32 @@ type NoticeTone = Extract<SemanticTone, 'info' | 'warning' | 'error' | 'success'
  */
 type NoticeVariant = NoticeTone | 'neutral'
 
-const VARIANT_CLASSES: Record<NoticeVariant, string> = {
-  info: toneClasses('info'),
-  warning: toneClasses('warning'),
-  error: toneClasses('error'),
-  success: toneClasses('success'),
-  neutral: 'border-mcs-border-muted bg-mcs-bg-muted text-mcs-text-muted',
+/** 导轨与图标共用同档语义色：语义只在两处着色，容器面保持中性 */
+const TONE_RAILS: Record<NoticeTone, string> = {
+  info: 'border-l-mcs-info-fg',
+  warning: 'border-l-mcs-warning-fg',
+  error: 'border-l-mcs-error-fg',
+  success: 'border-l-mcs-success-fg',
 }
+
+const TONE_ICONS: Record<NoticeVariant, string> = {
+  info: 'text-mcs-info-fg',
+  warning: 'text-mcs-warning-fg',
+  error: 'text-mcs-error-fg',
+  success: 'text-mcs-success-fg',
+  neutral: 'text-mcs-text-muted',
+}
+
+/** 无语义档不配图标；语义档即使调用点不传 icon 也必须留下非颜色载体 */
+const DEFAULT_ICONS: Record<NoticeVariant, LucideIcon | null> = {
+  info: Info,
+  warning: TriangleAlert,
+  error: CircleAlert,
+  success: CircleCheck,
+  neutral: null,
+}
+
+const ROOT_CLASSES = 'border border-mcs-border-container bg-mcs-bg-muted text-mcs-text-default'
 
 /**
  * 形态档：按**内容是不是块级**选（行内流 / 块级），不按「重不重要」也不按「文本多长」——
@@ -66,19 +87,30 @@ interface NoticeBannerProps {
 
 export function NoticeBanner({
   variant,
-  icon: Icon,
+  icon,
   iconClassName,
   children,
   className,
   form = 'bar',
   role = 'status',
 }: NoticeBannerProps) {
+  const Icon = icon ?? DEFAULT_ICONS[variant]
   return (
     <div
       role={role}
-      className={cn('flex border', FORM_CLASSES[form], VARIANT_CLASSES[variant], className)}
+      className={cn(
+        'flex',
+        FORM_CLASSES[form],
+        ROOT_CLASSES,
+        // 侧边导轨必须排在 `border` 全边之后：twMerge 视后写者胜，反过来会把 2px 左轨吞掉
+        variant !== 'neutral' && 'border-l-2',
+        variant !== 'neutral' && TONE_RAILS[variant],
+        className,
+      )}
     >
-      {Icon && <Icon className={cn(ICON_CLASSES[form], iconClassName)} aria-hidden />}
+      {Icon && (
+        <Icon className={cn(ICON_CLASSES[form], TONE_ICONS[variant], iconClassName)} aria-hidden />
+      )}
       {/* min-w-0：文案成块折行，不与右侧动作抢行（否则动作挤进文本流产生孤字换行）。
           用 div 而非 span：card 形态的 children 是块级内容（标题 + 正文段），
           塞进 span 会形成 span>div 的无效嵌套；根节点本就是 flex 容器（div），
@@ -90,14 +122,14 @@ export function NoticeBanner({
 
 /**
  * 横幅内动作按钮的唯一配方（重试 / 重连 / 查看进度）。
- * 横幅坐在 tint 面上：透明底按钮会与面融成一片，故面换成实底页面面、悬停留中性。
+ * 横幅坐在中性容器面上：透明底按钮会与面融成一片，故面换成实底页面面、悬停留中性。
  *
  * 走中性描边档：横幅里的动作是「重试 / 去某页看」，不改变数据、不是危险操作。
  * 用危险色统一会让「查看进度」与「重连」同屏同级，用户分不出哪个是恢复动作；
  * 破坏性动作不放横幅里——那需要二次确认，归 ui/dialog。
  *
- * 文字色必须显式给：横幅本体带 `text-mcs-{tone}-fg`，按钮不声明就会继承成
- * 危险红——描边改中性而文字仍红，视觉上还是「危险操作」。
+ * 文字色必须显式给：按钮基座不声明文字色，会继承横幅根节点；显式中性让按钮配方
+ * 不随横幅语义色变化——按钮动作不是横幅语义的一部分。
  *
  * 面与边界都要带 `!`：outline 基座自带暗色档面 `bg-input/30` 与悬停边界
  * `hover:border-foreground/25`，两者选择器权重更高、产物里又排在后面。

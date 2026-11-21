@@ -36,7 +36,7 @@ const MAX_ITEMS = 3
 /** 备份页（侧栏一级项） */
 const BACKUP_PAGE = '/backups'
 
-export function RecentBackupsCard() {
+export function RecentBackupsCard({ embedded = false }: { embedded?: boolean }) {
   const instanceId = useServerStore((s) => s.instanceId)
   const navigate = useNavigate()
   const backupsQuery = useBackups(instanceId)
@@ -62,7 +62,11 @@ export function RecentBackupsCard() {
   return (
     <Card
       size="default"
-      className="animate-mcs-fade-up mcs-delay-6 mcs-edge-top relative flex shrink-0 flex-col gap-3"
+      surface={embedded ? 'plain' : 'card'}
+      className={cn(
+        'animate-mcs-fade-up mcs-delay-6 relative flex shrink-0 flex-col gap-3',
+        !embedded && 'mcs-edge-top',
+      )}
     >
       <CardHeader className="justify-between gap-2">
         <CardTitle>最近备份</CardTitle>

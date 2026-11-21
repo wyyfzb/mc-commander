@@ -3,7 +3,9 @@ import { cn } from '@/lib/utils'
 
 /**
  * Card —— 卡片容器基座（卡片容器的类名声明处）
- * 只承载「卡片面」本身（圆角 + 描边 + 卡片底色 + 卡阴影）；内距与内部布局由调用点按容器档位给。
+ * 只承载「卡片面」本身（圆角 + 容器描边 + 卡片底色 + 顶高光）；内距与内部布局由调用点按容器档位给。
+ * `surface="plain"` 不声明卡片面（无圆角/描边/底色/阴影），只保留内距与元素语义——
+ * 用于父级卡片内的分区：面由父卡承担，分区只负责内容与分隔线。
  *
  * **内距默认给（opt-out）**：不写 `size` 就是标准卡（`default`）。原因是「忘了给内距」这个
  * 缺陷形态在 opt-in 下**无门禁可拦**——正像素不违规、也不触发任何静态规则，而症状是文字贴着
@@ -14,11 +16,12 @@ import { cn } from '@/lib/utils'
  * 默认 `<section>`：本仓既有卡片容器绝大多数是 section（卡片是主题分组，不该降级为无语义块）；
  * 元素语义不同时用 `as` 声明（div/main/button），基座不替调用点改标签。
  *
- * 圆角固定 `rounded-mcs-md`：twMerge 未登记 `rounded-mcs-*` 词汇表（同 font-size 曾有过的缺陷），
- * 调用点传其它圆角档会两个类并存、胜负交给样式表顺序——需要非 md 圆角的卡片面先补词汇表。
+ * 圆角固定 `rounded-mcs-md`（容器档）：调用点不应传其他 `rounded-mcs-*`。
+ * `cn` 已登记圆角词汇表，传入会覆盖基座——这是 API 约定，不是类名胜负碰巧。
  */
 
-const CARD_SURFACE = 'rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted shadow-mcs-card'
+const CARD_SURFACE =
+  'rounded-mcs-md border border-mcs-border-container bg-mcs-bg-muted shadow-mcs-card'
 
 /**
  * 卡片内距档位表（唯一声明处）。只收**卡片自己的**档位——Card 承载的是卡片面，
@@ -47,6 +50,10 @@ interface CardProps {
   className?: string
   children?: ReactNode
   /**
+   * 面档：`card`（默认）声明卡片面；`plain` 只保留内距/语义，用于父卡内分区。
+   */
+  surface?: 'card' | 'plain'
+  /**
    * 内距档位：取值见 CARD_SIZE_CLASSES，**不传即标准卡**（默认给内距，见文件头）。
    * 真的不要内距的现场显式写 `flush`；className 里的 p-* 仍会覆盖它（twMerge）。
    */
@@ -69,6 +76,7 @@ interface CardProps {
 
 export function Card({
   as = 'section',
+  surface = 'card',
   size = 'default',
   className,
   children,
@@ -76,7 +84,10 @@ export function Card({
 }: CardProps) {
   const Tag = as as ElementType
   return (
-    <Tag className={cn(CARD_SURFACE, CARD_SIZE_CLASSES[size], className)} {...rest}>
+    <Tag
+      className={cn(surface === 'card' && CARD_SURFACE, CARD_SIZE_CLASSES[size], className)}
+      {...rest}
+    >
       {children}
     </Tag>
   )

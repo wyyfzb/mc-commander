@@ -21,7 +21,7 @@ function EntryLink({ to, label }: { to: string; label: string }) {
 
 export function IntegrationPanel() {
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-4">
       <SettingsSectionCard
         icon={BellRing}
         title="推送通知到外部"

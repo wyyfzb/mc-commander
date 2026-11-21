@@ -210,6 +210,16 @@ describe('InstanceCards', () => {
     expect(stoppedDot.classList.contains('bg-mcs-text-muted')).toBe(true)
   })
 
+  it('卡片外沿：当前实例 accent 边，非当前实例沿用容器边', () => {
+    const { container } = renderCards(<InstanceCards {...baseProps({ currentId: 'alpha' })} />)
+    const alphaCard = container.querySelector('[data-instance-id="alpha"]') as HTMLElement
+    const betaCard = container.querySelector('[data-instance-id="beta"]') as HTMLElement
+    expect(alphaCard.classList.contains('border-mcs-accent-border')).toBe(true)
+    expect(betaCard.classList.contains('border-mcs-border-container')).toBe(true)
+    // 非当前分支不得把基座的容器边覆盖回发丝线
+    expect(betaCard.classList.contains('border-mcs-border-muted')).toBe(false)
+  })
+
   it('实例固定色相标识：左缘色条逐卡按 id 取槽（类名钉死，映射漂移即红）', () => {
     const { container } = renderCards(<InstanceCards {...baseProps()} />)
     const alphaCard = container.querySelector('[data-instance-id="alpha"]') as HTMLElement
@@ -241,6 +251,9 @@ describe('InstanceCards', () => {
     renderCards(<InstanceCards {...baseProps({ currentId: 'alpha' })} />)
 
     expect(screen.getByText('当前')).toBeInTheDocument()
+    // accent 与 success 同为品牌绿：当前徽章必须有 Check 图标这一非颜色载体
+    const currentBadge = screen.getByText('当前').closest('[data-status-pill]') as HTMLElement
+    expect(currentBadge.querySelector('svg')).not.toBeNull()
     expect(screen.queryByRole('button', { name: '切换到 虚构甲服' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '切换到 虚构乙服' })).toBeInTheDocument()
   })

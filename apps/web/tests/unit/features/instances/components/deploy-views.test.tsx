@@ -58,9 +58,12 @@ describe('DeploySuccessView 自动启动状态块', () => {
   it('pending 走中性档：既非成功也非失败，不得染成任一语义色', () => {
     const { container } = renderWith('pending')
     const banner = autoStartBanner(container)
-    expect(banner.className).toContain('border-mcs-border-muted')
+    expect(banner.className).toContain('border-mcs-border-container')
     expect(banner.className).toContain('bg-mcs-bg-muted')
-    expect(banner.className).toContain('text-mcs-text-muted')
+    expect(banner.className).toContain('text-mcs-text-default')
+    // 中性档连左轨都不给：导轨是语义档的专属形状
+    expect(banner.className).not.toContain('border-l-2')
+    expect(banner.className).not.toContain('border-l-mcs-info-fg')
     // info 蓝是最像「合理」的错档（在途≈提示），特别钉死
     expect(banner.className).not.toContain('text-mcs-info-fg')
     expect(banner.className).not.toContain('bg-mcs-info-bg-subtle')
@@ -74,12 +77,12 @@ describe('DeploySuccessView 自动启动状态块', () => {
 
   it('ok 走 success 档、failed 走 warning 档，两档互不串色', () => {
     const ok = renderWith('ok')
-    expect(autoStartBanner(ok.container).className).toContain('border-mcs-success-border')
-    expect(autoStartBanner(ok.container).className).not.toContain('border-mcs-warning-border')
+    expect(autoStartBanner(ok.container).className).toContain('border-l-mcs-success-fg')
+    expect(autoStartBanner(ok.container).className).not.toContain('border-l-mcs-warning-fg')
 
     const failed = renderWith('failed')
-    expect(autoStartBanner(failed.container).className).toContain('border-mcs-warning-border')
-    expect(autoStartBanner(failed.container).className).not.toContain('border-mcs-success-border')
+    expect(autoStartBanner(failed.container).className).toContain('border-l-mcs-warning-fg')
+    expect(autoStartBanner(failed.container).className).not.toContain('border-l-mcs-success-fg')
   })
 
   it('autoStart=null（未勾选 EULA）不渲染状态块', () => {
@@ -92,9 +95,9 @@ describe('DeploySuccessView 自动启动状态块', () => {
     const banner = whitelistBanner(container)
 
     // 「还差一步」不是故障：与同屏「未同意 EULA」那条同档（info），不得落到 warning/error
-    expect(banner.className).toContain('border-mcs-info-border')
-    expect(banner.className).not.toContain('border-mcs-warning-border')
-    expect(banner.className).not.toContain('border-mcs-error-border')
+    expect(banner.className).toContain('border-l-mcs-info-fg')
+    expect(banner.className).not.toContain('border-l-mcs-warning-fg')
+    expect(banner.className).not.toContain('border-l-mcs-error-fg')
     // 单句走默认 bar 形态 ⇒ 正文档 xs；完整句子最低 xs，不得落到 2xs 角标档
     expect(banner.className).toContain('text-mcs-xs')
 
@@ -116,15 +119,15 @@ describe('DeploySuccessView 自动启动状态块', () => {
     expect(order & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
-  it('autoStart=null 时同屏两条 info 档横幅靠图标区分语义（同图标同 tint 会被读成一条两块）', () => {
+  it('autoStart=null 时同屏两条 info 档横幅靠图标区分语义（同图标同导轨会被读成一条两块）', () => {
     const { container } = renderWith(null)
     const eulaIcon = eulaBanner(container).querySelector('svg')?.outerHTML
     const whitelistIcon = whitelistBanner(container).querySelector('svg')?.outerHTML
     expect(eulaIcon).toBeTruthy()
     expect(whitelistIcon).toBeTruthy()
-    // 两条都是 info 蓝，颜色区分不了它们，唯一的区分手段就是图标语义
-    expect(eulaBanner(container).className).toContain('border-mcs-info-border')
-    expect(whitelistBanner(container).className).toContain('border-mcs-info-border')
+    // 两条导轨都是 info 蓝，颜色区分不了它们，唯一的区分手段就是图标语义
+    expect(eulaBanner(container).className).toContain('border-l-mcs-info-fg')
+    expect(whitelistBanner(container).className).toContain('border-l-mcs-info-fg')
     expect(whitelistIcon).not.toBe(eulaIcon)
   })
 })

@@ -213,7 +213,7 @@ export function AccountPanel() {
             </StatusPill>
           )}
           {sessionApplies && session?.expiresAt && (
-            <span className="inline-flex items-center gap-1 text-mcs-2xs text-mcs-text-muted">
+            <span className="inline-flex items-center gap-1 text-mcs-xs text-mcs-text-muted">
               <Clock className="size-3" aria-hidden />
               会话到期：{formatDateTime(session.expiresAt)}（活动自动续期）
             </span>
@@ -282,9 +282,7 @@ export function AccountPanel() {
                   />
                 ))}
               </div>
-              <p
-                className={`mt-1 text-mcs-2xs font-medium ${STRENGTH_TEXT_STYLES[strength.score]}`}
-              >
+              <p className={`mt-1 text-mcs-xs font-medium ${STRENGTH_TEXT_STYLES[strength.score]}`}>
                 新密码强度：{strength.label}
                 {strength.score > 0 && strength.score < 3 && '（建议混合大小写字母、数字与符号）'}
               </p>

@@ -34,7 +34,7 @@ export function SettingsSectionHeader({
       </div>
       <div>
         <h3 className="text-mcs-lg font-semibold text-mcs-text-default">{title}</h3>
-        <p className="mt-0.5 text-mcs-2xs text-mcs-text-muted">{description}</p>
+        <p className="mt-1 text-mcs-xs text-mcs-text-muted">{description}</p>
       </div>
     </div>
   )
@@ -51,7 +51,7 @@ export function SettingsSectionCard({
   children,
 }: SettingsSectionCardProps) {
   return (
-    <Card className="p-5 bg-mcs-bg-default">
+    <Card>
       <SettingsSectionHeader icon={icon} title={title} description={description} />
       {children}
     </Card>

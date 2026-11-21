@@ -91,9 +91,9 @@ function CommandInput({
   return (
     /* 左右缘与列表项对齐：Command 根 p-1（4px）+ 这里 mx-1 共 8px。
        w-auto 让宽度按含外距的盒子算，右缘才与左缘同得内距 */
-    <InputGroup className="mx-1 mt-1 w-auto bg-input">
+    <InputGroup className="mx-1 mt-1 w-auto">
       {/* 必须挂 InputGroup 的控制槽位（input-group-control）：基座的焦点配方
-          `has-[[data-slot=input-group-control]:focus-visible]:border-ring ring-3`
+          `has-[[data-slot=input-group-control]:focus-visible]:border-ring ring-2`
           与 border/bg 归一都按该 slot 生效。挂别的 slot 名匹配不到，就得在此手写
           内层 focus ring——它会在外框里再画出第二个方框（一个输入框看着套了多层） */}
       <CommandPrimitive.Input

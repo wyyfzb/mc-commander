@@ -9,7 +9,7 @@
  * mock 数据全部为测试占位（虚构内容，无真实服务器信息）。
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import userEvent from '@testing-library/user-event'
 import { TaskList, type TaskListProps } from '@/features/tasks/components/task-list'
@@ -87,6 +87,32 @@ describe('TaskList 渲染', () => {
     expect(timeRows[2]?.textContent).toContain('下次运行: 从未')
   })
 
+  it('卡内摘要：启用计数、最早启用任务的下次执行、最近一次执行与结果', () => {
+    vi.useFakeTimers({ now: Date.now() })
+    renderList()
+    const summary = screen.getByTestId('task-summary')
+    expect(within(summary).getByText('2/3')).toBeInTheDocument()
+    // 下次执行取最早（2h），不是最晚（8h）；倒计时与时间行同源
+    const nextCountdown = formatNextRunCountdown(mockTasks[0]!.nextRunAt, Date.now())!
+    expect(within(summary).getByText(nextCountdown)).toBeInTheDocument()
+    // 最近执行取最晚（任务 1 的 24h 前），并带结果标记
+    expect(within(summary).getByText(formatTaskDate(mockTasks[0]!.lastRunAt))).toBeInTheDocument()
+    expect(within(summary).getByText('成功')).toBeInTheDocument()
+  })
+
+  it('启用任务没有可解析的下次执行时间：摘要说未排期，不误报「无启用任务」', () => {
+    renderList({ tasks: [{ ...mockTasks[0]!, nextRunAt: null }] })
+    const summary = screen.getByTestId('task-summary')
+    expect(within(summary).getByText('未排期')).toBeInTheDocument()
+    expect(within(summary).queryByText('无启用任务')).not.toBeInTheDocument()
+  })
+
+  it('没有任何启用任务：摘要才说「无启用任务」', () => {
+    renderList({ tasks: [{ ...mockTasks[0]!, isEnabled: false, nextRunAt: null }] })
+    const summary = screen.getByTestId('task-summary')
+    expect(within(summary).getByText('无启用任务')).toBeInTheDocument()
+  })
+
   it('类型徽章与图标使用 tone token 类（restart → warning）', () => {
     renderList()
     const badge = screen.getByText('重启')
@@ -119,14 +145,15 @@ describe('TaskList 上次运行结果标记', () => {
     renderList({ tasks: [task] })
   }
 
-  it('success → 显示成功标记', () => {
+  it('success → 行内显示成功标记', () => {
     renderOneTask('success', new Date().toISOString())
-    expect(screen.getByText('成功')).toBeInTheDocument()
+    expect(within(screen.getByText(/^上次运行:/)).getByText('成功')).toBeInTheDocument()
   })
 
-  it('failed → 显示失败标记', async () => {
+  it('failed → 行内显示失败标记', async () => {
     renderOneTask('failed', new Date().toISOString())
-    expect(screen.getByText('失败')).toBeInTheDocument()
+    const timeRow = screen.getByText(/^上次运行:/)
+    expect(within(timeRow).getByText('失败')).toBeInTheDocument()
 
     // 失败原因浮层内容 break-all：无空格长串（压缩 JSON/路径）不溢出浮层框。
     // 点按而非 hover——解释走 Popover，键盘/触屏与鼠标必须走同一条路
@@ -135,9 +162,9 @@ describe('TaskList 上次运行结果标记', () => {
     expect(await screen.findByText('RCON 不可用')).toHaveClass('break-all')
   })
 
-  it('skipped → 显示跳过标记（warning 语义，备份互斥跳过）', () => {
+  it('skipped → 行内显示跳过标记（warning 语义，备份互斥跳过）', () => {
     renderOneTask('skipped', new Date().toISOString())
-    expect(screen.getByText('跳过')).toBeInTheDocument()
+    expect(within(screen.getByText(/^上次运行:/)).getByText('跳过')).toBeInTheDocument()
   })
 
   it('never（未运行）→ 不显示结果标记', () => {

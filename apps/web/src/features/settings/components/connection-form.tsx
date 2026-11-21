@@ -1,6 +1,6 @@
 /**
  * ConnectionForm —— 连接配置表单
- * - 设置页（settings）：顶部状态行（已连接=store ready → success 色调）+ 实底卡片表单
+ * - 设置页（settings）：顶部状态行（真实连通证据 → success 状态点）+ 中性容器表单
  * - onboarding：大标题布局（标题+副标题）复用同一表单，保存后由 onSaved 回调跳转
  * - 单输入语义：面板地址为含协议端口的完整 URL
  * - 公网 http 明文传输警告（needsHttpPlaintextWarning → ConfirmDialog danger，
@@ -56,7 +56,6 @@ import { useAuthStore } from '@/stores/auth'
 import { useServerStore } from '@/stores/server'
 import { useConnectionStore } from '@/stores/connection'
 import type { ConnectionFormProps } from './contracts'
-import { toneClasses } from '@/components/mcs/tone'
 
 /** 明文警告确认后待执行的挂起动作（null = 无弹窗） */
 type PendingAction = 'save' | 'test' | null
@@ -297,7 +296,7 @@ export function ConnectionForm({
       </NoticeBanner>
     ) : (
       <div className="flex flex-wrap items-center gap-2">
-        <code className="min-w-0 flex-1 truncate rounded-mcs-sm bg-mcs-bg-muted px-2.5 py-2 font-mono text-mcs-sm text-mcs-text-default">
+        <code className="min-w-0 flex-1 truncate rounded-mcs-sm bg-mcs-bg-inset px-2.5 py-2 font-mono text-mcs-sm text-mcs-text-default">
           {shareAddress}
         </code>
         <Button
@@ -603,12 +602,8 @@ export function ConnectionForm({
         </header>
       ) : (
         <div
-          className={cn(
-            'flex items-center gap-2 rounded-mcs-md border px-4 py-3',
-            isConnected
-              ? toneClasses('success')
-              : 'border-mcs-border-muted bg-mcs-bg-muted text-mcs-text-muted',
-          )}
+          role="status"
+          className="flex items-center gap-2 rounded-mcs-sm border border-mcs-border-container bg-mcs-bg-subtle px-4 py-2.5"
         >
           <span
             className={cn(
@@ -617,7 +612,7 @@ export function ConnectionForm({
             )}
             aria-hidden
           />
-          <span className="text-mcs-sm font-medium">{statusLabel}</span>
+          <span className="text-mcs-sm font-medium text-mcs-text-default">{statusLabel}</span>
           {isConnected && latencyMs != null && (
             <span className="text-mcs-2xs text-mcs-text-muted">连接正常 · 延迟 {latencyMs}ms</span>
           )}
@@ -626,11 +621,15 @@ export function ConnectionForm({
 
       {bare ? (
         // 调用方已有区块卡：这里只输出字段，不再套一层同款卡片面
-        <div className={cn('flex flex-col gap-5', variant === 'settings' && 'mt-4')}>
+        <div className={cn('flex flex-col gap-4', variant === 'settings' && 'mt-4')}>
           {formFields}
         </div>
       ) : (
-        <Card as="div" className={cn('flex flex-col gap-5 p-6', variant === 'settings' && 'mt-4')}>
+        <Card
+          as="div"
+          size="panel"
+          className={cn('flex flex-col gap-4', variant === 'settings' && 'mt-4')}
+        >
           {formFields}
         </Card>
       )}

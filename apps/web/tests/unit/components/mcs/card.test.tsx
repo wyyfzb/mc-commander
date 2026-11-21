@@ -1,20 +1,35 @@
 /**
  * Card 基座测试：
- * - 卡片面四件套类存在（圆角/描边/卡片底色/卡阴影）
+ * - 卡片面四件套类存在（圆角/容器描边/卡片底色/顶高光）
+ * - 圆角档位契约：微件 6 / 控件 8 / 容器 12；卡片内的控件不得与外层同档
  * - className 透传且不被吞（布局与内边距档位由调用点持有）
  * - className 可覆盖基座同名属性（底色/描边按内容语义走），被覆盖基座类不残留
  * - as 保留调用点元素语义（section/div/main/button）
  * - CardHeader/CardTitle/CardBody 子块：默认类、className 透传、CardTitle 层级与两个角色配方（字号/字重/文字色）
  * mock 数据全部为测试占位，无真实服务器信息
  */
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { render } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
+import { Button, buttonVariants } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { InputGroup, InputGroupButton, InputGroupInput } from '@/components/ui/input-group'
+import { Select, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Textarea } from '@/components/ui/textarea'
+import { cn } from '@/lib/utils'
 import { Card, CardBody, CardHeader, CardTitle, CARD_SIZE_CLASSES } from '@/components/mcs/card'
+
+const WEB_DIR = join(import.meta.dirname, '..', '..', '..', '..')
+
+function hasClass(el: HTMLElement, name: string) {
+  return el.classList.contains(name)
+}
 
 const SURFACE = [
   'rounded-mcs-md',
   'border',
-  'border-mcs-border-muted',
+  'border-mcs-border-container',
   'bg-mcs-bg-muted',
   'shadow-mcs-card',
 ]
@@ -26,6 +41,18 @@ describe('Card', () => {
     expect(el).not.toBeNull()
     for (const c of SURFACE) expect(el.classList.contains(c)).toBe(true)
     expect(el.textContent).toBe('内容')
+  })
+
+  it('surface="plain" 不声明卡片面：面由父卡承担，分区只留内距', () => {
+    const { container } = render(
+      <Card surface="plain" data-testid="plain">
+        x
+      </Card>,
+    )
+    const el = container.querySelector('[data-testid="plain"]') as HTMLElement
+    for (const c of SURFACE) expect(el.classList.contains(c), c).toBe(false)
+    // opt-out 只针对「面」，内距仍默认给：分区内容不能贴住父卡描边
+    expect(el.classList.contains(CARD_SIZE_CLASSES.default)).toBe(true)
   })
 
   it('className 透传：布局与内边距类与基座类共存，不被吞', () => {
@@ -43,7 +70,7 @@ describe('Card', () => {
     const el = container.querySelector('section') as HTMLElement
     expect(el.classList.contains('border-mcs-accent-border')).toBe(true)
     expect(el.classList.contains('bg-mcs-bg-default')).toBe(true)
-    expect(el.classList.contains('border-mcs-border-muted')).toBe(false)
+    expect(el.classList.contains('border-mcs-border-container')).toBe(false)
     expect(el.classList.contains('bg-mcs-bg-muted')).toBe(false)
     // 未冲突的基座类保留
     expect(el.classList.contains('rounded-mcs-md')).toBe(true)
@@ -194,5 +221,75 @@ describe('Card 子块', () => {
     const c = container.querySelector('[data-testid="c"]') as HTMLElement
     expect(c.classList.contains('px-4')).toBe(true)
     expect(c.classList.contains('py-3')).toBe(true)
+  })
+})
+
+/**
+ * 圆角档位契约：内嵌微件 6 / 控件 8 / 容器 12 / 弹层 16。
+ *
+ * 规则依据是嵌套圆角：内层半径必须小于外层。卡片是 12px，落在卡片里的
+ * input/button/select 若也是 12px，两圈角线会互相挤压；控件档因此固定在 8px。
+ * 本用例锁住基座档位，防止后续把某个控件单独改回容器档。
+ */
+describe('圆角档位', () => {
+  it('输入/多行输入/按钮/下拉/输入组基座都是控件档 8px', () => {
+    render(
+      <>
+        <Input aria-label="单行输入" />
+        <Textarea aria-label="多行输入" />
+        <Button>按钮</Button>
+        <InputGroup aria-label="输入组">
+          <InputGroupInput aria-label="组内输入" />
+        </InputGroup>
+        <Select value="a">
+          <SelectTrigger aria-label="下拉">
+            <SelectValue placeholder="选择" />
+          </SelectTrigger>
+        </Select>
+      </>,
+    )
+
+    expect(hasClass(screen.getByLabelText('单行输入'), 'rounded-mcs-sm')).toBe(true)
+    expect(hasClass(screen.getByLabelText('多行输入'), 'rounded-mcs-sm')).toBe(true)
+    expect(hasClass(screen.getByRole('button', { name: '按钮' }), 'rounded-mcs-sm')).toBe(true)
+    expect(hasClass(screen.getByRole('group', { name: '输入组' }), 'rounded-mcs-sm')).toBe(true)
+    expect(hasClass(screen.getByRole('combobox', { name: '下拉' }), 'rounded-mcs-sm')).toBe(true)
+  })
+
+  it('按钮的小档走 6 / 8，容器档只留给卡片：xs=6、sm=8、default=8', () => {
+    expect(buttonVariants({ size: 'xs' })).toContain('rounded-mcs-xs')
+    expect(buttonVariants({ size: 'sm' })).toContain('rounded-mcs-sm')
+    expect(buttonVariants({ size: 'default' })).toContain('rounded-mcs-sm')
+    expect(buttonVariants({ size: 'default' })).not.toContain('rounded-mcs-md')
+  })
+
+  it('输入组内嵌按钮比外层控件小一档（6 < 8）', () => {
+    render(
+      <InputGroup aria-label="输入组">
+        <InputGroupButton>内嵌按钮</InputGroupButton>
+      </InputGroup>,
+    )
+    const btn = screen.getByRole('button', { name: '内嵌按钮' })
+    expect(hasClass(btn, 'rounded-mcs-xs')).toBe(true)
+    expect(hasClass(btn, 'rounded-mcs-sm')).toBe(false)
+  })
+
+  it('token 表只有 4 档（6/8/12/16），没有 0 消费的 20px 保留档', () => {
+    const css = readFileSync(join(WEB_DIR, 'src/styles/tokens/semantic.css'), 'utf-8')
+    for (const [name, value] of [
+      ['xs', '6px'],
+      ['sm', '8px'],
+      ['md', '12px'],
+      ['lg', '16px'],
+    ] as const) {
+      expect(css).toContain(`--mcs-radius-${name}: ${value};`)
+    }
+    expect(css).not.toContain('--mcs-radius-xl')
+  })
+
+  it('cn 按后写者收敛圆角档：全边与分侧覆盖都不留双档', () => {
+    // 未登记词汇表时两个类会并存，实际圆角由样式表顺序决定——那正是基座失效的来源
+    expect(cn('rounded-mcs-sm', 'rounded-mcs-xs')).toBe('rounded-mcs-xs')
+    expect(cn('rounded-t-mcs-lg rounded-mcs-md', 'rounded-mcs-sm')).toBe('rounded-mcs-sm')
   })
 })

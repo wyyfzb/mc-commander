@@ -23,6 +23,14 @@ describe('EmptyState', () => {
     expect(screen.queryByRole('button')).not.toBeInTheDocument()
   })
 
+  it('图标底座是浮起块：次级面 + 容器描边 + 卡阴影，不掉回页面底', () => {
+    const { container } = render(<EmptyState icon={ServerOff} title="暂无数据" />)
+    const seat = container.querySelector('svg')?.parentElement as HTMLElement
+    expect(seat.className).toContain('bg-mcs-bg-secondary')
+    expect(seat.className).toContain('border-mcs-border-container')
+    expect(seat.className).toContain('shadow-mcs-card')
+  })
+
   it('CTA 渲染并触发 onClick', () => {
     const onClick = vi.fn()
     render(<EmptyState title="暂无服务器实例" action={{ label: '前往实例管理', onClick }} />)

@@ -17,6 +17,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { useSendCommand } from '@/hooks/use-send-command'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { Card, CardHeader, CardTitle } from '@/components/mcs/card'
+import { cn } from '@/lib/utils'
 import { primaryModifierLabel } from '@/lib/platform'
 import { usePanelPreferencesStore, writePreference } from '@/stores/panel-preferences'
 
@@ -45,7 +46,7 @@ function writePresets(presets: AnnouncementPreset[]) {
   })
 }
 
-export function AnnouncementCard() {
+export function AnnouncementCard({ embedded = false }: { embedded?: boolean }) {
   const [text, setText] = useState('')
   const [confirmOpen, setConfirmOpen] = useState(false)
   const { send, isRunning, sending } = useSendCommand()
@@ -108,7 +109,11 @@ export function AnnouncementCard() {
   return (
     <Card
       size="default"
-      className="animate-mcs-fade-up mcs-delay-6 mcs-edge-top relative flex shrink-0 flex-col"
+      surface={embedded ? 'plain' : 'card'}
+      className={cn(
+        'animate-mcs-fade-up mcs-delay-6 relative flex shrink-0 flex-col',
+        !embedded && 'mcs-edge-top',
+      )}
     >
       <CardHeader className="mb-2 gap-2">
         <CardTitle>公告发送</CardTitle>

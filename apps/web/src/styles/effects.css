@@ -88,9 +88,6 @@
 
 /* ── 卡片层手法 ── */
 
-/* CTA 实底：品牌翠绿同色相渐变（配合 shadow-mcs-accent-button 使用） */
-.mcs-bg-accent-gradient { background-image: var(--mcs-gradient-accent); }
-
 /* 顶部受光线：1px 渐变高光自左右边缘向中央增强（hero 卡强调用，避开圆角区） */
 .mcs-edge-top::before {
   content: '';

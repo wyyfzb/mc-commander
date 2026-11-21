@@ -128,23 +128,23 @@ test.describe('桌面端回归（B1 响应式不改桌面）', () => {
 })
 
 /**
- * R19：375 宽下仪表盘右栏完全不可达。
+ * 375 宽下仪表盘右栏必须可达。
  * 根因＝主栅格行 `min-h-0 flex-1` 在外层定高 flex 列里被收缩到 23.3px，行内
- * `flex-1` 的终端与 `<aside>` 一并塌陷（右栏只剩 3.6px、三张卡用户够不到）。
+ * `flex-1` 的终端与 `<aside>` 一并塌陷（右栏只剩 3.6px、三个分区用户够不到）。
  *
- * 可达性判据用**视口相交**（三卡 `toBeInViewport({ ratio: 0.5 })` + 与 `innerHeight`
+ * 可达性判据用**视口相交**（三个分区 `toBeInViewport({ ratio: 0.5 })` + 与 `innerHeight`
  * 的相交高度 > 0）：它直接断言「用户看得见」这一真实意图，并配合滚动后的公告输入框
  * 可交互断言。下方的盒子高度断言（`aside` 成块）**同样承重、勿删**——回退修法时实测
  * `aside` 为 343×0，高度断言与 `toBeVisible` 都会红；两条断言互补而非互相替代。
  */
-test.describe('仪表盘右栏窄屏可达', () => {
+test.describe('仪表盘右栏面板窄屏可达', () => {
   test.use({ viewport: { width: 375, height: 812 }, reducedMotion: 'reduce' })
 
-  test('375px：右栏三卡可达且公告卡可交互', async ({ page }) => {
+  test('375px：右栏面板三个分区可达且公告区可交互', async ({ page }) => {
     await setupConnection(page)
     await page.goto('/dashboard')
     // 就绪门：本用例量的是盒子高度与视口相交（**不可重试**断言），须等外壳挂载、字体就位
-    // 与异步内容落定——挂载未完成时主栅格高度还在变、字体回退会改字形盒与行高、右栏卡从
+    // 与异步内容落定——挂载未完成时主栅格高度还在变、字体回退会改字形盒与行高、右栏分区从
     // Skeleton 换数据时高度也会变，量早会读到未完成布局（同 dashboard.spec 的字体范式）。
     // 本 describe 关掉动效：`mcs-fade-up` 的 opacity/translate 会让盒子在动画期间偏移 10px，
     // 而 Playwright 的 visible 判定不排除 opacity:0；reduced-motion 是应用自身的降级路径
@@ -160,7 +160,7 @@ test.describe('仪表盘右栏窄屏可达', () => {
     expect(asideBox).not.toBeNull()
     expect(asideBox!.height).toBeGreaterThan(100)
 
-    // 三张右栏卡在 375 下各自成块
+    // 三个分区在 375 下各自成块
     const titles = ['MC 时钟 · 世界控制', '最近备份', '公告发送']
     const heights: number[] = []
     for (const title of titles) {
@@ -168,18 +168,18 @@ test.describe('仪表盘右栏窄屏可达', () => {
       await expect(heading).toBeVisible()
       const card = heading.locator('xpath=ancestor::section[1]')
       const box = await card.boundingBox()
-      expect(box, `${title} 卡片无 box`).not.toBeNull()
-      expect(box!.height, `${title} 卡片高度`).toBeGreaterThan(0)
+      expect(box, `${title} 分区无 box`).not.toBeNull()
+      expect(box!.height, `${title} 分区高度`).toBeGreaterThan(0)
       heights.push(box!.height)
     }
-    // 三卡都成块（不只是最后一张把行撑开）
+    // 三个分区都成块（不只是最后一个把行撑开）
     for (const h of heights) expect(h).toBeGreaterThan(100)
 
-    // 真正可达：逐卡滚到视野内并断言与视口有实际相交面积（裁剪掉时相交≈0）
+    // 真正可达：逐区滚到视野内并断言与视口有实际相交面积（裁剪掉时相交≈0）
     for (const title of titles) {
       const card = page.getByRole('heading', { name: title }).locator('xpath=ancestor::section[1]')
       await card.scrollIntoViewIfNeeded()
-      await expect(card, `${title} 卡片未进入视口`).toBeInViewport({ ratio: 0.5 })
+      await expect(card, `${title} 分区未进入视口`).toBeInViewport({ ratio: 0.5 })
       const visible = await card.evaluate((el) => {
         const r = el.getBoundingClientRect()
         return Math.min(r.bottom, window.innerHeight) - Math.max(r.top, 0)
@@ -187,7 +187,7 @@ test.describe('仪表盘右栏窄屏可达', () => {
       expect(visible, `${title} 视口内可见高度`).toBeGreaterThan(0)
     }
 
-    // 滚动到公告卡：真正够得到并可用（塌陷时 #announcement-input 滚不出来）
+    // 滚动到公告区：真正够得到并可用（塌陷时 #announcement-input 滚不出来）
     const input = page.getByLabel('公告内容')
     await input.scrollIntoViewIfNeeded()
     await expect(input).toBeVisible()

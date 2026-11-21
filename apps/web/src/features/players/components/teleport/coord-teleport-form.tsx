@@ -21,7 +21,9 @@ export function CoordTeleportForm({
 }: CoordTeleportFormProps) {
   return (
     <Section title="坐标传送">
-      <div className="flex items-end gap-2 rounded-mcs-sm border border-mcs-border-muted bg-mcs-bg-default p-3">
+      {/* 输入控件是 inset 填充面：宿主须是浮起面。玩家详情面板本身是画布，先用 muted 嵌块
+          把三个坐标框托起来，否则填充对画布只有 1.03:1，输入框只剩一条描边。 */}
+      <div className="flex items-end gap-2 rounded-mcs-md border border-mcs-border-container bg-mcs-bg-muted p-3">
         <div className="grid flex-1 grid-cols-3 gap-2">
           {(['x', 'y', 'z'] as const).map((axis) => (
             <CoordField

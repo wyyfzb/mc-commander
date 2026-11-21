@@ -404,7 +404,7 @@ export function ServerTerminal({
        与 dashboard-page 的分栏同档切到 min-h-0——分栏后终端改为吃满剩余高度 */
     <section
       data-testid="server-terminal"
-      className="@container animate-mcs-fade-up mcs-delay-4 flex min-h-[60vh] flex-1 flex-col overflow-hidden rounded-mcs-md border border-mcs-border-muted shadow-mcs-card @5xl:min-h-0"
+      className="@container animate-mcs-fade-up mcs-delay-4 flex min-h-[60vh] flex-1 flex-col overflow-hidden rounded-mcs-md border border-mcs-border-container shadow-mcs-card @5xl:min-h-0"
       style={{ background: 'var(--mcs-terminal-bg)' }}
     >
       {/* 工具栏（实底）。固定 h-10 且不换行 ⇒ 内联内容必须自己压成单行，
@@ -477,7 +477,7 @@ export function ServerTerminal({
           <div
             role="search"
             aria-label="终端内容搜索"
-            className="absolute right-2 top-2 z-(--mcs-z-local) flex items-center gap-1 rounded-mcs-md border border-mcs-border-muted bg-popover p-1 shadow-mcs-raised"
+            className="absolute right-2 top-2 z-(--mcs-z-local) flex items-center gap-1 rounded-mcs-md border border-mcs-border-container bg-popover p-1 shadow-mcs-raised"
           >
             <Input
               value={search.query}

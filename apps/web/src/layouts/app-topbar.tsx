@@ -161,7 +161,7 @@ export function AppTopBar() {
   ) : null
 
   return (
-    <header className="flex h-12 shrink-0 items-center gap-2 border-b border-mcs-border-muted bg-mcs-bg-default px-3">
+    <header className="flex h-12 shrink-0 items-center gap-2 border-b border-mcs-border-container bg-mcs-bg-default px-3">
       {/* 移动端导航抽屉开关（桌面侧栏开合在侧栏 Logo 上，见 app-sidebar） */}
       <IconButton onClick={toggleMobileNav} aria-label="打开导航菜单" className="md:hidden">
         <Menu aria-hidden />

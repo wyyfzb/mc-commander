@@ -16,7 +16,7 @@ import { GeneralPreferencesFields } from './general-preferences-fields'
 
 export function DevicePanel() {
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-4">
       <SettingsSectionCard
         icon={Laptop}
         title="面板连接"

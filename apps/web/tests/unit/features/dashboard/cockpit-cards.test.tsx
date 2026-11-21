@@ -21,7 +21,7 @@ import { mockInstanceStatus } from '@tests/support/handlers'
 import { usePanelPreferencesStore } from '@/stores/panel-preferences'
 
 /**
- * 驾驶舱右栏三卡组件测试：MC 时钟（纯函数 + 联动发送）/ 事件与待办（抽屉深链）/ 公告发送
+ * 驾驶舱右栏面板三分区组件测试：MC 时钟（纯函数 + 联动发送）/ 事件与待办（抽屉深链）/ 公告发送
  */
 
 const server = setupServer(...handlers)
@@ -102,6 +102,16 @@ describe('McClockCard 世界控制', () => {
     await waitFor(() =>
       expect(useTerminalStore.getState().buffer.some((e) => e.text === 'weather rain')).toBe(true),
     )
+  })
+
+  it('embedded：分区不再套一层卡片面，只保留内距（父面板承担面与圆角）', () => {
+    renderWithProviders(<McClockCard embedded />)
+    const root = screen
+      .getByRole('heading', { name: 'MC 时钟 · 世界控制' })
+      .closest('section') as HTMLElement
+    expect(root.className).not.toContain('shadow-mcs-card')
+    expect(root.className).not.toContain('bg-mcs-bg-muted')
+    expect(root.className).toContain('p-4')
   })
 
   it('实例停止时控件禁用', () => {

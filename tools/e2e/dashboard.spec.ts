@@ -28,10 +28,10 @@ async function setupConnection(page: Page) {
 }
 
 test.describe('仪表盘', () => {
-  test('统计卡渲染：顶部三卡 + 右栏三卡 + 健康标签 + 实时数据', async ({ page }) => {
+  test('统计卡渲染：顶部三卡 + 右栏面板三分区 + 健康标签 + 实时数据', async ({ page }) => {
     await setupConnection(page)
     await page.goto('/dashboard')
-    // 顶部三卡 + 右栏卡标题
+    // 顶部三卡 + 右栏三分区标题
     for (const title of [
       '在线玩家',
       '资源使用',

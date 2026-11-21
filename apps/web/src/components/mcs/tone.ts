@@ -21,6 +21,12 @@
 /** 语义档（六色）：有明确成败/告警含义，需要底+边+前景三者同色系 */
 export const SEMANTIC_TONES = ['accent', 'success', 'warning', 'error', 'info', 'purple'] as const
 
+/**
+ * accent 与 success 共用同一个品牌绿（--ref-accent = --ref-success）是有意决策：
+ * 另起一个绿会被读成第二种状态；「当前/选中」靠文案 + Check 图标/强档描边区分，
+ * 不靠色相。不要把 accent 拆成独立色值。
+ */
+
 export type SemanticTone = (typeof SEMANTIC_TONES)[number]
 
 export interface ToneClasses {

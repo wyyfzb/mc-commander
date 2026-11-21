@@ -194,6 +194,12 @@ for (const [scopeName, vars] of scopeEntries) {
 
   // 4. on-accent × accent（CTA 按钮文字 ≥4.5）
   check('on-accent on accent', contrastVarPair('--mcs-on-accent', '--mcs-accent', vars), 4.5)
+  // 4b. CTA hover 换底色后文字仍须可读（亮色 hover 是 color-mix，不是暗色档的直接复制）
+  check(
+    'on-accent on accent-hover',
+    contrastVarPair('--mcs-on-accent', '--mcs-accent-hover', vars),
+    4.5,
+  )
 
   // 5. accent-fg × 面（accent 做文字/图标 ≥4.5）
   {

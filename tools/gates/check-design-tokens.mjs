@@ -191,7 +191,10 @@ function parseTokenClass(raw) {
   const base = alphaMatch ? body.slice(0, -alphaMatch[0].length) : body
   const m = base.slice(base.lastIndexOf(':') + 1).match(/^([a-z-]+)-mcs-([a-z0-9-]+)$/)
   if (!m) return null
-  return { prefix: m[1], name: m[2], alpha: alphaMatch ? alphaMatch[1] : null }
+  // 侧边颜色类（border-l-* / border-s-*）与全边同角色：归一后再查注册集与角色矩阵，
+  // 否则合法的 `border-l-mcs-info-fg` 会被误报成「未注册」。
+  const prefix = m[1].replace(/^(border|divide|ring|outline)-[xytrblse]$/, '$1')
+  return { prefix, name: m[2], alpha: alphaMatch ? alphaMatch[1] : null }
 }
 
 /** 该 token 名是否颜色档（文字档/圆角档/动效档等同名前缀不算） */
@@ -1013,14 +1016,14 @@ for (const f of G9_FILES) {
   }
 }
 
-// 21. 卡片面类名只在 components/mcs/card.tsx 声明：配方 = rounded-mcs-md + border-mcs-border-muted
+// 21. 卡片面类名只在 components/mcs/card.tsx 声明：配方 = rounded-mcs-md + border-mcs-border-container
 //     + bg-mcs-bg-muted + shadow-mcs-card，以 `shadow-mcs-card`（卡阴影无第二用途）为判定标记；
 //     非卡片面但共用该标记的现场按「登记额度」豁免——额度外的第 N 处即报（豁免的是现场，不豁免
 //     整个文件）。额度是逐处核定的结果而非白名单：7 处里只有「同配方」与「仅共用卡阴影」两种来源，
 //     逐条理由见下表；新写一处卡面会被额度拒收，不因同文件已豁免而放过。
 const CARD_DECLARATION_SOURCE = 'src/components/mcs/card.tsx'
 const CARD_SURFACE_ALLOWLIST = new Map([
-  ['src/components/mcs/empty-state.tsx', 1], // 空态插画底座：ring-1 ring-mcs-border-muted 代 border，非卡片面配方
+  ['src/components/mcs/empty-state.tsx', 1], // 空态插画底座：bg-secondary + shadow-mcs-card 的图标座，不是卡片面
   ['src/layouts/app-sidebar.tsx', 1], // 侧栏实例摘要条：导航区部件，不是页面内容卡片
   ['src/features/dashboard/components/server-terminal.tsx', 1], // 终端深底面：底色走 --mcs-terminal-*（主题无关），无卡底色
   ['src/features/instances/components/instance-cards.tsx', 1], // 卡内数值栅格：rounded-mcs-sm + bg-mcs-bg-default，档位不同

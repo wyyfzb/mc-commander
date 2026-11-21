@@ -6,13 +6,13 @@ import { cn } from '@/lib/utils'
 import { TONE_SELECTED_CLASSES } from '@/components/mcs/tone'
 
 const buttonVariants = cva(
-  "group/button inline-flex shrink-0 items-center justify-center rounded-lg border border-transparent bg-clip-padding text-sm font-medium whitespace-nowrap transition select-none focus-visible:outline-2 focus-visible:outline-mcs-focus-ring focus-visible:outline-offset-2 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:outline-2 aria-invalid:outline-destructive/40 aria-invalid:outline-offset-2 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "group/button inline-flex shrink-0 items-center justify-center rounded-mcs-sm border border-transparent bg-clip-padding text-sm font-medium whitespace-nowrap transition select-none focus-visible:outline-2 focus-visible:outline-mcs-focus-ring focus-visible:outline-offset-2 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:outline-2 aria-invalid:outline-destructive/40 aria-invalid:outline-offset-2 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {
-        // CTA：翠绿同色相渐变 + 亮边高光 + 微辉光，hover 辉光增强（品牌克制：辉光仅 CTA）
+        // CTA：翠绿平涂 + 亮边高光；hover 只换底色，不叠辉光（品牌克制）
         default:
-          'mcs-bg-accent-gradient text-mcs-on-accent shadow-mcs-accent-button hover:shadow-mcs-glow-accent-strong',
+          'bg-mcs-accent text-mcs-on-accent shadow-mcs-accent-button hover:bg-mcs-accent-hover',
         outline:
           // 亮色主题用交互边框（--mcs-border-default）：--border 为 8% 发丝线，可交互元素边界不达标（独立审查必改项）
           'border-input bg-background hover:bg-muted hover:border-foreground/25 hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50',
@@ -41,14 +41,13 @@ const buttonVariants = cva(
       size: {
         default:
           'h-10 gap-1.5 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2',
-        xs: "h-6 gap-1 rounded-[min(var(--radius-md),10px)] px-2 text-xs in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3",
-        sm: "h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-mcs-xs in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5",
+        xs: "h-6 gap-1 rounded-mcs-xs px-2 text-xs in-data-[slot=button-group]:rounded-mcs-md has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3",
+        sm: "h-7 gap-1 rounded-mcs-sm px-2.5 text-mcs-xs in-data-[slot=button-group]:rounded-mcs-md has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5",
         lg: 'h-11 gap-1.5 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2',
         icon: 'size-10',
         'icon-xs':
-          "size-6 rounded-[min(var(--radius-md),10px)] in-data-[slot=button-group]:rounded-lg [&_svg:not([class*='size-'])]:size-3",
-        'icon-sm':
-          'size-7 rounded-[min(var(--radius-md),12px)] in-data-[slot=button-group]:rounded-lg',
+          "size-6 rounded-mcs-xs in-data-[slot=button-group]:rounded-mcs-md [&_svg:not([class*='size-'])]:size-3",
+        'icon-sm': 'size-7 rounded-mcs-sm in-data-[slot=button-group]:rounded-mcs-md',
         'icon-lg': 'size-11',
       },
     },

@@ -40,7 +40,7 @@ export function EmptyState({
       )}
     >
       {Icon && (
-        <span className="flex size-16 items-center justify-center rounded-mcs-md bg-mcs-bg-muted shadow-mcs-card ring-1 ring-mcs-border-muted">
+        <span className="flex size-16 items-center justify-center rounded-mcs-md border border-mcs-border-container bg-mcs-bg-secondary shadow-mcs-card">
           <Icon className="size-7 text-mcs-text-muted" aria-hidden />
         </span>
       )}

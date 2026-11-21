@@ -138,7 +138,7 @@ export function AppSidebar({ collapsed, mobileNavOpen, onMobileNavClose }: AppSi
           会改变交互语义）→ 保留宽度过渡，用 contain 把重排/重绘限制在侧栏内部 */}
       <aside
         className={cn(
-          'hidden h-full shrink-0 flex-col overflow-hidden border-r border-mcs-border-muted contain-[layout_paint] md:flex',
+          'hidden h-full shrink-0 flex-col overflow-hidden border-r border-mcs-border-container contain-[layout_paint] md:flex',
           'bg-mcs-bg-muted',
           'transition-[width] duration-mcs-base ease-mcs-snappy',
           collapsed ? 'w-14' : 'w-52',
@@ -172,7 +172,7 @@ export function AppSidebar({ collapsed, mobileNavOpen, onMobileNavClose }: AppSi
         <aside
           ref={mobileDrawerRef}
           className={cn(
-            'relative inset-y-0 left-0 flex w-64 flex-col border-r border-mcs-border-muted bg-mcs-bg-muted',
+            'relative inset-y-0 left-0 flex w-64 flex-col border-r border-mcs-border-container bg-mcs-bg-muted',
             'transition-transform duration-mcs-base ease-mcs-snappy',
             mobileNavOpen ? 'translate-x-0' : '-translate-x-full',
           )}
@@ -252,13 +252,11 @@ function SidebarBody(props: SidebarBodyProps) {
       {/* 实例迷你卡（原型 side-foot：当前实例 + TPS + 人数；仅展开态展示） */}
       {!isCollapsed && current && (
         <div className="border-t border-mcs-border-muted p-2.5">
-          <div className="flex items-center gap-2 rounded-mcs-md border border-mcs-border-muted bg-mcs-bg-muted px-2.5 py-2 shadow-mcs-card">
+          <div className="flex items-center gap-2 rounded-mcs-md border border-mcs-border-container bg-mcs-bg-muted px-2.5 py-2 shadow-mcs-card">
             <span
               className={cn(
                 'size-2 shrink-0 rounded-full',
-                current.isRunning
-                  ? 'bg-mcs-success-fg shadow-mcs-glow-accent'
-                  : 'bg-mcs-text-muted',
+                current.isRunning ? 'bg-mcs-success-fg' : 'bg-mcs-text-muted',
               )}
               aria-hidden
             />

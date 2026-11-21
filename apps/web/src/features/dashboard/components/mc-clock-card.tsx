@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Clock, CloudLightning, CloudRain, Cloudy, Moon, Sun, type LucideIcon } from 'lucide-react'
 import { worldTimePhase } from '@/lib/format'
+import { cn } from '@/lib/utils'
 import { Chip } from '@/components/mcs/chip'
 import { Card, CardHeader, CardTitle } from '@/components/mcs/card'
 import { useServerStore } from '@/stores/server'
@@ -61,7 +62,7 @@ const WEATHER_LABEL: Record<'clear' | 'rain' | 'thunder', { label: string; Icon:
   thunder: { label: '雷暴', Icon: CloudLightning },
 }
 
-export function McClockCard() {
+export function McClockCard({ embedded = false }: { embedded?: boolean }) {
   const status = useServerStore((s) => s.status)
   const { send, isRunning } = useSendCommand()
   // eslint-disable-next-line react/purity -- 幂等初值，StrictMode 双初始化仅差数毫秒，无可观察影响
@@ -143,7 +144,11 @@ export function McClockCard() {
   return (
     <Card
       size="default"
-      className="animate-mcs-fade-up mcs-delay-5 mcs-edge-top relative flex shrink-0 flex-col"
+      surface={embedded ? 'plain' : 'card'}
+      className={cn(
+        'animate-mcs-fade-up mcs-delay-5 relative flex shrink-0 flex-col',
+        !embedded && 'mcs-edge-top',
+      )}
     >
       <CardHeader className="justify-between gap-2">
         <CardTitle>MC 时钟 · 世界控制</CardTitle>

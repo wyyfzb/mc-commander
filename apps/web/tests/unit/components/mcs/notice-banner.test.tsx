@@ -1,24 +1,35 @@
 /**
- * NoticeBanner 语义色契约：四档变体的底/边/前景是同档三元组，档位不与语义名串色。
+ * NoticeBanner 语义色契约：四档语义只落在左缘导轨与图标，容器面始终中性；
  * 两形态（bar / card）的内距与图标对齐各一套，且 card 必须能承载块级 children。
- * 断言的是**类族契约**——「四档必须来自 tone.ts」由静态门禁（check-design-tokens）保证，
- * 本用例区分不了「调用 toneClasses」与「照抄一份恰好相同的字面量」
+ * 断言的是**类族契约**——「四档必须来自 token」由静态门禁（check-design-tokens）保证，
+ * 本用例区分不了「引用 token」与「照抄一份恰好相同的字面量」
  */
 import { describe, expect, it } from 'vitest'
 import { render } from '@testing-library/react'
-import { Loader2 } from 'lucide-react'
+import { Info, Loader2 } from 'lucide-react'
 import { NoticeBanner, NoticeBannerAction } from '@/components/mcs/notice-banner'
 
 const VARIANTS = ['info', 'warning', 'error', 'success'] as const
 
 describe('NoticeBanner', () => {
-  it('四档变体各带同档 border / bg-subtle / fg，且档位与语义名一致', () => {
+  it('四档变体各带同档导轨/图标，容器面保持中性', () => {
     for (const variant of VARIANTS) {
-      const { container } = render(<NoticeBanner variant={variant}>提示内容</NoticeBanner>)
+      const { container } = render(
+        <NoticeBanner variant={variant} icon={Info}>
+          提示内容
+        </NoticeBanner>,
+      )
       const el = container.firstElementChild as HTMLElement
-      expect(el.className, variant).toContain(`border-mcs-${variant}-border`)
-      expect(el.className, variant).toContain(`bg-mcs-${variant}-bg-subtle`)
-      expect(el.className, variant).toContain(`text-mcs-${variant}-fg`)
+      expect(el.className, variant).toContain('border-mcs-border-container')
+      expect(el.className, variant).toContain('bg-mcs-bg-muted')
+      expect(el.className, variant).toContain('text-mcs-text-default')
+      // 语义色只落在左缘导轨与图标两处，不得回到满宽内容面 tint
+      expect(el.className, variant).toContain('border-l-2')
+      expect(el.className, variant).toContain(`border-l-mcs-${variant}-fg`)
+      const icon = el.querySelector('svg') as SVGElement
+      expect(icon.getAttribute('class'), variant).toContain(`text-mcs-${variant}-fg`)
+      expect(el.className, variant).not.toContain(`bg-mcs-${variant}-bg-subtle`)
+      expect(el.className, variant).not.toContain(`text-mcs-${variant}-fg`)
     }
   })
 
@@ -55,16 +66,30 @@ describe('NoticeBanner', () => {
     expect(slot?.querySelector('div')).not.toBeNull()
   })
 
-  it('neutral 档三件套全取中性面，不带任何语义色', () => {
+  it('语义档不传 icon 时仍有默认图标：严重度不得只靠 2px 颜色轨', () => {
+    for (const variant of VARIANTS) {
+      const { container } = render(<NoticeBanner variant={variant}>提示</NoticeBanner>)
+      const root = container.firstElementChild as HTMLElement
+      const icon = root.querySelector('svg') as SVGElement
+      expect(icon, variant).not.toBeNull()
+      expect(icon.getAttribute('class'), variant).toContain(`text-mcs-${variant}-fg`)
+    }
+  })
+
+  it('neutral 档连导轨也不给，不带任何语义色', () => {
     // 在途态用它（正在启动/正在部署）：染成任一语义色都会读成「有消息要看」
     const { container } = render(<NoticeBanner variant="neutral">正在启动…</NoticeBanner>)
-    const cls = (container.firstElementChild as HTMLElement).className
-    expect(cls).toContain('border-mcs-border-muted')
+    const el = container.firstElementChild as HTMLElement
+    const cls = el.className
+    expect(cls).toContain('border-mcs-border-container')
     expect(cls).toContain('bg-mcs-bg-muted')
-    expect(cls).toContain('text-mcs-text-muted')
-    // 语义档一个都不许混进来（VARIANT_CLASSES 是按档取整串的，混入说明档表写错）
+    expect(cls).toContain('text-mcs-text-default')
+    expect(cls).not.toContain('border-l-2')
+    expect(el.querySelector('svg')).toBeNull()
+    // 语义档一个都不许混进来（档表是按档取整串的，混入说明档表写错）
     for (const tone of VARIANTS) {
       expect(cls, tone).not.toContain(`text-mcs-${tone}-fg`)
+      expect(cls, tone).not.toContain(`border-l-mcs-${tone}-fg`)
       expect(cls, tone).not.toContain(`bg-mcs-${tone}-bg-subtle`)
     }
   })
@@ -82,9 +107,8 @@ describe('NoticeBanner', () => {
     expect(root.className).not.toContain('animate-spin')
   })
 
-  it('横幅内动作按钮自带中性文字色，不继承横幅的语义前景', () => {
-    // 横幅根节点带 text-mcs-{tone}-fg；按钮不声明文字色就会继承成危险红，
-    // 描边改中性也没用——用户仍会把「重试」读成危险操作。
+  it('横幅内动作按钮显式中性文字色，不随横幅语义档变化', () => {
+    // 按钮基座不声明文字色，会继承横幅根节点；显式中性让按钮配方不随横幅语义色变化。
     const { container } = render(
       <NoticeBanner variant="error">
         <NoticeBannerAction onClick={() => {}}>重试</NoticeBannerAction>
@@ -94,7 +118,7 @@ describe('NoticeBanner', () => {
     const classes = new Set(btn.className.split(/\s+/))
     expect(classes.has('text-mcs-text-default')).toBe(true)
     expect(btn.className).not.toContain('text-mcs-error-fg')
-    // 面必须是实底页面面（横幅底是 tint，透明按钮会与它融成一片）
+    // 面必须是实底页面面（横幅底是中性容器面，透明按钮会与它融成一片）
     expect(classes.has('bg-mcs-bg-default!')).toBe(true)
     // 描边静止/悬停都固定中性档：基座的 hover:border-foreground/25 落到 error tint
     // 上实测 2.15:1（亮色 1.63:1），跌破交互边界 3:1
