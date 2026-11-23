@@ -44,8 +44,7 @@ import {
 } from '@/lib/second-factor'
 import { useAuthStore } from '@/stores/auth'
 import { useConnectionStore } from '@/stores/connection'
-import { useUiStore } from '@/stores/ui'
-import { useResolvedTheme } from '@/hooks/use-resolved-theme'
+import { changeThemeFrom, useResolvedTheme } from '@/hooks/use-resolved-theme'
 import {
   assessPasswordStrength,
   STRENGTH_BAR_STYLES,
@@ -94,7 +93,6 @@ export function LoginPage() {
   const [searchParams] = useSearchParams()
   const returnTo = searchParams.get('returnTo') ?? '/dashboard'
   const theme = useResolvedTheme()
-  const toggleTheme = useUiStore((s) => s.toggleTheme)
 
   const [phase, setPhase] = useState<Phase>('probing')
   const [baseUrlOpen, setBaseUrlOpen] = useState(false)
@@ -278,7 +276,7 @@ export function LoginPage() {
       {/* 主题切换（本地偏好，与会话无关；登录态外仍可调） */}
       <button
         type="button"
-        onClick={toggleTheme}
+        onClick={(event) => changeThemeFrom(event.currentTarget)}
         aria-label={theme === 'dark' ? '切换到亮色主题' : '切换到暗色主题'}
         className="absolute right-4 top-4 z-(--mcs-z-local) rounded-mcs-md p-2 text-mcs-text-muted transition-colors hover:bg-mcs-state-hover hover:text-mcs-text-default"
       >

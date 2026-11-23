@@ -79,13 +79,118 @@ test.describe('冒烟', () => {
     await expect(page).toHaveURL(/\/world/)
   })
 
-  test('主题切换：dark ↔ light 同步 html class', async ({ page }) => {
+  test('主题切换：从顶栏按钮和设置下拉框中心圆形扩散', async ({ page }) => {
     await setupConnection(page)
-    await page.goto('/')
-    await expect(page.locator('html')).toHaveClass(/dark/)
-    await page.getByRole('button', { name: /切换到亮色主题/ }).click()
-    await expect(page.locator('html')).toHaveClass(/light/)
+    await page.emulateMedia({ reducedMotion: 'no-preference' })
+    await page.goto('/settings/device')
+    const root = page.locator('html')
+    const theme = page.getByRole('combobox', { name: '界面主题' })
+    const topbar = page.getByRole('button', { name: '切换到亮色主题' })
+    await expect(root).toHaveClass(/dark/)
+    await expect(topbar).toBeVisible()
+
+    await page.evaluate(() => {
+      const start = document.startViewTransition.bind(document)
+      document.startViewTransition = (update) => {
+        const root = document.documentElement
+        const listClosed = !document.querySelector('[role=listbox]')
+        const activeRole = document.activeElement?.getAttribute('role') ?? ''
+        const transition = start(update)
+        void transition.ready.then(() => {
+          const animation = document
+            .getAnimations()
+            .find((item) => 'animationName' in item && item.animationName === 'mcs-theme-reveal')
+          if (animation) {
+            animation.pause()
+            animation.currentTime = 50
+          }
+          const style = getComputedStyle(root, '::view-transition-new(root)')
+          root.dataset.testReveal = JSON.stringify({
+            clip: style.clipPath,
+            duration: style.animationDuration,
+            listClosed,
+            activeRole,
+          })
+        })
+        return transition
+      }
+    })
+
+    const assertReveal = async (origin: {
+      x: number
+      y: number
+      width: number
+      height: number
+    }) => {
+      await expect(root).toHaveAttribute('data-test-reveal', /"clip":"circle\(/)
+      const { clip, duration, listClosed, activeRole } = JSON.parse(
+        (await root.getAttribute('data-test-reveal'))!,
+      )
+      const match = /circle\(([\d.]+)px at ([\d.]+)px ([\d.]+)px\)/.exec(clip)
+      expect(match).not.toBeNull()
+      const [radius, x, y] = match!.slice(1).map(Number)
+      expect(radius).toBeGreaterThan(0)
+      expect(x).toBeCloseTo(origin.x + origin.width / 2, 0)
+      expect(y).toBeCloseTo(origin.y + origin.height / 2, 0)
+      expect(duration).toBe('0.3s')
+      await maybeShot(page, `theme-reveal-${activeRole || 'button'}.png`)
+      await page.evaluate(() => {
+        delete document.documentElement.dataset.testReveal
+        for (const animation of document.getAnimations()) {
+          if ('animationName' in animation && animation.animationName === 'mcs-theme-reveal') {
+            animation.finish()
+          }
+        }
+      })
+      await expect(root).not.toHaveAttribute('data-theme-reveal')
+      return { listClosed, activeRole }
+    }
+
+    const buttonBounds = (await topbar.boundingBox())!
+    await topbar.click()
+    await assertReveal(buttonBounds)
+    await expect(root).toHaveClass(/light/)
+
+    await theme.scrollIntoViewIfNeeded()
+    const selectBounds = (await theme.boundingBox())!
+    await theme.click()
+    await page.getByRole('option', { name: '暗色' }).press('Enter')
+    expect(await assertReveal(selectBounds)).toEqual({ listClosed: true, activeRole: 'combobox' })
+    await expect(root).toHaveClass(/dark/)
+    await expect(theme).toBeFocused()
+
+    await topbar.click()
+    await expect(root).toHaveAttribute('data-test-reveal', /"clip":"circle\(/)
+    await expect(root).toHaveClass(/light/)
+    // 快照播放时仍可用键盘激活焦点控件。
+    await page.keyboard.press('Enter')
+    await expect(root).toHaveClass(/dark/)
   })
+
+  for (const fallback of ['减少动态', '不支持 API'] as const) {
+    test(`主题切换降级：${fallback}时直接换色`, async ({ page }) => {
+      await setupConnection(page)
+      if (fallback === '减少动态') {
+        await page.emulateMedia({ reducedMotion: 'reduce' })
+        await page.addInitScript(() => {
+          document.startViewTransition = () => {
+            document.documentElement.dataset.testUnexpectedTransition = ''
+            throw new Error('减少动态时不应请求快照')
+          }
+        })
+      } else {
+        await page.addInitScript(() => {
+          Object.defineProperty(document, 'startViewTransition', { value: undefined })
+        })
+      }
+      await page.goto('/')
+      const root = page.locator('html')
+      await page.getByRole('button', { name: '切换到亮色主题' }).click()
+      await expect(root).toHaveClass(/light/)
+      await expect(root).not.toHaveAttribute('data-test-unexpected-transition', '')
+      await expect(root).not.toHaveAttribute('data-theme-reveal')
+    })
+  }
 
   /* 跟随系统：偏好存 'system' 时配色由 prefers-color-scheme 决定，且系统切换后要即时换档
      （只读一次会让面板停在旧配色）。jsdom 的 matchMedia 是常量桩，这条只有真浏览器能锁。 */
@@ -126,6 +231,7 @@ test.describe('冒烟', () => {
 
     await page.getByRole('button', { name: /切换到亮色主题/ }).click()
     await expect(page.locator('html')).toHaveClass(/light/)
+    await expect(page.locator('html')).not.toHaveAttribute('data-theme-reveal')
     await maybeShot(page, 'dashboard-light.png')
 
     // 亮色命令面板 + 键盘选中态（设计审查必须修项复审：选中态可见性）

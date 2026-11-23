@@ -7,6 +7,36 @@
  *   - 消费 --mcs-* 语义 token，不引入新色值；reduced-motion 由 index.css 全局降级兜底
  */
 
+/* 主题快照只移动新配色的圆形边界，控件不再各自渐变颜色。 */
+:root[data-theme-reveal="capture"],
+:root[data-theme-reveal="capture"] *,
+:root[data-theme-reveal="capture"] *::before,
+:root[data-theme-reveal="capture"] *::after {
+  transition-property: none;
+}
+
+:root[data-theme-reveal]::view-transition {
+  pointer-events: none;
+}
+
+:root[data-theme-reveal]::view-transition-group(root),
+:root[data-theme-reveal]::view-transition-old(root),
+:root[data-theme-reveal]::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  :root[data-theme-reveal]::view-transition-new(root) {
+    animation: mcs-theme-reveal var(--mcs-motion-base) var(--mcs-ease-snappy) both;
+  }
+}
+
+@keyframes mcs-theme-reveal {
+  from { clip-path: circle(0 at var(--mcs-theme-reveal-x) var(--mcs-theme-reveal-y)); }
+  to { clip-path: circle(var(--mcs-theme-reveal-radius) at var(--mcs-theme-reveal-x) var(--mcs-theme-reveal-y)); }
+}
+
 /* ── 入场编排（both 保证 delay 期间保持初始不可见态）── */
 @keyframes mcs-fade-up {
   from { opacity: 0; transform: translateY(10px); }

@@ -7,6 +7,7 @@
  * 实例级配置（内存、JVM 参数、自动重启）不在这里，它们的写入口是 PUT /instances/:id。
  * 只出字段、不出卡片面：容器（区块卡）由调用点给，避免一个页面里两种卡片基座。
  */
+import { useRef } from 'react'
 import { Switch } from '@/components/ui/switch'
 import {
   Select,
@@ -15,19 +16,25 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { changeThemeFrom } from '@/hooks/use-resolved-theme'
 import { useUiStore, type ThemeMode } from '@/stores/ui'
 
 /** 三个浏览器本地偏好开关的字段本体（无卡片外观，供区块卡或整卡复用） */
 export function GeneralPreferencesFields() {
   const theme = useUiStore((s) => s.theme)
-  const setTheme = useUiStore((s) => s.setTheme)
+  const themeTrigger = useRef<HTMLButtonElement>(null)
+  const selectedTheme = useRef<ThemeMode | null>(null)
+  const themeSelectOpen = useRef(false)
   const terminalAutoScroll = useUiStore((s) => s.terminalAutoScroll)
   const setTerminalAutoScroll = useUiStore((s) => s.setTerminalAutoScroll)
   const confirmCommands = useUiStore((s) => s.confirmCommands)
   const setConfirmCommands = useUiStore((s) => s.setConfirmCommands)
 
   const handleThemeChange = (value: string) => {
-    setTheme(value as ThemeMode)
+    if (value === 'dark' || value === 'light' || value === 'system') {
+      if (themeSelectOpen.current) selectedTheme.current = value
+      else changeThemeFrom(themeTrigger.current, value)
+    }
   }
 
   return (
@@ -37,11 +44,27 @@ export function GeneralPreferencesFields() {
           <div className="text-mcs-sm font-semibold text-mcs-text-default">界面主题</div>
           <div className="mt-0.5 text-mcs-xs text-mcs-text-muted">跟随系统，或固定为暗色/亮色</div>
         </div>
-        <Select value={theme} onValueChange={handleThemeChange}>
-          <SelectTrigger className="w-28" aria-label="界面主题">
+        <Select
+          value={theme}
+          onValueChange={handleThemeChange}
+          onOpenChange={(open) => {
+            themeSelectOpen.current = open
+          }}
+        >
+          <SelectTrigger ref={themeTrigger} className="w-28" aria-label="界面主题">
             <SelectValue />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent
+            onCloseAutoFocus={(event) => {
+              const next = selectedTheme.current
+              selectedTheme.current = null
+              if (next === null) return
+              // Radix 关闭后先恢复焦点，再捕获旧配色；列表不会出现在过渡快照中。
+              event.preventDefault()
+              themeTrigger.current?.focus({ preventScroll: true })
+              changeThemeFrom(themeTrigger.current, next)
+            }}
+          >
             <SelectItem value="system">跟随系统</SelectItem>
             <SelectItem value="dark">暗色</SelectItem>
             <SelectItem value="light">亮色</SelectItem>

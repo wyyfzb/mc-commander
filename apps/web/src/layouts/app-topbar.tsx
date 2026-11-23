@@ -29,7 +29,7 @@ import { StatusIndicator, type IndicatorStatus } from '@/components/mcs/status-i
 import { toneClasses } from '@/components/mcs/tone'
 import { NotificationDrawer } from '@/layouts/notification-drawer'
 import { useUiStore } from '@/stores/ui'
-import { useResolvedTheme } from '@/hooks/use-resolved-theme'
+import { changeThemeFrom, useResolvedTheme } from '@/hooks/use-resolved-theme'
 import { useServerStore } from '@/stores/server'
 import { useInstanceStatus } from '@/api/queries'
 import { useInstanceSwitch } from '@/hooks/use-instance-switch'
@@ -53,7 +53,6 @@ import { instanceHueFillClass } from '@/lib/instance-hue'
 export function AppTopBar() {
   const navigate = useNavigate()
   const theme = useResolvedTheme()
-  const toggleTheme = useUiStore((s) => s.toggleTheme)
   const toggleMobileNav = useUiStore((s) => s.toggleMobileNav)
   const setCommandPaletteOpen = useUiStore((s) => s.setCommandPaletteOpen)
   const notificationsOpen = useUiStore((s) => s.notificationsOpen)
@@ -372,7 +371,7 @@ export function AppTopBar() {
         className="hidden xs:inline-flex"
         tooltip={theme === 'dark' ? '切换到亮色主题' : '切换到暗色主题'}
         tooltipSide="bottom"
-        onClick={toggleTheme}
+        onClick={(event) => changeThemeFrom(event.currentTarget)}
         aria-label={theme === 'dark' ? '切换到亮色主题' : '切换到暗色主题'}
       >
         {theme === 'dark' ? <Sun aria-hidden /> : <Moon aria-hidden />}

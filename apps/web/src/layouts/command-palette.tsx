@@ -37,7 +37,7 @@ import {
   CommandShortcut,
 } from '@/components/ui/command'
 import { useUiStore } from '@/stores/ui'
-import { useResolvedTheme } from '@/hooks/use-resolved-theme'
+import { changeThemeFrom, useResolvedTheme } from '@/hooks/use-resolved-theme'
 import { queryFailed } from '@/lib/query-phase'
 import { useCommandBus } from '@/stores/command-bus'
 import { useServerStore } from '@/stores/server'
@@ -75,7 +75,6 @@ export function CommandPalette() {
   const open = useUiStore((s) => s.commandPaletteOpen)
   const setOpen = useUiStore((s) => s.setCommandPaletteOpen)
   const theme = useResolvedTheme()
-  const toggleTheme = useUiStore((s) => s.toggleTheme)
   const navigate = useNavigate()
   // 双槽消费：仪表盘终端回显优先，否则全局执行器
   const overlayRunner = useCommandBus((s) => s.overlayRunner)
@@ -258,7 +257,7 @@ export function CommandPalette() {
     icon: theme === 'dark' ? Sun : Moon,
     keywords: 'theme 主题 暗色 亮色 dark light',
     run: () => {
-      toggleTheme()
+      changeThemeFrom(null)
       setOpen(false)
     },
   }
