@@ -14,9 +14,12 @@
  * - java-detector / db / config.serversDir（tmp 目录）：隔离宿主环境
  * - jar-download-guard / audit / validateBody：真实 import，语义原样
  */
-import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import crypto from 'crypto';
 import fs from 'fs';
+import os from 'node:os';
+import path from 'node:path';
+import { GAME_PORT_START, GAME_PORT_COUNT } from '@mc-commander/schemas';
 import express from 'express';
 import request from 'supertest';
 
@@ -27,27 +30,35 @@ const testState = vi.hoisted(() => ({
   mcCoreVersions: [],
   mcCoreThrow: false,
   dbCreateError: null,
+  dbInstances: new Map(),
+  runtimeChildren: new Set(),
 }));
 
 const httpState = vi.hoisted(() => ({ jsonTable: {}, streamImpl: null }));
 
 vi.mock('../src/db/index.js', () => ({
   InstanceModel: {
-    create: vi.fn(() => {
+    create: vi.fn(({ type, ...fields }) => {
       if (testState.dbCreateError) throw testState.dbCreateError;
+      testState.dbInstances.set(fields.id, { ...fields, modLoader: type });
+      return fields.id;
     }),
+    getAll: vi.fn(() => [...testState.dbInstances.values()]),
+    getById: vi.fn((id) => testState.dbInstances.get(id)),
+    migrateFromJson: vi.fn((config, serverPath) => {
+      if (testState.dbInstances.has(config.id)) return false;
+      testState.dbInstances.set(config.id, { ...config, serverPath, modLoader: config.type });
+      return true;
+    }),
+    delete: vi.fn((id) => testState.dbInstances.delete(id)),
+    addUptime: vi.fn(),
     update: vi.fn(),
   },
   AuditLogModel: { create: vi.fn() },
+  CommandHistoryModel: {},
 }));
 
-vi.mock('../src/config.js', async () => {
-  const fsp = await import('node:fs/promises');
-  const os = await import('node:os');
-  const path = await import('node:path');
-  testState.serversDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'mcs-deploy-chain-'));
-  return { default: { serversDir: testState.serversDir } };
-});
+vi.mock('../src/config.js', () => ({ default: { serversDir: null } }));
 
 vi.mock('../src/utils/java-detector.js', () => ({
   getRecommendedJavaVersion: vi.fn(() => '21'),
@@ -56,13 +67,8 @@ vi.mock('../src/utils/java-detector.js', () => ({
 
 // 面板自供 Java：本组只验证部署主链，不触达真实运行时下载
 vi.mock('../src/services/java-runtime.service.js', () => ({
-  ensureJavaRuntime: vi.fn(async () => '/usr/bin/java'),
+  ensureJavaRuntime: vi.fn(async () => 'java'),
 }));
-
-vi.mock('../src/services/mc_server.js', async () => {
-  const fsSync = await import('node:fs');
-  return { atomicWriteFile: (p, c) => fsSync.writeFileSync(p, c) };
-});
 
 vi.mock('child_process', async (importOriginal) => {
   const actual = await importOriginal();
@@ -70,12 +76,18 @@ vi.mock('child_process', async (importOriginal) => {
   return {
     ...actual,
     // 假 java/forge 进程：按 testState.spawnBehavior 决定退出/报错/挂起
-    spawn: vi.fn(() => {
+    spawn: vi.fn((_command, _args, options) => {
       const proc = new events.EventEmitter();
       proc.stdout = new events.EventEmitter();
       proc.stderr = new events.EventEmitter();
       proc.pid = 42424;
       proc.kill = vi.fn();
+      if (options.stdio) {
+        proc.stdin = new events.EventEmitter();
+        proc.stdin.write = vi.fn();
+        testState.runtimeChildren.add(proc);
+        return proc;
+      }
       if (testState.spawnBehavior === 'exit0') queueMicrotask(() => proc.emit('exit', 0));
       if (testState.spawnBehavior === 'exit1') queueMicrotask(() => proc.emit('exit', 1));
       if (testState.spawnBehavior === 'error') {
@@ -157,6 +169,9 @@ const { createServerJarRoutes } = await import('../src/routes/server-jar.js');
 const { ensureJavaRuntime } = await import('../src/services/java-runtime.service.js');
 const { InstanceModel, AuditLogModel } = await import('../src/db/index.js');
 const { errorHandler } = await import('../src/middleware/error_handler.js');
+const { default: config } = await import('../src/config.js');
+const { MCServerManager, MCServerInstance } = await import('../src/services/mc_server.js');
+const instanceIds = await import('../src/utils/instance-id.js');
 
 /** 注入假 jar 字节流的默认下载实现（可被单个用例覆写 httpState.streamImpl） */
 function defaultStreamImpl(jarBytes) {
@@ -180,25 +195,15 @@ const PAPER_URL = 'https://fill.papermc.io/v3';
 const JAR_BYTES = Buffer.from('fake-paper-server-jar-payload');
 const JAR_SHA256 = crypto.createHash('sha256').update(JAR_BYTES).digest('hex');
 
-/** 组装 app（与生产一致的路由 + 全局 errorHandler） */
+/** 组装真实部署路由和实例管理器，保留注册、运行态与事件转发。 */
 function buildApp() {
   const app = express();
+  const manager = new MCServerManager();
+  vi.spyOn(manager, 'emit');
   app.use(express.json());
-  // getInstance 供部署后的自动启动使用；按 id 返回同一个实例对象，
-  // 否则断言拿到的不是被调用过的那一个
-  const instanceById = new Map();
-  const mockManager = {
-    activeDeploys: new Map(),
-    emit: vi.fn(),
-    loadInstances: vi.fn(),
-    getInstance: vi.fn((id) => {
-      if (!instanceById.has(id)) instanceById.set(id, { start: vi.fn() });
-      return instanceById.get(id);
-    }),
-  };
-  app.use('/api', createServerJarRoutes(mockManager));
+  app.use('/api', createServerJarRoutes(manager));
   app.use(errorHandler);
-  return { app, manager: mockManager };
+  return { app, manager };
 }
 
 /** 从审计 mock 调用中取本次部署 instanceId（部署链路最早落库点） */
@@ -207,13 +212,6 @@ function lastDeployInstanceId() {
   return AuditLogModel.create.mock.calls[0][0].instanceId;
 }
 
-afterAll(async () => {
-  const fsp = await import('node:fs/promises');
-  if (testState.serversDir) {
-    await fsp.rm(testState.serversDir, { recursive: true, force: true });
-  }
-});
-
 beforeEach(() => {
   vi.clearAllMocks();
   testState.spawnBehavior = 'exit0';
@@ -221,15 +219,22 @@ beforeEach(() => {
   testState.mcCoreVersions = [];
   testState.mcCoreThrow = false;
   testState.dbCreateError = null;
+  testState.dbInstances.clear();
+  config.serversDir = testState.serversDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'mcs-deploy-chain-'),
+  );
   httpState.jsonTable = {};
   httpState.streamImpl = defaultStreamImpl(JAR_BYTES);
-  // 面板自供 Java：默认视为本机已满足，用例可覆盖
-  ensureJavaRuntime.mockImplementation(async () => '/usr/bin/java');
+  ensureJavaRuntime.mockResolvedValue('java');
+  vi.spyOn(MCServerInstance.prototype, '_detectPublicIp').mockResolvedValue(undefined);
 });
 
 afterEach(() => {
+  for (const child of testState.runtimeChildren) child.emit('exit', 0);
+  testState.runtimeChildren.clear();
   vi.restoreAllMocks();
   vi.useRealTimers();
+  fs.rmSync(testState.serversDir, { recursive: true, force: true });
 });
 
 describe('GET /versions 多核心版本分发', () => {
@@ -481,6 +486,226 @@ describe('POST /instances/deploy · loaderVersion 形态白名单', () => {
       // 上游夹具未就绪时是 502，此处只断言「没有被白名单拦下」
       expect(res.status).not.toBe(400);
     }
+  });
+});
+
+describe('POST /instances/deploy · 实例所有权', () => {
+  const id = 'vanilla-00000001';
+
+  beforeEach(() => {
+    testState.latestBuild = {
+      downloads: { application: { url: 'https://piston-data.mojang.com/jar/server.jar' } },
+    };
+  });
+
+  it('部署并启动新实例时，保留运行中实例的对象、进程句柄和日志转发', async () => {
+    const serverPath = path.join(testState.serversDir, id);
+    fs.mkdirSync(serverPath);
+    fs.writeFileSync(path.join(serverPath, 'server.jar'), JAR_BYTES);
+    fs.writeFileSync(path.join(serverPath, 'eula.txt'), 'eula=true\n');
+    testState.dbInstances.set(id, {
+      id,
+      name: '正在运行的实例',
+      jarFile: 'server.jar',
+      serverPath,
+      port: 25567,
+    });
+    const { app, manager } = buildApp();
+    const running = manager.getInstance(id);
+    running.start();
+    const child = running.process;
+    vi.spyOn(instanceIds, 'generateInstanceId').mockReturnValueOnce('vanilla-00000002');
+    const onLog = vi.fn();
+    manager.on('instance:log', onLog);
+
+    const res = await request(app).post('/api/instances/deploy').send({
+      type: 'vanilla',
+      mcVersion: '1.21.4',
+      instanceName: '新实例',
+      eula: true,
+    });
+
+    expect(res.status).toBe(200);
+    const deployed = manager.getInstance(res.body.data.id);
+    expect(deployed).toMatchObject({ name: '新实例', modLoader: 'vanilla', isRunning: true });
+    expect(deployed.process).not.toBe(child);
+    expect(manager.getInstance(id) === running, '新部署不得替换运行中的实例').toBe(true);
+    expect(manager.getRunningInstances().map((instance) => instance.id)).toEqual([
+      id,
+      res.body.data.id,
+    ]);
+    expect(manager.getInstance(id).process).toBe(child);
+    child.stdout.emit('data', Buffer.from('仍由面板接收的日志\n'));
+    expect(onLog).toHaveBeenCalledWith(
+      expect.objectContaining({ instanceId: id, text: '仍由面板接收的日志' }),
+    );
+  });
+
+  it('分配端口同时避开 DB 旧端口与磁盘上的实时 server-port', async () => {
+    const existingId = 'vanilla-00000003';
+    const existingPath = path.join(testState.serversDir, existingId);
+    fs.mkdirSync(existingPath);
+    fs.writeFileSync(
+      path.join(existingPath, 'server.properties'),
+      `server-port=${GAME_PORT_START + 1}\n`,
+    );
+    testState.dbInstances.set(existingId, {
+      id: existingId,
+      name: '端口已漂移的实例',
+      serverPath: existingPath,
+      port: GAME_PORT_START,
+    });
+    const { app, manager } = buildApp();
+    expect(manager.getInstance(existingId).properties['server-port']).toBe(
+      String(GAME_PORT_START + 1),
+    );
+    vi.spyOn(instanceIds, 'generateInstanceId').mockReturnValueOnce('vanilla-00000002');
+
+    const res = await request(app).post('/api/instances/deploy').send({
+      type: 'vanilla',
+      mcVersion: '1.21.4',
+      instanceName: '端口对账部署',
+    });
+
+    expect(res.status).toBe(200);
+    const deployedId = res.body.data.id;
+    // DB 记 25567、磁盘实时为 25568：两个都占用，新实例只能拿 25569
+    expect(InstanceModel.create).toHaveBeenCalledWith(
+      expect.objectContaining({ id: deployedId, port: GAME_PORT_START + 2 }),
+    );
+    expect(
+      fs.readFileSync(path.join(testState.serversDir, deployedId, 'server.properties'), 'utf8'),
+    ).toContain(`server-port=${GAME_PORT_START + 2}`);
+  });
+
+  it('DB 的 serverPath 过期时，按同名磁盘目录恢复实例', () => {
+    const existingId = 'vanilla-00000004';
+    const actualPath = path.join(testState.serversDir, existingId);
+    fs.mkdirSync(actualPath);
+    fs.writeFileSync(
+      path.join(actualPath, 'instance.json'),
+      JSON.stringify({ id: existingId, name: '磁盘旧配置', type: 'paper' }),
+    );
+    testState.dbInstances.set(existingId, {
+      id: existingId,
+      name: '数据库配置',
+      serverPath: path.join(testState.serversDir, '已搬走的旧目录'),
+      port: GAME_PORT_START + 4,
+    });
+
+    const { manager } = buildApp();
+    const instance = manager.getInstance(existingId);
+
+    expect(instance.serverPath).toBe(actualPath);
+    // 目录名只修正路径，配置仍以 DB 为准
+    expect(instance.name).toBe('数据库配置');
+    expect(InstanceModel.migrateFromJson).not.toHaveBeenCalled();
+  });
+
+  it('失败清理时目录删不掉：移除 instance.json，并在 502 响应中报告清理异常', async () => {
+    const deployedId = 'vanilla-00000006';
+    vi.spyOn(instanceIds, 'generateInstanceId').mockReturnValueOnce(deployedId);
+    const { app, manager } = buildApp();
+    vi.spyOn(manager, 'createInstance').mockImplementationOnce(() => {
+      throw new Error('register failed');
+    });
+    const instancePath = path.join(testState.serversDir, deployedId);
+    const actualRmSync = fs.rmSync.bind(fs);
+    const rmSpy = vi.spyOn(fs, 'rmSync').mockImplementation((target, options) => {
+      if (path.resolve(String(target)) === path.resolve(instancePath)) {
+        const err = new Error('EPERM: operation not permitted');
+        err.code = 'EPERM';
+        throw err;
+      }
+      return actualRmSync(target, options);
+    });
+
+    try {
+      const res = await request(app).post('/api/instances/deploy').send({
+        type: 'vanilla',
+        mcVersion: '1.21.4',
+        instanceName: '清理失败部署',
+      });
+
+      expect(res.status).toBe(502);
+      expect(res.body.message).toContain('register failed');
+      expect(res.body.details?.cleanup).toContain('实例目录未能删除');
+      // 目录可能因句柄占用删不掉，但恢复入口必须移除——否则重启会把它迁移成幽灵实例
+      expect(fs.existsSync(instancePath)).toBe(true);
+      expect(fs.existsSync(path.join(instancePath, 'instance.json'))).toBe(false);
+      expect(InstanceModel.delete).toHaveBeenCalledWith(deployedId);
+    } finally {
+      rmSpy.mockRestore();
+    }
+  });
+
+  it('生成的 ID 已被磁盘目录占用时，不接管或清理该目录', async () => {
+    vi.spyOn(instanceIds, 'generateInstanceId').mockReturnValue(id);
+    const serverPath = path.join(testState.serversDir, id);
+    fs.mkdirSync(serverPath);
+    fs.writeFileSync(path.join(serverPath, 'server.jar'), '既有实例文件');
+    const { app, manager } = buildApp();
+
+    const res = await request(app).post('/api/instances/deploy').send({
+      type: 'vanilla',
+      mcVersion: '1.21.4',
+      instanceName: '重名目录部署',
+    });
+
+    expect(res.status).toBe(409);
+    expect(fs.readFileSync(path.join(serverPath, 'server.jar'), 'utf8')).toBe('既有实例文件');
+    expect(InstanceModel.create).not.toHaveBeenCalled();
+    expect(manager.getInstance(id)).toBeUndefined();
+    expect(manager.emit).not.toHaveBeenCalled();
+  });
+
+  it('拒绝用同一 ID 重新注册实例', () => {
+    const { manager } = buildApp();
+    const instance = manager.createInstance({ id, name: '已登记', jarFile: 'server.jar' });
+
+    expect(() => manager.createInstance({ id, name: '待创建', jarFile: 'server.jar' })).toThrow(
+      expect.objectContaining({ code: 40919 }),
+    );
+    expect(manager.getInstance(id)).toBe(instance);
+  });
+
+  it('DB 已占用 ID 时，部署在取得目录前拒绝', async () => {
+    const { app } = buildApp();
+    testState.dbInstances.set(id, { id, name: '已登记' });
+    vi.spyOn(instanceIds, 'generateInstanceId').mockReturnValue(id);
+
+    const res = await request(app).post('/api/instances/deploy').send({
+      type: 'vanilla',
+      mcVersion: '1.21.4',
+      instanceName: '待创建',
+    });
+
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe(40919);
+    expect(AuditLogModel.create).not.toHaveBeenCalled();
+    expect(fs.readdirSync(testState.serversDir)).toEqual([]);
+  });
+
+  it('游戏端口段已分配完时，报告冲突而不留下半成品', async () => {
+    const { app } = buildApp();
+    InstanceModel.getAll.mockReturnValueOnce(
+      Array.from({ length: GAME_PORT_COUNT }, (_, i) => ({
+        id: `occupied-${i}`,
+        port: GAME_PORT_START + i,
+      })),
+    );
+
+    const res = await request(app).post('/api/instances/deploy').send({
+      type: 'vanilla',
+      mcVersion: '1.21.4',
+      instanceName: '无空闲端口',
+    });
+
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe(40920);
+    expect(res.body.message).toContain('请先卸载不用的实例');
+    expect(InstanceModel.create).not.toHaveBeenCalled();
+    expect(fs.readdirSync(testState.serversDir)).toEqual([]);
   });
 });
 
@@ -1015,10 +1240,10 @@ describe('POST /instances/deploy · 下载异常与核心回退', () => {
   });
 
   it('mkdirSync 失败 → 502 且不产生审计（受理前置失败）', async () => {
+    const { app, manager } = buildApp();
     const mkdirSpy = vi.spyOn(fs, 'mkdirSync').mockImplementationOnce(() => {
       throw new Error('EACCES: permission denied');
     });
-    const { app, manager } = buildApp();
 
     const res = await request(app)
       .post('/api/instances/deploy')
@@ -1031,20 +1256,32 @@ describe('POST /instances/deploy · 下载异常与核心回退', () => {
     expect(mkdirSpy).toHaveBeenCalled();
   });
 
-  it('InstanceModel.create 抛错 → 部署不阻断仍 200（DB 故障仅降级记录）', async () => {
+  it('写库失败时实例仍可管理并保留端口，面板重启可从磁盘恢复记录', async () => {
     testState.dbCreateError = new Error('SQLITE_BUSY: database is locked');
     testState.latestBuild = {
       downloads: { application: { url: 'https://piston-data.mojang.com/jar/server.jar' } },
     };
-    const { app } = buildApp();
+    const { app, manager } = buildApp();
+    const deploy = (instanceName) =>
+      request(app)
+        .post('/api/instances/deploy')
+        .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName });
 
-    const res = await request(app)
-      .post('/api/instances/deploy')
-      .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Db Busy Server' });
+    const first = await deploy('待恢复实例');
+    expect(first.status).toBe(200);
+    const { id } = first.body.data;
+    expect(first.body.data.warnings.join()).toContain('实例未能写入数据库');
+    expect(manager.getInstance(id).properties['server-port']).toBe('25567');
+    expect(InstanceModel.getById(id)).toBeUndefined();
 
-    expect(res.status).toBe(200);
-    expect(res.body.status).toBe('ok');
-    expect(fs.existsSync(`${testState.serversDir}/${res.body.data.id}/server.jar`)).toBe(true);
+    testState.dbCreateError = null;
+    const second = await deploy('另一实例');
+    expect(second.status).toBe(200);
+    expect(InstanceModel.getById(second.body.data.id).port).toBe(25568);
+
+    const restartedManager = new MCServerManager();
+    expect(restartedManager.getInstance(id).properties['server-port']).toBe('25567');
+    expect(InstanceModel.getById(id).port).toBe(25567);
   });
 });
 
@@ -1106,7 +1343,7 @@ describe('generateServerProperties 落盘契约', () => {
       jarFile: 'server.jar',
       maxMemory: '2G',
       minMemory: '1G',
-      javaPath: '/usr/bin/java',
+      javaPath: 'java',
     });
   });
 
@@ -1243,7 +1480,8 @@ describe('runFirstLaunch 首启行为', () => {
 
       expect(res.status).toBe(200);
       const inst = manager.getInstance(res.body.data.id);
-      expect(inst.start).toHaveBeenCalled();
+      expect(inst.isRunning).toBe(true);
+      expect(inst.process).not.toBeNull();
       expect(InstanceModel.update).toHaveBeenCalledWith(res.body.data.id, { status: 'running' });
     });
 
@@ -1259,7 +1497,8 @@ describe('runFirstLaunch 首启行为', () => {
 
       expect(res.status).toBe(200);
       const inst = manager.getInstance(res.body.data.id);
-      expect(inst.start).not.toHaveBeenCalled();
+      expect(inst.isRunning).toBe(false);
+      expect(inst.process).toBeNull();
     });
 
     it('自动启动失败不阻断部署（实例已建好，可手动点启动）', async () => {
@@ -1267,16 +1506,9 @@ describe('runFirstLaunch 首启行为', () => {
         downloads: { application: { url: 'https://piston-data.mojang.com/jar/server.jar' } },
       };
       const { app, manager } = buildApp();
-      // 让启动抛错
-      const origGet = manager.getInstance.bind(manager);
-      manager.getInstance = (id) => {
-        const inst = origGet(id);
-        if (inst)
-          inst.start = () => {
-            throw new Error('boom');
-          };
-        return inst;
-      };
+      vi.spyOn(MCServerInstance.prototype, 'start').mockImplementationOnce(() => {
+        throw new Error('测试启动失败');
+      });
 
       const res = await request(app)
         .post('/api/instances/deploy')
@@ -1287,6 +1519,7 @@ describe('runFirstLaunch 首启行为', () => {
       expect(res.body.data.started).toBe(false);
       expect(res.body.data.warnings.join()).toContain('未能自动启动');
       expect(res.body.data.warnings.join()).toContain('手动启动');
+      expect(manager.getInstance(res.body.data.id).isRunning).toBe(false);
     });
 
     it('启动成功时 started 为 true 且没有启动相关警告', async () => {

@@ -80,26 +80,11 @@ export class InstanceModel {
     const modLoader = instanceData.type ? capitalizeFirst(instanceData.type) : 'Vanilla';
     const port = instanceData.port !== undefined ? instanceData.port : 25565;
 
-    // 窄列 upsert：整行覆盖（INSERT OR REPLACE）在 id 冲突时先删后插，未列出的列
-    // （description/status/start_command/auto_start/auto_restart/total_uptime/
-    // jvm_args）会被静默清空或重置、created_at 被重置；这些列只由 update() 维护，
-    // create() 一律不得回退它们。范式与 db/admin.model.js 的窄列 UPDATE 一致。
     db.prepare(`
       INSERT INTO instances (
         id, name, mod_loader, jar_file, java_path, max_memory, min_memory,
         server_path, mc_version, port
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(id) DO UPDATE SET
-        name = excluded.name,
-        mod_loader = excluded.mod_loader,
-        jar_file = excluded.jar_file,
-        java_path = excluded.java_path,
-        max_memory = excluded.max_memory,
-        min_memory = excluded.min_memory,
-        server_path = excluded.server_path,
-        mc_version = excluded.mc_version,
-        port = excluded.port,
-        updated_at = CURRENT_TIMESTAMP
     `).run(
       instanceData.id,
       instanceData.name,
@@ -186,6 +171,15 @@ export class InstanceModel {
       return false;
     }
     this.create({ ...instanceConfig, serverPath });
+    // create 只写实例身份与启动所需的基础列；instance.json 里由设置页同步过来的
+    // 运行期偏好需要补一次 update，否则 DB 丢失后恢复出来的实例会回到默认值。
+    const restore = {};
+    for (const key of ['description', 'startCommand', 'jvmArgs', 'autoStart', 'autoRestart']) {
+      if (instanceConfig[key] !== undefined) restore[key] = instanceConfig[key];
+    }
+    if (Object.keys(restore).length > 0) {
+      this.update(instanceConfig.id, restore);
+    }
     return true;
   }
 }

@@ -94,6 +94,7 @@ export function syncInstanceJson(instance) {
     const updated = {
       ...existing,
       name: instance.name ?? existing.name,
+      description: instance.description !== undefined ? instance.description : existing.description,
       type: instance.modLoader ?? existing.type,
       mcVersion: instance.mcVersion ?? existing.mcVersion,
       jarFile: instance.jarFile ?? existing.jarFile,
@@ -102,6 +103,8 @@ export function syncInstanceJson(instance) {
       javaPath: instance.javaPath ?? existing.javaPath,
       startCommand: instance.startCommand ?? null,
       jvmArgs: instance.jvmArgs ?? null,
+      autoStart: instance.autoStart ?? existing.autoStart,
+      autoRestart: instance.autoRestart ?? existing.autoRestart,
     };
     atomicWriteFile(configPath, JSON.stringify(updated, null, 2));
   } catch (e) {
@@ -119,49 +122,15 @@ export class MCServerManager extends EventEmitter {
     // 服务重启即失效——重启本身会中断未完成的长任务，无需持久化。
     this.activeDeploys = new Map();
     this.activeUpgrades = new Map();
-    this.loadInstances();
+    this.#loadInstances();
   }
 
-  loadInstances() {
+  #loadInstances() {
     ensureDir(config.serversDir);
 
-    // 1. 从 SQLite 加载实例
-    let dbInstances = [];
-    try {
-      dbInstances = InstanceModel.getAll();
-      logger.info(`Loading ${dbInstances.length} instances from DB`);
-    } catch (e) {
-      logger.warn('Failed to load instances from DB, will try file system:', e.message);
-    }
-
-    // 2. 从 DB 加载到内存
-    for (const inst of dbInstances) {
-      try {
-        this.createInstance({
-          id: inst.id,
-          name: inst.name,
-          javaPath: inst.javaPath || 'java',
-          jarFile: inst.jarFile,
-          maxMemory: inst.maxMemory || '2G',
-          minMemory: inst.minMemory || '1G',
-          serverPath: inst.serverPath || path.join(config.serversDir, inst.id),
-          startCommand: inst.startCommand,
-          jvmArgs: inst.jvmArgs,
-          autoRestart: inst.autoRestart,
-          autoStart: inst.autoStart,
-          mcVersion: inst.mcVersion,
-          modLoader: inst.modLoader,
-        });
-        logger.info(`Loaded instance from DB: ${inst.id}`);
-      } catch (e) {
-        logger.error(`Failed to load DB instance ${inst.id}:`, e);
-      }
-    }
-
-    // 3. 迁移文件系统中的旧实例（instance.json 存在但 DB 无记录）
-    // readdirSync 即判定：serversDir 已在方法起手 ensureDir 建好，故不做 existsSync
-    // 预检（预检也护不住紧随其后的 readdir——它不在预检的保护范围内）；极端并发
-    // 删除下 readdir 抛 ENOENT，语义等价于「没有旧实例可迁移」
+    // 先读磁盘上的 instance.json：目录名决定实例的真实 serverPath，DB 记录提供其余
+    // 配置。DB 的 server_path 可能是旧路径，不能让它把实例指到另一个目录。
+    const jsonInstances = new Map();
     let dirs;
     try {
       dirs = fs
@@ -178,63 +147,68 @@ export class MCServerManager extends EventEmitter {
 
       try {
         const instanceConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-
-        // 已迁移标记，跳过
-        if (instanceConfig.migrated === true) {
-          // 如果 DB 中没有但已标记迁移，说明 DB 记录被删除了，重新迁移
-          const dbRecord = InstanceModel.getById(instanceConfig.id);
-          if (dbRecord) {
-            // 已在 DB 中，确保内存中也加载
-            if (!this.instances.has(instanceConfig.id)) {
-              this.createInstance({
-                ...instanceConfig,
-                serverPath: path.join(config.serversDir, dir.name),
-              });
-              logger.info(`Loaded migrated instance: ${instanceConfig.id}`);
-            }
-            continue;
-          }
-          // DB 无记录但已标记迁移，移除标记重新迁移
-          delete instanceConfig.migrated;
+        if (!instanceConfig || typeof instanceConfig.id !== 'string' || instanceConfig.id === '') {
+          throw new Error('instance.json 缺少有效 id');
         }
-
-        // 检查 DB 是否已有此实例
-        const existing = InstanceModel.getById(instanceConfig.id);
-        if (existing) {
-          // DB 已有记录，确保内存加载（避免重复）
-          if (!this.instances.has(instanceConfig.id)) {
-            this.createInstance({
-              ...instanceConfig,
-              serverPath: path.join(config.serversDir, dir.name),
-            });
-          }
-          // 标记为已迁移
-          instanceConfig.migrated = true;
-          atomicWriteFile(configPath, JSON.stringify(instanceConfig, null, 2));
-          continue;
-        }
-
-        // DB 无记录，执行迁移
-        logger.info(`Migrating instance ${instanceConfig.id} from JSON to DB...`);
-        const serverPath = path.join(config.serversDir, dir.name);
-        const migrated = InstanceModel.migrateFromJson(instanceConfig, serverPath);
-        if (migrated) {
-          // 确保内存加载
-          if (!this.instances.has(instanceConfig.id)) {
-            this.createInstance({
-              ...instanceConfig,
-              serverPath,
-            });
-          }
-          // 标记为已迁移
-          instanceConfig.migrated = true;
-          atomicWriteFile(configPath, JSON.stringify(instanceConfig, null, 2));
-          logger.info(`Migrated instance ${instanceConfig.id} to DB`);
+        // 同 id 多目录时取第一个：后续目录没有可认领的实例，不能覆盖已认领的路径。
+        if (!jsonInstances.has(instanceConfig.id)) {
+          jsonInstances.set(instanceConfig.id, {
+            config: instanceConfig,
+            serverPath: path.dirname(configPath),
+          });
         }
       } catch (e) {
-        logger.error(`Failed to load/migrate instance ${dir.name}:`, e);
+        logger.error(`Failed to read instance.json in ${dir.name}:`, e);
       }
     }
+
+    // 1. 从 SQLite 加载实例
+    let dbInstances = [];
+    try {
+      dbInstances = InstanceModel.getAll();
+      logger.info(`Loading ${dbInstances.length} instances from DB`);
+    } catch (e) {
+      logger.warn('Failed to load instances from DB, will try file system:', e.message);
+    }
+
+    // 2. 从 DB 加载到内存；磁盘有同名 instance.json 时，以目录为真实 serverPath
+    for (const inst of dbInstances) {
+      try {
+        this.#loadStoredInstance(inst, jsonInstances.get(inst.id)?.serverPath);
+        logger.info(`Loaded instance from DB: ${inst.id}`);
+      } catch (e) {
+        logger.error(`Failed to load DB instance ${inst.id}:`, e);
+      }
+    }
+
+    // 3. instance.json 只补回 DB 缺失的记录；DB 已有的配置始终优先
+    for (const [id, local] of jsonInstances) {
+      if (this.instances.has(id)) continue;
+
+      try {
+        const stored = InstanceModel.getById(id);
+        if (stored) {
+          this.#loadStoredInstance(stored, local.serverPath);
+          continue;
+        }
+        if (InstanceModel.migrateFromJson(local.config, local.serverPath)) {
+          this.createInstance({ ...local.config, serverPath: local.serverPath });
+          logger.info(`Recovered instance ${id} from instance.json`);
+        }
+      } catch (e) {
+        logger.error(`Failed to load/migrate instance ${id}:`, e);
+      }
+    }
+  }
+
+  #loadStoredInstance(instance, serverPath) {
+    return this.createInstance({
+      ...instance,
+      ...(serverPath ? { serverPath } : {}),
+      javaPath: instance.javaPath || 'java',
+      maxMemory: instance.maxMemory || '2G',
+      minMemory: instance.minMemory || '1G',
+    });
   }
 
   createInstance({
@@ -248,6 +222,9 @@ export class MCServerManager extends EventEmitter {
     modLoader,
     ...rest
   }) {
+    if (this.instances.has(id)) {
+      throw new AppError(ErrorCodes.INSTANCE_ID_CONFLICT);
+    }
     const instancePath = serverPath || path.join(config.serversDir, id);
     ensureDir(instancePath);
 
@@ -338,6 +315,7 @@ export class MCServerInstance extends EventEmitter {
   constructor({
     id,
     name,
+    description,
     javaPath,
     jarFile,
     maxMemory,
@@ -353,6 +331,7 @@ export class MCServerInstance extends EventEmitter {
     super();
     this.id = id;
     this.name = name;
+    this.description = description ?? null;
     this.javaPath = javaPath;
     this.jarFile = jarFile;
     this.maxMemory = maxMemory;
@@ -922,7 +901,7 @@ export class MCServerInstance extends EventEmitter {
     // → 实时推送配置补齐（写 management-server-* 三项，服务器启动时读）
     // → 启动命令/参数构建（四种来源优先级）
     // → spawn 与进程/stdin/输出/exit 监听器挂载 → 运行时状态初始化 → 收尾
-    // （熔断重置 → started 事件 → 定时存档）。必须按此顺序依次调用。
+    // （started 事件 → 定时存档）。
     this._ensureEulaAccepted();
     this._reconcileTempBansSafe();
     this._cleanWorldLock();

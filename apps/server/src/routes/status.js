@@ -429,6 +429,7 @@ export function createStatusRoutes(serverManager) {
       if (updates.maxMemory !== undefined) instance.maxMemory = updates.maxMemory;
       if (updates.minMemory !== undefined) instance.minMemory = updates.minMemory;
       if (updates.name !== undefined) instance.name = updates.name;
+      if (updates.description !== undefined) instance.description = updates.description;
       if (updates.jarFile !== undefined) instance.jarFile = updates.jarFile;
       if (updates.autoRestart !== undefined) instance.autoRestart = Boolean(updates.autoRestart);
       if (updates.autoStart !== undefined) instance.autoStart = Boolean(updates.autoStart);
@@ -834,7 +835,7 @@ export function createStatusRoutes(serverManager) {
       //    再 rmSync，Windows 句柄占用（杀软扫描 server.jar、资源管理器打开目录、
       //    日志文件被编辑器占用等）导致 rmSync 抛 EPERM（force:true 只吞 ENOENT
       //    不吞 EPERM）时删除已不可逆完成一半——实例已 404 客户端无法重试补偿，
-      //    实例目录残留，重启 loadInstances（mc_server.js）还会从残留的
+      //    实例目录残留，重启时实例恢复逻辑（mc_server.js）还会从残留的
       //    instance.json 迁移"复活"已卸载实例。文件删除失败直接抛错经 asyncHandler
       //    进入全局 errorHandler，此时内存与 DB 记录均未动 → 实例保留可重试。
       // 不做事前存在性判定：rmSync 的 force 已容忍 ENOENT，而「预检 + 删除」之间的
@@ -847,7 +848,7 @@ export function createStatusRoutes(serverManager) {
       //    记录否则成孤儿）。快照目录 backupsDir/<instanceId> 本身**不删**：它是
       //    实例数据的事实副本，卸载后仍需随磁盘留存供人工取回，磁盘回收由保留期
       //    孤儿清扫承接（services/backup-snapshot.service.js）；备份目录与实例
-      //    目录分离，删不删它都不影响实例是否被 loadInstances 复活。
+      //    目录分离，删不删它都不影响实例是否被实例恢复逻辑复活。
       BackupModel.deleteByInstance(req.params.id);
 
       // 6. 文件与备份记录全部清理成功后才从内存中移除

@@ -32,6 +32,9 @@ vi.mock('../src/db/index.js', () => ({
     create: vi.fn(() => {
       if (testState.dbCreateError) throw testState.dbCreateError;
     }),
+    getAll: vi.fn(() => []),
+    getById: vi.fn(),
+    update: vi.fn(),
   },
   AuditLogModel: { create: vi.fn() },
 }));
@@ -169,7 +172,13 @@ const JAR_SHA256 = crypto.createHash('sha256').update(JAR_BYTES).digest('hex');
 function buildApp() {
   const app = express();
   app.use(express.json());
-  const mockManager = { activeDeploys: new Map(), emit: vi.fn(), loadInstances: vi.fn() };
+  const mockManager = {
+    activeDeploys: new Map(),
+    instances: new Map(),
+    emit: vi.fn(),
+    getInstance: vi.fn(),
+    createInstance: vi.fn(() => ({ start: vi.fn() })),
+  };
   app.use('/api', createServerJarRoutes(mockManager));
   app.use(errorHandler);
   return { app, manager: mockManager };

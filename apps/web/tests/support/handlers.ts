@@ -29,6 +29,7 @@ import {
   instanceStatusSchema,
   taskRunHistorySchema,
   updateCheckResultSchema,
+  authPasswordChangeRequestBodySchema,
 } from '@mc-commander/schemas'
 
 /**
@@ -1345,7 +1346,27 @@ export const handlers = [
   ),
   // 登出 / 改密 / 踢单设备（结构占位）
   http.post('*/api/v1/auth/logout', () => ok({ ok: true })),
-  http.put('*/api/v1/auth/password', () => ok({ ok: true, kickedSessions: 2 })),
+  http.put('*/api/v1/auth/password', async ({ request }) => {
+    // 服务端会剥离未知字段；测试拒绝额外字段以锁定实际发送的 JSON。
+    const body = authPasswordChangeRequestBodySchema.strict().safeParse(await request.json())
+    if (!body.success) {
+      return HttpResponse.json(
+        {
+          status: 'error',
+          code: 40000,
+          message: body.error.issues.map(({ message }) => message).join('; '),
+          details: body.error.issues.map(({ path, code, message }) => ({
+            path: path.join('.'),
+            code,
+            message,
+          })),
+          timestamp: new Date().toISOString(),
+        },
+        { status: 400 },
+      )
+    }
+    return ok({ ok: true, kickedSessions: 2 })
+  }),
   http.delete('*/api/v1/auth/sessions/:id', () => ok({ ok: true, current: false })),
   // 两步验证状态（默认未启用；各用例按需覆写 enabled/剩余数量）
   http.get('*/api/v1/auth/totp/status', () =>

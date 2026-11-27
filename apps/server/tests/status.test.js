@@ -261,6 +261,7 @@ describe('Status Routes', () => {
         const instance = {
           id: 's2',
           name: 'S2',
+          description: '旧描述',
           modLoader: 'purpur',
           mcVersion: '1.21.9',
           startCommand: null,
@@ -268,19 +269,27 @@ describe('Status Routes', () => {
           maxMemory: null,
           minMemory: null,
           jarFile: 'server-1.21.9.jar',
+          autoStart: true,
+          autoRestart: false,
           serverPath: tmpDir,
           toStatus: () => ({ id: 's2' }),
         };
         mockManager.getInstance.mockReturnValue(asInstance(instance));
         InstanceModel.update.mockReturnValue({ changes: 1 });
 
-        const res = await request(app).put('/api/instances/s2').send({ name: 'Renamed' });
+        const res = await request(app)
+          .put('/api/instances/s2')
+          .send({ name: 'Renamed', description: '新描述' });
 
         expect(res.status).toBe(200);
         const synced = JSON.parse(fs.readFileSync(path.join(tmpDir, 'instance.json'), 'utf-8'));
         expect(synced.type).toBe('purpur');
         expect(synced.mcVersion).toBe('1.21.9');
         expect(synced.jarFile).toBe('server-1.21.9.jar');
+        expect(synced.description).toBe('新描述');
+        expect(synced.autoStart).toBe(true);
+        expect(synced.autoRestart).toBe(false);
+        expect(instance.description).toBe('新描述');
       } finally {
         fs.rmSync(tmpDir, { recursive: true, force: true });
       }

@@ -20,7 +20,7 @@ import request from 'supertest';
 const testState = vi.hoisted(() => ({ serversDir: null, latestBuild: {} }));
 
 vi.mock('../src/db/index.js', () => ({
-  InstanceModel: { create: vi.fn() },
+  InstanceModel: { create: vi.fn(), getAll: vi.fn(() => []), getById: vi.fn() },
   AuditLogModel: { create: vi.fn() },
 }));
 
@@ -114,7 +114,13 @@ const { errorHandler } = await import('../src/middleware/error_handler.js');
 function buildApp() {
   const app = express();
   app.use(express.json());
-  const mockManager = { activeDeploys: new Map(), emit: vi.fn(), loadInstances: vi.fn() };
+  const mockManager = {
+    activeDeploys: new Map(),
+    instances: new Map(),
+    emit: vi.fn(),
+    getInstance: vi.fn(),
+    createInstance: vi.fn(),
+  };
   app.use('/api', createServerJarRoutes(mockManager));
   app.use(errorHandler);
   return app;

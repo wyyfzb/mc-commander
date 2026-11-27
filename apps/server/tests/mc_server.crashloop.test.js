@@ -35,12 +35,12 @@ import { InstanceModel } from '../src/db/index.js';
 import { MCServerInstance } from '../src/services/mc_server.js';
 
 // 构造可受控派发事件的模拟 java 子进程
-function makeFakeProcess() {
+function makeFakeProcess(pid) {
   const proc = new EventEmitter();
   proc.stdout = new EventEmitter();
   proc.stderr = new EventEmitter();
   proc.stdin = { write: vi.fn(), on: vi.fn() };
-  proc.pid = 12345;
+  proc.pid = pid;
   proc.kill = vi.fn();
   return proc;
 }
@@ -72,10 +72,10 @@ describe('MCServerInstance - 进程异常退出与崩溃循环熔断', () => {
     vi.spyOn(MCServerInstance.prototype, '_detectPublicIp').mockResolvedValue(undefined);
     spawn.mockReset();
     spawn.mockImplementation(() => {
-      lastProc = makeFakeProcess();
+      lastProc = makeFakeProcess(12344 + spawn.mock.calls.length);
       return lastProc;
     });
-    instance = createInstance();
+    instance = createInstance({ autoRestart: true });
   });
 
   afterEach(() => {
@@ -191,62 +191,78 @@ describe('MCServerInstance - 进程异常退出与崩溃循环熔断', () => {
   });
 
   describe('崩溃循环熔断（crashLoop 300s 窗口 / 5 次阈值）', () => {
-    // 现状语义：start() 成功会清零计数，连续意外退出且期间无成功启动
-    // 才会累积到阈值——用 autoRestart=false 隔离重启清零路径，纯验证 exit 计数与熔断
-    async function crashNTimes(n) {
-      instance.autoRestart = false;
-      await instance.start();
-      const statuses = [];
-      instance.on('status', (s) => statuses.push(s));
-      for (let i = 0; i < n; i++) {
-        lastProc.emit('exit', 1);
+    async function crashAcrossRestarts(count) {
+      instance.start();
+      const counts = [];
+      for (let i = 0; i < count; i++) {
+        instance.process.emit('exit', 1);
+        counts.push(instance._consecutiveCrashes);
+        if (i + 1 < count) await vi.advanceTimersByTimeAsync(5000);
       }
-      return statuses;
+      return counts;
     }
 
-    it('连崩 5 次达阈值：熔断触发、autoRestart 持久化禁用', async () => {
-      const statuses = await crashNTimes(5);
-      const cb = statuses.find((s) => s.event === 'circuit_breaker');
-      expect(cb).toBeDefined();
-      expect(cb.consecutiveCrashes).toBe(5);
-      expect(cb.windowMs).toBe(300000);
+    it('窗口内 5 个进程相继崩溃：自动重启熔断并持久化禁用', async () => {
+      const statuses = [];
+      instance.on('status', (status) => statuses.push(status));
+
+      expect(await crashAcrossRestarts(5)).toEqual([1, 2, 3, 4, 5]);
+      expect(new Set(spawn.mock.results.map(({ value }) => value)).size).toBe(5);
+      expect(statuses.filter((status) => status.event === 'circuit_breaker')).toEqual([
+        { event: 'circuit_breaker', consecutiveCrashes: 5, windowMs: 300000 },
+      ]);
+      expect(
+        statuses.filter((status) => status.event === 'crash').map((s) => s.autoRestart),
+      ).toEqual([true, true, true, true, false]);
       expect(instance.autoRestart).toBe(false);
-      expect(InstanceModel.update).toHaveBeenCalledWith('crash-test', { autoRestart: false });
+      expect(InstanceModel.update.mock.calls).toEqual([['crash-test', { autoRestart: false }]]);
+
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(spawn).toHaveBeenCalledTimes(5);
     });
 
-    it('连崩 4 次未达阈值：不熔断、autoRestart 保持原值', async () => {
-      const statuses = await crashNTimes(4);
-      expect(statuses.find((s) => s.event === 'circuit_breaker')).toBeUndefined();
-      expect(instance.autoRestart).toBe(false); // 未被熔断逻辑改写（保持调用方设置）
-      expect(InstanceModel.update).not.toHaveBeenCalled();
-    });
-
-    it('熔断后再次崩溃不重复触发 circuit_breaker', async () => {
-      const statuses = await crashNTimes(5);
-      // 第 6 次意外退出：计数继续增长但 _circuitBreakerTripped 已置位，不再重发
-      lastProc.emit('exit', 1);
-      const cbCount = statuses.filter((s) => s.event === 'circuit_breaker').length;
-      expect(cbCount).toBe(1);
-    });
-
-    it('滑动窗口过期：计数重置，不累积历史崩溃', async () => {
-      await crashNTimes(4);
-      expect(instance._consecutiveCrashes).toBe(4);
-      // 拨动时钟使窗口过期后第 5 次意外退出：计数应重置为 1 而非累到 5
-      vi.setSystemTime(Date.now() + 300001);
-      lastProc.emit('exit', 1);
-      expect(instance._consecutiveCrashes).toBe(1);
-    });
-
-    it('成功重启后计数清零：熔断不跨启动周期累积', async () => {
-      instance.autoRestart = false;
-      await instance.start();
-      lastProc.emit('exit', 1);
-      expect(instance._consecutiveCrashes).toBe(1);
-      // 下一次成功启动（手动重启）清零历史崩溃
-      await instance.start();
-      expect(instance._consecutiveCrashes).toBe(0);
+    it('少于阈值时保留窗口计数，超窗后从新崩溃重新起算', async () => {
+      expect(await crashAcrossRestarts(3)).toEqual([1, 2, 3]);
       expect(instance._circuitBreakerTripped).toBe(false);
+
+      vi.setSystemTime(Date.now() + 300001);
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(instance.isRunning).toBe(true);
+      instance.process.emit('exit', 1);
+      expect(instance._consecutiveCrashes).toBe(1);
+      expect(instance._circuitBreakerTripped).toBe(false);
+    });
+
+    it('手动停止不增加或清除窗口内崩溃计数', async () => {
+      instance.start();
+      instance.process.emit('exit', 1);
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(instance._consecutiveCrashes).toBe(1);
+
+      const stoppedProcess = instance.process;
+      instance.stopServer = vi.fn().mockResolvedValue(undefined);
+      instance.stop();
+      stoppedProcess.emit('exit', 1);
+      expect(instance._consecutiveCrashes).toBe(1);
+
+      instance.start();
+      instance.process.emit('exit', 1);
+      expect(instance._consecutiveCrashes).toBe(2);
+      expect(instance._circuitBreakerTripped).toBe(false);
+    });
+
+    it('启动进程清理不误解除熔断或清空窗口', async () => {
+      instance._consecutiveCrashes = 3;
+      instance._crashWindowStart = Date.now();
+      instance._circuitBreakerTripped = true;
+      instance.autoRestart = false;
+
+      instance.start();
+
+      expect(instance._consecutiveCrashes).toBe(3);
+      expect(instance._crashWindowStart).not.toBeNull();
+      expect(instance._circuitBreakerTripped).toBe(true);
+      expect(instance.autoRestart).toBe(false);
     });
   });
 });

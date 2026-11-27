@@ -72,6 +72,8 @@ export const ErrorCode = {
    * 用户唯一能据以行动的信息。
    */
   INSTANCE_JAVA_UNAVAILABLE: 40918,
+  INSTANCE_ID_CONFLICT: 40919,
+  DEPLOY_PORTS_EXHAUSTED: 40920,
   /**
    * 该服务端版本不支持性能快照（/perf、/jfr）：能力缺失，重试无意义。
    * **刻意不进 `LOCALIZED_MESSAGES`**：进表会盖掉服务端那句「请升级到带 /perf 的版本」。

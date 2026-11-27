@@ -10,6 +10,7 @@ import type { ConnectionConfig } from './client'
 import type {
   ApiKeyRotateResponse,
   AuthCapabilitiesResponse,
+  AuthPasswordChangeRequestBody,
   AuthStatusResponse,
 } from '@mc-commander/schemas'
 import type { StoredSession } from '@/stores/auth'
@@ -200,13 +201,11 @@ export function logout(config: ConnectionConfig): Promise<{ ok: boolean }> {
 /** PUT /auth/password：验旧密改新密；服务端踢其余会话（保留当前） */
 export function changePassword(
   config: ConnectionConfig,
-  currentPassword: string,
+  oldPassword: string,
   newPassword: string,
 ): Promise<ChangePasswordData> {
-  return apiPut<ChangePasswordData>('/api/v1/auth/password', config, {
-    currentPassword,
-    newPassword,
-  })
+  const body: AuthPasswordChangeRequestBody = { oldPassword, newPassword }
+  return apiPut<ChangePasswordData>('/api/v1/auth/password', config, body)
 }
 
 /** GET /auth/sessions：活跃会话列表（含 current 标记） */

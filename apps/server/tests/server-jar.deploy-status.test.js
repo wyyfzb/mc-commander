@@ -18,7 +18,7 @@ import { deployStatusResponseSchema } from '@mc-commander/schemas';
 const testState = vi.hoisted(() => ({ serversDir: null }));
 
 vi.mock('../src/db/index.js', () => ({
-  InstanceModel: { create: vi.fn() },
+  InstanceModel: { create: vi.fn(), getById: vi.fn() },
   AuditLogModel: { create: vi.fn() },
 }));
 
@@ -76,7 +76,7 @@ function inFlightSnapshot(overrides = {}) {
 function buildApp(entries = []) {
   const app = express();
   app.use(express.json());
-  const manager = { activeDeploys: new Map(entries), emit: vi.fn(), loadInstances: vi.fn() };
+  const manager = { activeDeploys: new Map(entries), emit: vi.fn(), getInstance: vi.fn() };
   app.use('/api/v1', createServerJarRoutes(manager));
   app.use(errorHandler);
   return { app, manager };

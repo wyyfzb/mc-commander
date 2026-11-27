@@ -1,14 +1,19 @@
 /**
- * api/auth 第二因子契约测试：
- * - login 的 totpCode 传参（省略 / 空串 / 有效串三种形态的请求体形状）
- * - status / enroll / confirm / disable 四个端点的路径与载荷
+ * api/auth 请求契约：登录第二因子、改密和 TOTP 管理。
  * mock 数据为结构占位（虚构口令与恢复码），严禁真实凭据
  */
 import { describe, it, expect, beforeEach, afterEach, afterAll, beforeAll } from 'vitest'
 import { http, HttpResponse } from 'msw'
 import { setupServer } from 'msw/node'
 import { handlers } from '@tests/support/handlers'
-import { confirmTotp, disableTotp, enrollTotp, fetchTotpStatus, login } from '@/api/auth'
+import {
+  changePassword,
+  confirmTotp,
+  disableTotp,
+  enrollTotp,
+  fetchTotpStatus,
+  login,
+} from '@/api/auth'
 
 const server = setupServer(...handlers)
 beforeAll(() => server.listen({ onUnhandledFrame: 'error' }))
@@ -86,6 +91,28 @@ describe('login 的第二因子传参', () => {
     await login('', 'demo-pass-12345', 'ABCD2345EF')
 
     expect(body).toEqual({ password: 'demo-pass-12345', totpCode: 'ABCD2345EF' })
+  })
+})
+
+describe('改密请求契约', () => {
+  it('changePassword：实际发送的请求体符合共享 schema，且新旧密码未对调', async () => {
+    const oldPassword = 'demo-old-pass'
+    const newPassword = 'demo-new-pass-123'
+    let body: Promise<unknown> | undefined
+    const capture = ({ request }: { request: Request }) => {
+      if (request.method === 'PUT' && new URL(request.url).pathname === '/api/v1/auth/password') {
+        body = request.clone().json()
+      }
+    }
+    server.events.on('request:start', capture)
+    try {
+      await expect(
+        changePassword({ baseUrl: '', apiKey: 'demo-api-key' }, oldPassword, newPassword),
+      ).resolves.toEqual({ ok: true, kickedSessions: 2 })
+      expect(await body).toEqual({ oldPassword, newPassword })
+    } finally {
+      server.events.removeListener('request:start', capture)
+    }
   })
 })
 

@@ -2,7 +2,14 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { MCServerManager } from '../src/services/mc_server.js';
+import config from '../src/config.js';
+import { MCServerManager, MCServerInstance } from '../src/services/mc_server.js';
+
+vi.mock('../src/config.js', () => ({ default: { serversDir: null } }));
+vi.mock('../src/db/index.js', () => ({
+  InstanceModel: { getAll: () => [] },
+  CommandHistoryModel: {},
+}));
 
 /**
  * 实例事件转发：MCServerInstance 发出的玩家事件必须由 manager 加上 instanceId
@@ -14,9 +21,8 @@ describe('MCServerManager 实例事件转发', () => {
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-forward-'));
-    fs.writeFileSync(path.join(tmpDir, 'server.jar'), '');
-    // 构造 manager 会加载实例（DB 未初始化时告警），本用例只关注转发注册
-    vi.spyOn(MCServerManager.prototype, 'loadInstances').mockImplementation(() => {});
+    config.serversDir = tmpDir;
+    vi.spyOn(MCServerInstance.prototype, '_detectPublicIp').mockResolvedValue(undefined);
   });
 
   afterEach(() => {

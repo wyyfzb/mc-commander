@@ -1,8 +1,8 @@
 /**
  * 实例启动生命周期域：MCServerInstance.start() 的
  * 子阶段拆解——EULA 检查、tempban 对账、world 锁文件清理、启动命令/参数构建（四种来源
- * 优先级）、spawn 与进程/stdin/输出/exit 监听器挂载、运行时状态初始化、收尾（熔断重置/
- * started 事件/定时存档），共 11 方法。挂载方式与 level-dat /
+ * 优先级）、spawn 与进程/stdin/输出/exit 监听器挂载、运行时状态初始化、收尾（started 事件/
+ * 定时存档），共 11 方法。挂载方式与 level-dat /
  * output-parser / stats-collector 域一致：由宿主模块 Object.assign 原型注入复用，模块函数
  * 体内 this 语义与类内定义完全一致（实例方法调用时 this 绑定实例）。
  * 域外协作方法（_getSafeLevelName、_readWeatherFromLevelDat、
@@ -452,11 +452,6 @@ export function _attachExitListener() {
 }
 
 export function _finalizeStartup() {
-  // 成功启动 → 重置熔断器
-  this._consecutiveCrashes = 0;
-  this._crashWindowStart = null;
-  this._circuitBreakerTripped = false;
-
   this.emit('status', { event: 'started' });
 
   // MSMP 通知面（一期）：进程起来了就守着通道。此刻 MSMP 可能还没绑好端口，

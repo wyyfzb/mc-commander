@@ -1522,7 +1522,7 @@ describe('MCServerManager', () => {
       instance._parseOutput('[12:00:05] [Server thread/INFO]: Steve left the game');
 
       // 新实例（模拟重启）从同一 serverPath 加载
-      const instance2 = manager.createInstance({
+      const instance2 = new MCServerManager().createInstance({
         id: 'sess-restore',
         name: 'Sess Restore',
         jarFile: 'server.jar',
@@ -1553,7 +1553,7 @@ describe('MCServerManager', () => {
       expect(saved.events.some((e) => e.message.includes('Stone Age'))).toBe(true);
 
       // 新实例（模拟服务端重启）从同一 serverPath 恢复成就事件
-      const instance2 = manager.createInstance({
+      const instance2 = new MCServerManager().createInstance({
         id: 'sess-events',
         name: 'Sess Events',
         jarFile: 'server.jar',
@@ -1626,7 +1626,7 @@ describe('MCServerManager', () => {
       expect(saved.events.some((e) => e.type === 'leave' && e.message === '离开服务器')).toBe(true);
 
       // 模拟进程退出后重启：新实例从 playerdata 恢复，leave 事件不能丢
-      const instance2 = manager.createInstance({
+      const instance2 = new MCServerManager().createInstance({
         id: 'sess-leave-event',
         name: 'Sess Leave Event',
         jarFile: 'server.jar',

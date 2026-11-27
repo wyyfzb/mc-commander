@@ -133,22 +133,18 @@ async function getPaperDownload(mcVersion) {
 const TERMINAL_DEPLOY_STAGES = new Set(['complete', 'error', 'cancelled']);
 
 function trackDeployProgress(serverManager, meta, payload) {
-  if (meta) {
-    if (!TERMINAL_DEPLOY_STAGES.has(payload.stage)) {
-      serverManager.activeDeploys?.set(meta.instanceId, {
-        ...meta,
-        stage: payload.stage,
-        percent: payload.percent,
-        transferred: payload.transferred,
-        total: payload.total,
-        detail: payload.detail,
-        updatedAt: Date.now(),
-      });
-    }
-    serverManager.emit('deployProgress', { ...payload, ...meta });
-  } else {
-    serverManager.emit('deployProgress', payload);
+  if (meta && !TERMINAL_DEPLOY_STAGES.has(payload.stage)) {
+    serverManager.activeDeploys?.set(meta.instanceId, {
+      ...meta,
+      stage: payload.stage,
+      percent: payload.percent,
+      transferred: payload.transferred,
+      total: payload.total,
+      detail: payload.detail,
+      updatedAt: Date.now(),
+    });
   }
+  serverManager.emit('deployProgress', meta ? { ...payload, ...meta } : payload);
 }
 
 /**
@@ -579,6 +575,9 @@ export function createServerJarRoutes(serverManager) {
       const eulaAgreed = eula === true;
 
       const instanceId = generateInstanceId(type);
+      if (serverManager.getInstance(instanceId) || InstanceModel.getById(instanceId)) {
+        throw new AppError(ErrorCodes.INSTANCE_ID_CONFLICT);
+      }
       const instancePath = path.join(config.serversDir, instanceId);
 
       // 部署归属元数据：进度事件 payload 与进行中注册表共用（展示名与
@@ -594,12 +593,12 @@ export function createServerJarRoutes(serverManager) {
       const downloadJarName = isForge ? 'forge-installer.jar' : 'server.jar';
       const jarPath = path.join(instancePath, downloadJarName);
 
-      // 可取消登记：取消端点据注册表定位本次部署。登记必须先于第一个 await——
-      // 上游版本查询可能耗时数秒，此窗口内的取消请求同样要被受理
-      const task = beginCancellableTask(TASK_KINDS.DEPLOY, instanceId);
-      // 首启前才写 DB，但写入后仍可能被取消（首启最长 60s）：清理必须一并回滚这一行，
-      // 否则留下指向已删除目录的幽灵实例
+      let task;
       let instanceCreatedInDb = false;
+      let directoryCreated = false;
+      let instanceConfig;
+      let launched;
+      const deployWarnings = [];
 
       try {
         // 磁盘余量预检：放在 mkdir 之前，此时还没有任何落盘。
@@ -612,9 +611,17 @@ export function createServerJarRoutes(serverManager) {
             `磁盘剩余空间不足（需约 ${Math.round(disk.requiredBytes / 1024 / 1024)} MB，实际剩余 ${Math.round(disk.freeBytes / 1024 / 1024)} MB），请清理后重试`,
           );
         }
-        // 必须在 try 内：mkdirSync 抛错（ENOTDIR/EACCES/EPERM）时由 catch 统一返回 502 并清理，
-        // 否则裸 async handler 的 rejection 不被 Express 4 捕获 → 请求挂起 + unhandledRejection
-        fs.mkdirSync(instancePath, { recursive: true });
+        // 独占创建才取得目录的清理权；存在同名目录时不能写入或删除它。
+        try {
+          fs.mkdirSync(instancePath);
+        } catch (err) {
+          if (err.code !== 'EEXIST') throw err;
+          return res
+            .status(ErrorCodes.INSTANCE_ID_CONFLICT.status)
+            .json(error(ErrorCodes.INSTANCE_ID_CONFLICT));
+        }
+        directoryCreated = true;
+        task = beginCancellableTask(TASK_KINDS.DEPLOY, instanceId);
         logger.info(`Deploying ${type} ${mcVersion} as ${instanceId}...`);
         // 部署起始即入注册表（连接补发的最早可见点：下载阶段首事件前）
         trackDeployProgress(serverManager, deployMeta, {
@@ -779,19 +786,28 @@ export function createServerJarRoutes(serverManager) {
 
         // 端口在写盘前就定下来：properties 与 DB 必须同源，否则实例跑在 A 端口、
         // 面板显示 B 端口，用户照着面板给的地址发出去没人连得上
-        const existingInstances =
-          typeof InstanceModel.getAll === 'function' ? InstanceModel.getAll() : [];
+        const existingInstances = InstanceModel.getAll();
+        const persistedPorts = new Map(existingInstances.map(({ id, port }) => [id, port]));
+        for (const instance of serverManager.instances?.values() ?? []) {
+          const livePort = Number(instance.properties?.['server-port']);
+          if (!Number.isInteger(livePort)) continue;
+          // DB 端口可能过期（旧 JSON 恢复的默认值、手工改过 server.properties），
+          // 而实时端口才是当前监听值；两者不一致时都保留，避免新部署撞上任一占用。
+          if (persistedPorts.get(instance.id) !== livePort) {
+            existingInstances.push({ id: instance.id, port: livePort });
+          }
+        }
         const gamePort = allocateGamePort(existingInstances, instanceId);
         if (gamePort === null) {
           throw new AppError(
-            ErrorCodes.CONFLICT,
+            ErrorCodes.DEPLOY_PORTS_EXHAUSTED,
             `可用端口已用尽（${GAME_PORT_START}-${GAME_PORT_START + GAME_PORT_COUNT - 1}），请先卸载不用的实例`,
           );
         }
-        const instanceConfig = {
+        instanceConfig = {
           id: instanceId,
           name: deployMeta.instanceName,
-          type: type.toLowerCase(),
+          type: deployMeta.type,
           jarFile,
           maxMemory: ramSize,
           minMemory: Math.max(Math.floor(ramSize.replace('G', '')) / 2, 1) + 'G',
@@ -799,6 +815,7 @@ export function createServerJarRoutes(serverManager) {
           loaderVersion: loaderVersion || undefined,
           javaVersion,
           javaPath,
+          port: gamePort,
         };
 
         atomicWriteFile(
@@ -814,31 +831,16 @@ export function createServerJarRoutes(serverManager) {
           generateServerProperties(instanceId, mcVersion, gamePort),
         );
 
-        // 收尾阶段的失败都不会让部署本身失败，但会让「部署成功」变成假承诺：
-        // 没入库的实例重启后消失、没启动起来的服务器谁也连不上。逐条记下来随响应回报。
-        const deployWarnings = [];
-        let autoStarted = false;
-
         try {
-          InstanceModel.create({
-            id: instanceId,
-            name: instanceConfig.name,
-            type: type.toLowerCase(),
-            jarFile,
-            javaPath,
-            maxMemory: ramSize,
-            minMemory: instanceConfig.minMemory,
-            serverPath: instancePath,
-            mcVersion,
-            port: gamePort,
-          });
-          logger.info(`Instance ${instanceId} written to DB`);
+          InstanceModel.create({ ...instanceConfig, serverPath: instancePath });
           instanceCreatedInDb = true;
+          logger.info(`Instance ${instanceId} written to DB`);
         } catch (dbErr) {
-          logger.warn(`Failed to write instance to DB:`, dbErr.message);
-          deployWarnings.push(
-            `实例未能写入数据库（${dbErr.message}）：重启面板后该实例会从列表消失`,
-          );
+          if (dbErr.code === 'SQLITE_CONSTRAINT_PRIMARYKEY') {
+            throw new AppError(ErrorCodes.INSTANCE_ID_CONFLICT);
+          }
+          logger.warn('Failed to write instance to DB:', dbErr.message);
+          deployWarnings.push(`实例未能写入数据库（${dbErr.message}）：部分管理功能可能受限`);
         }
 
         // 首启用于生成世界与校验 jar，而 MC 首启强制要求 eula=true；
@@ -863,65 +865,8 @@ export function createServerJarRoutes(serverManager) {
           }
         }
 
-        serverManager.loadInstances();
-
-        // 勾了 EULA 就是「我要开服」，不是「我要生成世界」：首启只生成配置就退出，
-        // 部署完停在「已停止」会让用户以为已经开好、去发地址，结果没人连得上。
-        // 启动属于「部署并启动」这个动作的一部分，故排在 complete 之前——
-        // 排在之后会让进度条先消失、界面静默一到两分钟，用户以为卡死。
-        if (eulaAgreed) {
-          trackDeployProgress(serverManager, deployMeta, {
-            stage: 'starting',
-            percent: 0,
-            transferred: 0,
-            total: 0,
-          });
-          const launched =
-            typeof serverManager.getInstance === 'function'
-              ? serverManager.getInstance(instanceId)
-              : null;
-          if (launched && typeof launched.start === 'function') {
-            try {
-              launched.start();
-              InstanceModel.update(instanceId, { status: 'running' });
-              autoStarted = true;
-              logger.info(`Instance ${instanceId} auto-started after deploy`);
-            } catch (e) {
-              logger.warn(`Auto-start after deploy failed: ${e.message}`);
-              deployWarnings.push(`服务器未能自动启动（${e.message}）：请到实例页手动启动`);
-            }
-          } else {
-            deployWarnings.push('服务器未能自动启动（实例未注册到运行管理器）：请到实例页手动启动');
-          }
-        }
-
-        // 终态：先移除注册表（补发只针对进行中），payload 仍携带归属供通知文案
-        serverManager.activeDeploys?.delete(instanceId);
-        trackDeployProgress(serverManager, deployMeta, {
-          stage: 'complete',
-          percent: 1.0,
-          transferred: 0,
-          total: 0,
-        });
-        logger.info(`Instance ${instanceId} deployed successfully`);
-
-        res.json(
-          validatedSuccess(
-            deployResultSchema,
-            {
-              id: instanceId,
-              name: instanceConfig.name,
-              type: type.toLowerCase(),
-              mcVersion,
-              javaVersion,
-              path: instancePath,
-              maxMemory: ramSize,
-              warnings: deployWarnings,
-              started: autoStarted,
-            },
-            'Instance deployed successfully',
-          ),
-        );
+        task.throwIfCancelled();
+        launched = serverManager.createInstance({ ...instanceConfig, serverPath: instancePath });
       } catch (e) {
         // 取消与执行失败共用同一清理（磁盘目录 + 注册表 + DB 行），只在终态事件与
         // HTTP 回声上分叉——用户取消不是故障，报 error 会让通知中心与审计页失真
@@ -931,11 +876,26 @@ export function createServerJarRoutes(serverManager) {
         // async rejection，Express 4 不捕获 → 请求挂起 + unhandledRejection 崩溃。
         // 但也不能吞掉：取消的终态会向用户声称「已清理」，收尾没做成时必须据实回报
         const cleanupProblems = [];
-        try {
-          fs.rmSync(instancePath, { recursive: true, force: true });
-        } catch (cleanupErr) {
-          cleanupProblems.push(`实例目录未能删除（${cleanupErr.message}）`);
-          logger.warn('Failed to clean up instance dir after failed deploy:', cleanupErr.message);
+        if (directoryCreated) {
+          try {
+            fs.rmSync(instancePath, { recursive: true, force: true });
+          } catch (cleanupErr) {
+            cleanupProblems.push(`实例目录未能删除（${cleanupErr.message}）`);
+            logger.warn('Failed to clean up instance dir after failed deploy:', cleanupErr.message);
+            // 目录删不掉时至少移除恢复入口：否则下次启动会把残留的 instance.json
+            // 当成有效实例迁移回来，失败部署会变成幽灵实例。
+            try {
+              fs.unlinkSync(path.join(instancePath, 'instance.json'));
+            } catch (unlinkErr) {
+              if (unlinkErr.code !== 'ENOENT') {
+                cleanupProblems.push(`实例配置未能移除（${unlinkErr.message}）`);
+                logger.warn(
+                  'Failed to remove instance.json after failed deploy:',
+                  unlinkErr.message,
+                );
+              }
+            }
+          }
         }
         // 首启前已入库的行必须回滚（取消可落在首启窗口内）：否则留下指向已删目录的
         // 幽灵实例，列表里可见、点进去全是 404
@@ -950,14 +910,15 @@ export function createServerJarRoutes(serverManager) {
             );
           }
         }
-        serverManager.activeDeploys?.delete(instanceId);
+        const cleanupText = cleanupProblems.length ? cleanupProblems.join('；') : null;
+        if (task) serverManager.activeDeploys?.delete(instanceId);
         if (cancelled) {
           trackDeployProgress(serverManager, deployMeta, {
             stage: 'cancelled',
             percent: 0,
             transferred: 0,
             total: 0,
-            ...(cleanupProblems.length ? { error: cleanupProblems.join('；') } : {}),
+            ...(cleanupText ? { error: cleanupText } : {}),
           });
           logger.info(`Instance ${instanceId} deployment cancelled by user`);
           // 收尾明细同时放进响应 details：WS 断线时前端只能靠这次回声，缺了它会
@@ -968,25 +929,89 @@ export function createServerJarRoutes(serverManager) {
               error(
                 ErrorCodes.TASK_CANCELLED,
                 undefined,
-                cleanupProblems.length ? { cleanup: cleanupProblems.join('；') } : null,
+                cleanupText ? { cleanup: cleanupText } : null,
               ),
             );
         }
+        const errorText = cleanupText ? `${e.message}；清理异常：${cleanupText}` : e.message;
         trackDeployProgress(serverManager, deployMeta, {
           stage: 'error',
           percent: 0,
           transferred: 0,
           total: 0,
-          error: e.message,
+          error: errorText,
         });
         logger.error(`Failed to deploy ${type} ${mcVersion}:`, e.message);
+        if (e instanceof AppError && e.status === 409) {
+          if (cleanupText) e.details = { ...(e.details || {}), cleanup: cleanupText };
+          throw e;
+        }
         return res
           .status(502)
-          .json(error(ErrorCodes.SERVER_ERROR, `Deployment failed: ${e.message}`));
+          .json(
+            error(
+              ErrorCodes.SERVER_ERROR,
+              `Deployment failed: ${e.message}`,
+              cleanupText ? { cleanup: cleanupText } : null,
+            ),
+          );
       } finally {
-        // 成功/失败/取消都要注销：残留条目会让取消端点对着已结束的任务回「已取消」
-        task.finish();
+        task?.finish();
       }
+
+      // 注册后由实例管理器持有目录和运行对象，启动失败不回滚已部署的实例。
+      let autoStarted = false;
+      if (eulaAgreed) {
+        trackDeployProgress(serverManager, deployMeta, {
+          stage: 'starting',
+          percent: 0,
+          transferred: 0,
+          total: 0,
+        });
+        try {
+          launched.start();
+          autoStarted = true;
+          logger.info(`Instance ${instanceId} auto-started after deploy`);
+        } catch (e) {
+          logger.warn(`Auto-start after deploy failed: ${e.message}`);
+          deployWarnings.push(`服务器未能自动启动（${e.message}）：请到实例页手动启动`);
+        }
+        if (autoStarted && instanceCreatedInDb) {
+          try {
+            InstanceModel.update(instanceId, { status: 'running' });
+          } catch (e) {
+            logger.warn(`Failed to persist running status for ${instanceId}:`, e.message);
+            deployWarnings.push('进程已启动，但运行状态未能写入数据库');
+          }
+        }
+      }
+
+      // 终态只广播，不参与重连补发。
+      serverManager.activeDeploys?.delete(instanceId);
+      trackDeployProgress(serverManager, deployMeta, {
+        stage: 'complete',
+        percent: 1.0,
+        transferred: 0,
+        total: 0,
+      });
+      logger.info(`Instance ${instanceId} deployed successfully`);
+      res.json(
+        validatedSuccess(
+          deployResultSchema,
+          {
+            id: instanceId,
+            name: instanceConfig.name,
+            type: instanceConfig.type,
+            mcVersion,
+            javaVersion: instanceConfig.javaVersion,
+            path: instancePath,
+            maxMemory: instanceConfig.maxMemory,
+            warnings: deployWarnings,
+            started: autoStarted,
+          },
+          'Instance deployed successfully',
+        ),
+      );
     }),
   );
 

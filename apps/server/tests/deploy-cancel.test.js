@@ -24,6 +24,8 @@ vi.mock('../src/db/index.js', () => ({
   InstanceModel: {
     create: vi.fn(),
     delete: vi.fn(),
+    getAll: vi.fn(() => []),
+    getById: vi.fn(),
   },
   AuditLogModel: { create: vi.fn() },
 }));
@@ -149,7 +151,13 @@ function hangingStream() {
 function buildApp() {
   const app = express();
   app.use(express.json());
-  const mockManager = { activeDeploys: new Map(), emit: vi.fn(), loadInstances: vi.fn() };
+  const mockManager = {
+    activeDeploys: new Map(),
+    instances: new Map(),
+    emit: vi.fn(),
+    getInstance: vi.fn(),
+    createInstance: vi.fn(() => ({ start: vi.fn() })),
+  };
   app.use('/api', createServerJarRoutes(mockManager));
   app.use(errorHandler);
   return { app, manager: mockManager };
