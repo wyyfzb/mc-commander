@@ -40,11 +40,33 @@ test.describe('实例总览', () => {
 
     await expect(page.getByRole('heading', { name: '实例总览' })).toBeVisible()
     // 一屏同时给出运行台数与在线玩家（多实例用户要的是这两个数，不是逐台卡）
-    await expect(page.getByText('全部实例都在运行')).toBeVisible()
-    await expect(page.getByText('分布在 1 台运行中的实例')).toBeVisible()
+    await expect(page.getByText('全部实例均已就绪')).toBeVisible()
+    await expect(page.getByText('仅统计 1 台已就绪实例')).toBeVisible()
     // 余量按「整机总量 − 系统保留 − 已分配 -Xmx」算：16 GB → 可分配 14 GB，减去 4G = 10 GB
     await expect(page.getByText('已分配 4 GB，可分配 14 GB')).toBeVisible()
     await expect(page.getByText('10.0 GB')).toBeVisible()
+  })
+
+  test('整机内存读数缺失时，总览不报超配或零占用；刷新后可显示真实零占用', async ({ page }) => {
+    await setupConnection(page)
+    let total = 0
+    await page.route('**/api/v1/overview', async (route) => {
+      const response = await route.fetch()
+      const body = await response.json()
+      await route.fulfill({
+        response,
+        json: { ...body, data: { ...body.data, systemMemoryTotal: total, systemMemoryPercent: 0 } },
+      })
+    })
+    await page.goto('/fleet')
+    await expect(page.getByText('整机内存读数未取到')).toBeVisible()
+    await expect(page.getByText('内存暂无数据')).toBeVisible()
+    await expect(page.getByText(/超出可分配量|内存 0\.0%/)).toHaveCount(0)
+
+    total = 16
+    await page.getByRole('button', { name: '刷新', exact: true }).click()
+    await expect(page.getByText('10.0 GB')).toBeVisible()
+    await expect(page.getByText('内存 0.0%')).toBeVisible()
   })
 
   test('清单一台一行，实例名可点开当前实例', async ({ page }) => {
@@ -60,6 +82,47 @@ test.describe('实例总览', () => {
 
     await open.click()
     await expect(page).toHaveURL(/\/dashboard$/)
+  })
+
+  test('用键盘从总览的反复退出标记定位到对应实例卡', async ({ page }) => {
+    await setupConnection(page)
+    await page.setViewportSize({ width: 375, height: 812 })
+    await page.route('**/api/v1/instances', async (route) => {
+      const response = await route.fetch()
+      const body = await response.json()
+      const [demo] = body.data
+      await route.fulfill({
+        response,
+        json: {
+          ...body,
+          data: [
+            demo,
+            {
+              ...demo,
+              id: 'demo-breaker',
+              name: '待排查示例实例',
+              isRunning: false,
+              playerCount: 0,
+              circuitBreakerTripped: true,
+              consecutiveCrashes: 5,
+            },
+          ],
+        },
+      })
+    })
+    await page.goto('/fleet')
+    const mark = page.getByRole('button', {
+      name: '查看 待排查示例实例 反复退出的实例卡',
+      exact: true,
+    })
+    await page.getByRole('button', { name: '打开 待排查示例实例' }).focus()
+    await page.keyboard.press('Tab')
+    await expect(mark).toBeFocused()
+    await page.keyboard.press('Enter')
+    await expect(page).toHaveURL(/\/instances$/)
+    const card = page.getByRole('group', { name: '待排查示例实例' })
+    await expect(card).toBeFocused()
+    await expect(card).toBeInViewport()
   })
 
   /**

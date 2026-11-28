@@ -14,6 +14,7 @@ vi.mock('../src/db/ban.model.js', () => ({
   },
 }));
 vi.mock('../src/services/backup.service.js', () => ({
+  hasInProgressBackup: vi.fn(() => false),
   // 判据导出：upgrade.service 用它决定要不要跑前置备份。既有用例都走「有世界」路径
   hasWorldData: vi.fn(() => true),
   BackupService: class {
@@ -60,7 +61,7 @@ describe('TaskScheduler - 临时封禁到期自动解封', () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(mockManager.getInstance).toHaveBeenCalledWith('s1');
-    expect(instance.sendCommand).toHaveBeenCalledWith('pardon Steve');
+    expect(instance.sendCommand).toHaveBeenCalledWith('pardon Steve', { requireResponse: true });
     expect(BanModel.deactivate).toHaveBeenCalledWith(1);
   });
 
@@ -74,7 +75,9 @@ describe('TaskScheduler - 临时封禁到期自动解封', () => {
     scheduler.checkExpiredBans();
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(instance.sendCommand).toHaveBeenCalledWith('pardon-ip 1.2.3.4');
+    expect(instance.sendCommand).toHaveBeenCalledWith('pardon-ip 1.2.3.4', {
+      requireResponse: true,
+    });
     expect(BanModel.deactivate).toHaveBeenCalledWith(2);
   });
 
@@ -153,7 +156,7 @@ describe('TaskScheduler - 官方条目到期清扫', () => {
     scheduler.checkExpiredBans();
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(instance.sendCommand).toHaveBeenCalledWith('pardon Steve');
+    expect(instance.sendCommand).toHaveBeenCalledWith('pardon Steve', { requireResponse: true });
     // 没有 DB 记录可停用，且不得凭空去停用别人的记录
     expect(BanModel.deactivate).not.toHaveBeenCalled();
   });

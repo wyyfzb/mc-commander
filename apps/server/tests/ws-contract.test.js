@@ -20,6 +20,7 @@ describe('WS 载荷契约观测', () => {
     observeWsPayload('statusSnapshot', {
       status: 'running',
       isRunning: true,
+      startupState: 'starting',
       players: [],
       tps: 20,
       msmpPush: false,

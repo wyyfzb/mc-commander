@@ -17,7 +17,7 @@ import { useServerStore } from '@/stores/server'
 
 /** 启动回调（入口差异化行为：仪表盘轮询等待/实例页即时反馈） */
 export interface StartInstanceCallbacks {
-  /** start 指令成功（启动过程异步继续：轮询/终端联动由调用方负责） */
+  /** 启动请求已受理，Minecraft 就绪由实例状态确认。 */
   onStarted?: () => void | Promise<void>
   /** 非 EULA 启动错误；未提供时 hook 内 toast 兜底 */
   onStartError?: (err: unknown) => void
@@ -54,7 +54,7 @@ export function useStartInstanceWithEula() {
     callbacksRef.current = callbacks ?? null
     startMutation.mutate(id, {
       onSuccess: () => {
-        // onStarted 可能是长链（仪表盘 waitForStart 轮询）：链终了兜底清 phase
+        // 请求阶段结束后，由服务端状态继续表示启动进度。
         void Promise.resolve(callbacksRef.current?.onStarted?.())
           .catch(() => {})
           .finally(() => setPhase(id, null))

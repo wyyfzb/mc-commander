@@ -20,6 +20,7 @@ import { FALLBACK_POLL_INTERVAL_MS, queryKeys } from '@/api/queries'
 import { mockInstanceStatus } from '@tests/support/handlers'
 import { useConnectionStore } from '@/stores/connection'
 import { useServerStore } from '@/stores/server'
+import type { InstanceStatus } from '@/api/types'
 
 const server = setupServer()
 beforeAll(() => server.listen({ onUnhandledFrame: 'bypass' }))
@@ -61,11 +62,20 @@ function renderSidebar(props?: { collapsed?: boolean; mobileNavOpen?: boolean })
 /** 列表里一个运行中实例；capabilities 传 'unknown' 时详情请求悬而不决（模拟详情未到） */
 function readyWithMiniCard(
   capabilities: { rcon: boolean; msmp: boolean; msmpPush: boolean } | 'unknown',
+  summaryState: InstanceStatus['startupState'] = 'ready',
 ) {
   useConnectionStore.setState({ baseUrl: '', apiKey: 'test-key', status: 'ready' })
   server.use(
     http.get('*/api/v1/instances', () =>
-      instancesOk([{ id: 'demo-1', name: '演示实例', isRunning: true, playerCount: 3 }]),
+      instancesOk([
+        {
+          id: 'demo-1',
+          name: '演示实例',
+          isRunning: true,
+          startupState: summaryState,
+          playerCount: 3,
+        },
+      ]),
     ),
     capabilities === 'unknown'
       ? http.get('*/api/v1/instances/:id', () => new Promise<Response>(() => {}))
@@ -87,7 +97,7 @@ describe('AppSidebar 实例迷你卡的刷新时机标记', () => {
     readyWithMiniCard({ rcon: true, msmp: true, msmpPush: true })
     renderSidebar()
 
-    const line = await within(rail()).findByText('运行中 · 3 人在线 · 实时')
+    const line = await within(rail()).findByText('已就绪 · 3 人在线 · 实时')
     // 句子不进可见文本（完整句会把这行 152px 内容宽撑到截断），但要真的可达：
     // title 供指针悬停；aria-label 在 role=generic 上按规范被忽略（本仓已踩过）⇒ 挂 sr-only
     expect(line).toHaveAttribute('title', '实时推送已连通，服务器的状态变化会立即到达面板')
@@ -105,7 +115,7 @@ describe('AppSidebar 实例迷你卡的刷新时机标记', () => {
     // 可见文本只给「轮询」这个短语，秒数在完整解释里——常量与字面量同为 30 时
     // 「秒数取自常量而不是写死」不可被变异区分，故本条不自称锁它
     // 「两字标签不截断」是真实几何问题，jsdom 量不到（clientWidth 恒 0）⇒ 由 e2e 锁
-    const line = await within(rail()).findByText('运行中 · 3 人在线 · 轮询')
+    const line = await within(rail()).findByText('已就绪 · 3 人在线 · 轮询')
     expect(line).toHaveAttribute(
       'title',
       `实时推送未连通，面板每 ${FALLBACK_POLL_INTERVAL_MS / 1000} 秒刷新一次状态`,
@@ -117,7 +127,7 @@ describe('AppSidebar 实例迷你卡的刷新时机标记', () => {
     renderSidebar()
 
     // 精确匹配即门控判据：若按 `?? false` 落到轮询档，这行会多出「 · 轮询」而不匹配
-    const line = await within(rail()).findByText('运行中 · 3 人在线')
+    const line = await within(rail()).findByText('已就绪 · 3 人在线')
     expect(line).not.toHaveAttribute('title')
     expect(line.querySelector('.sr-only')).toBeNull()
   })
@@ -132,8 +142,25 @@ describe('AppSidebar 实例迷你卡的刷新时机标记', () => {
     await waitFor(() => {
       expect(qc.getQueryState(queryKeys.instance('demo-1'))?.status).toBe('success')
     })
-    expect(within(rail()).getByText('运行中 · 3 人在线')).toBeInTheDocument()
+    expect(within(rail()).getByText('已就绪 · 3 人在线')).toBeInTheDocument()
     expect(within(rail()).queryByText(/实时$/)).toBeNull()
+  })
+
+  it('列表报告启动中、详情确认就绪后才展示在线人数', async () => {
+    readyWithMiniCard('unknown', 'starting')
+    const qc = renderSidebar()
+    expect(await within(rail()).findByText('启动中')).toBeInTheDocument()
+    expect(within(rail()).queryByText(/人在线/)).not.toBeInTheDocument()
+
+    qc.setQueryData(queryKeys.instance('demo-1'), { ...mockInstanceStatus, id: 'demo-1' })
+    expect(await within(rail()).findByText(/^已就绪 · 3 人在线/)).toBeInTheDocument()
+  })
+
+  it('运行中的进程就绪未确认时不显示就绪', async () => {
+    readyWithMiniCard('unknown', 'unknown')
+    renderSidebar()
+    expect(await within(rail()).findByText('就绪未知')).toBeInTheDocument()
+    expect(within(rail()).queryByText(/已就绪/)).not.toBeInTheDocument()
   })
 
   it('桌面侧栏收起：迷你卡整块不渲染（标记随之不出现）', async () => {
@@ -142,7 +169,7 @@ describe('AppSidebar 实例迷你卡的刷新时机标记', () => {
     renderSidebar({ collapsed: true, mobileNavOpen: true })
 
     // 抽屉那副本体恒展开 ⇒ 它出现即证明详情已到
-    expect(await within(drawer()).findByText('运行中 · 3 人在线 · 实时')).toBeInTheDocument()
+    expect(await within(drawer()).findByText('已就绪 · 3 人在线 · 实时')).toBeInTheDocument()
     expect(within(rail()).queryByText(/人在线/)).toBeNull()
   })
 })

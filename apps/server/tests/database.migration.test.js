@@ -25,8 +25,25 @@ describe('数据库 v5 迁移 - scheduled_tasks.last_run_status', () => {
     fs.rmSync(config.dataDir, { recursive: true, force: true });
   });
 
-  it('user_version 升到 16（v5 起连续跑完全部迁移块）', () => {
-    expect(db.pragma('user_version', { simple: true })).toBe(16);
+  it('空库执行全部迁移后版本为 17', () => {
+    expect(db.pragma('user_version', { simple: true })).toBe(17);
+  });
+
+  it('v16 实例迁移后保留启动偏好，熔断计数默认归零', () => {
+    db.exec('ALTER TABLE instances DROP COLUMN circuit_breaker_crash_count');
+    db.pragma('user_version = 16');
+    db.prepare(
+      'INSERT INTO instances (id, name, auto_start, auto_restart) VALUES (?, ?, 1, 0)',
+    ).run('migration-test', '迁移测试');
+    db.close();
+    db = initDatabase();
+
+    expect(db.pragma('user_version', { simple: true })).toBe(17);
+    expect(db.prepare('SELECT * FROM instances WHERE id = ?').get('migration-test')).toMatchObject({
+      auto_start: 1,
+      auto_restart: 0,
+      circuit_breaker_crash_count: 0,
+    });
   });
 
   it('v10：task_run_history 表存在且随任务级联删除', () => {

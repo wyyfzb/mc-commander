@@ -370,7 +370,7 @@ export async function applyPropertyUpdates(instance, newProps) {
   // 运行中逐键应用：成功与否由**实际生效**决定，不看「这张表里有没有它」——
   // 表里有、但这条实例的 MSMP 不可用又无命令回退时，该键仍要重启才生效
   const appliedKeys = new Set();
-  if (instance.isRunning) {
+  if (instance.isRunning && instance.startupState !== 'starting') {
     for (const key of runtimeChanged) {
       try {
         const via = await instance.applyServerSetting(key, validated[key]);

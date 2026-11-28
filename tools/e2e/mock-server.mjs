@@ -18,6 +18,14 @@
 import { createServer } from 'node:http'
 import { createHash } from 'node:crypto'
 
+// Node.js 24 可加载契约源码；E2E 的构建任务不产出 schemas/dist。
+/** @type {typeof import('../../apps/schemas/src/auth.ts')} */
+const {
+  authLoginRequestBodySchema,
+  authSetupRequestBodySchema,
+  authPasswordChangeRequestBodySchema,
+} = await import(new URL('../../apps/schemas/src/auth.ts', import.meta.url).href)
+
 const PORT = Number(process.env.MOCK_PORT) || 5198
 
 // 崩溃历史夹具：时间固定在 2026-10 上旬，与其余 mock 数据的「现在」同一档（相对时间才显示得出
@@ -153,8 +161,37 @@ const webhooks = [
 ]
 const ok = (data, message = 'Success') =>
   JSON.stringify({ status: 'ok', code: 0, message, data, timestamp: now() })
-const err = (code, message) =>
-  JSON.stringify({ status: 'error', code, message, details: null, timestamp: now() })
+/** @param {{ path: string, code: string, message: string }[] | null} details */
+const err = (code, message, details = null) =>
+  JSON.stringify({ status: 'error', code, message, details, timestamp: now() })
+
+/**
+ * @template T
+ * @param {import('zod').ZodType<T>} schema
+ * @param {string} body
+ * @param {import('node:http').ServerResponse} res
+ */
+function validateAuthBody(schema, body, res) {
+  let payload
+  try {
+    payload = JSON.parse(body || '{}')
+  } catch {
+    res.statusCode = 400
+    res.end(err(40000, 'Invalid JSON'))
+    return null
+  }
+  const result = schema.safeParse(payload)
+  if (result.success) return result.data
+
+  const details = result.error.issues.map(({ path, code, message }) => ({
+    path: path.join('.'),
+    code,
+    message,
+  }))
+  res.statusCode = 400
+  res.end(err(40000, details.map(({ message }) => message).join('; '), details))
+  return null
+}
 
 /** 本 mock 签发的唯一会话令牌（登录/设密固定返回；鉴权建模见请求入口） */
 const MOCK_SESSION_TOKEN = 'e2e-mock-session-token-0000000001'
@@ -191,6 +228,7 @@ const parseQuery = (url) => {
 }
 
 const instance = {
+  startupState: 'ready',
   id: 'e2e-demo',
   name: 'E2E 演示实例',
   isRunning: true,
@@ -251,9 +289,14 @@ const instance = {
  * spec 并行时被拖到超时）。故场景态按请求头覆写，全局状态恒为默认。
  */
 function instanceView(req) {
-  const raw = req?.headers?.['x-mock-instance-running']
-  if (raw !== 'true' && raw !== 'false') return instance
-  return { ...instance, isRunning: raw === 'true' }
+  const startupState = req?.headers?.['x-mock-instance-startup-state']
+  if (startupState === 'starting' || startupState === 'unknown') {
+    return { ...instance, isRunning: true, startupState, tps: null, players: [], playerCount: 0 }
+  }
+  if (req?.headers?.['x-mock-instance-running'] === 'false') {
+    return { ...instance, isRunning: false, startupState: 'stopped' }
+  }
+  return instance
 }
 
 const overview = {
@@ -269,7 +312,14 @@ const overview = {
   freeMemory: 11.8,
   // maxMemory 走与详情同一个字段：部署向导据此从整机内存里扣掉已占部分
   instances: [
-    { id: 'e2e-demo', name: 'E2E 演示实例', isRunning: true, playerCount: 3, maxMemory: '4G' },
+    {
+      id: 'e2e-demo',
+      name: 'E2E 演示实例',
+      isRunning: true,
+      startupState: 'ready',
+      playerCount: 3,
+      maxMemory: '4G',
+    },
   ],
 }
 
@@ -867,29 +917,22 @@ const server = createServer((req, res) => {
       return res.end(ok({ apiKey: 'mcro-mock-1234-5678-90ab-cdef-1234-5678-90ab-cdef' }))
     }
     if (path === '/api/v1/auth/login' && req.method === 'POST') {
-      const mockSession = {
-        token: MOCK_SESSION_TOKEN,
-        sessionId: 'sess-mock-1',
-        expiresAt: new Date(Date.now() + 7 * 86400000).toISOString(),
+      const payload = validateAuthBody(authLoginRequestBodySchema, body, res)
+      if (payload === null) return
+      if (payload.password !== 'e2e-correct-pass') {
+        res.statusCode = 401
+        return res.end(err(40102, '密码错误'))
       }
-      try {
-        const { password } = JSON.parse(body || '{}')
-        if (password !== 'e2e-correct-pass') {
-          res.statusCode = 401
-          return res.end(
-            JSON.stringify({
-              status: 'error',
-              code: 40102,
-              message: '密码错误',
-              details: null,
-              timestamp: '',
-            }),
-          )
-        }
-      } catch {}
-      return res.end(ok(mockSession))
+      return res.end(
+        ok({
+          token: MOCK_SESSION_TOKEN,
+          sessionId: 'sess-mock-1',
+          expiresAt: new Date(Date.now() + 7 * 86400000).toISOString(),
+        }),
+      )
     }
     if (path === '/api/v1/auth/setup' && req.method === 'POST') {
+      if (validateAuthBody(authSetupRequestBodySchema, body, res) === null) return
       passwordSet = true
       return res.end(
         ok({
@@ -918,8 +961,10 @@ const server = createServer((req, res) => {
       )
     }
     if (path === '/api/v1/auth/logout' && req.method === 'POST') return res.end(ok({ ok: true }))
-    if (path === '/api/v1/auth/password' && req.method === 'PUT')
+    if (path === '/api/v1/auth/password' && req.method === 'PUT') {
+      if (validateAuthBody(authPasswordChangeRequestBodySchema, body, res) === null) return
       return res.end(ok({ ok: true, kickedSessions: 1 }))
+    }
     if (path === '/api/v1/rotate-key' && req.method === 'POST') {
       // API Key 轮换（mock：固定返回演示 key；生产为随机生成）
       return res.end(
@@ -1154,11 +1199,12 @@ const server = createServer((req, res) => {
       }
       // 裸 gamerule 只回一句已执行：规则的名单与当前值只从 /gamerules 交齐，
       // 命令回包不带「name = value」，前端也就不存在解析它的路径
-      return res.end(ok({ response: `已执行: ${cmd}` }))
+      return res.end(ok(`已执行: ${cmd}`))
     }
     if (path === '/api/v1/instances/e2e-demo/start') return res.end(ok({ started: true }))
     if (path === '/api/v1/instances/e2e-demo/stop') return res.end(ok({ stopped: true }))
-    if (path === '/api/v1/instances/e2e-demo/restart') return res.end(ok({ restarted: true }))
+    if (path === '/api/v1/instances/e2e-demo/restart') return res.end(ok(null))
+    if (path === '/api/v1/instances/e2e-demo/save') return res.end(ok(null))
     // EULA 首启闭环：部署产物实例的同意写入 + 自动启动端点
     if (path === '/api/v1/instances/paper-a1b2c3d4/eula') return res.end(ok({ accepted: true }))
     if (path === '/api/v1/instances/paper-a1b2c3d4/start') return res.end(ok({ started: true }))
@@ -1948,7 +1994,7 @@ const wsSockets = new Set()
 /**
  * WS 握手后挂到 socket 上的逐连接场景态：分组名与运行态覆写随握手请求头携带，
  * 只在 mock 内部使用（Node 的 Duplex 类型没有这两个字段）。
- * @typedef {import('node:net').Socket & { mockWsGroup?: string, mockRunning?: boolean | null }} MockWsSocket
+ * @typedef {import('node:net').Socket & { mockWsGroup?: string, mockInstance?: ReturnType<typeof instanceView> }} MockWsSocket
  */
 server.on(
   'upgrade',
@@ -1978,12 +2024,7 @@ server.on(
     // 携带（Playwright 的 extraHTTPHeaders 会带到 WS 握手，已实测）
     socket.mockWsGroup = String(req.headers['x-mock-ws-group'] ?? '')
     // 逐连接场景态：握手请求头携带的覆写在 status 快照里沿用（与 REST 同源）
-    socket.mockRunning =
-      req.headers['x-mock-instance-running'] === 'true'
-        ? true
-        : req.headers['x-mock-instance-running'] === 'false'
-          ? false
-          : null
+    socket.mockInstance = instanceView(req)
     // 首帧鉴权状态（对齐真实端：鉴权前收到非 auth 消息即断连）
     let authed = !firstFrameAuth
     wsSockets.add(socket)
@@ -2025,10 +2066,11 @@ server.on(
               type: 'statusSnapshot',
               instanceId: msg.instanceId,
               data: {
-                status: (socket.mockRunning ?? instance.isRunning) ? 'running' : 'stopped',
-                isRunning: socket.mockRunning ?? instance.isRunning,
-                players: instance.players,
-                tps: instance.tps,
+                status: socket.mockInstance?.isRunning ? 'running' : 'stopped',
+                isRunning: socket.mockInstance?.isRunning ?? false,
+                startupState: socket.mockInstance?.startupState ?? 'stopped',
+                players: socket.mockInstance?.players ?? [],
+                tps: socket.mockInstance?.tps ?? null,
               },
               timestamp: Date.now(),
             }),

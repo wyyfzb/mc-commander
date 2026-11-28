@@ -147,6 +147,7 @@ export function createApiV1Router(serverManager, taskScheduler, tlsState) {
           '/instances/:id/stop',
           '/instances/:id/restart',
           '/instances/:id/command',
+          '/instances/:id/save',
           '/instances/:id/logs',
           '/instances/:id/properties',
           '/instances/:id/world',

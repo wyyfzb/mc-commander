@@ -38,7 +38,7 @@ import { useDeployInstance, useServerVersions } from '../queries'
 import { useDeployStatusFallback } from '../hooks/use-deploy-status-fallback'
 import { apiCancelDeploy } from '@/api/instances'
 import type { DeployRequest, DeployResult } from '@/api/types'
-import { INITIAL_FORM, type AutoStartState, type DeployForm } from './deploy/types'
+import { INITIAL_FORM, type DeployForm } from './deploy/types'
 import { hasRoomForInstance, memoryBudget, recommendNewInstanceGB } from '@/lib/instance-memory'
 import { Stepper } from './deploy/stepper'
 import {
@@ -64,8 +64,6 @@ export function DeployDialog({ open, onOpenChange, onDeployed }: DeployDialogPro
   const [form, setForm] = useState<DeployForm>({ ...INITIAL_FORM })
   /** EULA 同意（默认不勾；不参与 dirty 判定——流程性同意而非部署配置） */
   const [eulaAgreed, setEulaAgreed] = useState(false)
-  /** 部署成功后自动启动状态（首启闭环；未勾选 EULA 时为 null 不自动启动） */
-  const [autoStart, setAutoStart] = useState<AutoStartState>(null)
   /** 基线（自动回填的版本/加载器同步基线：不算用户改动） */
   const baselineRef = useRef<DeployForm>({ ...INITIAL_FORM })
   const [nameError, setNameError] = useState('')
@@ -128,7 +126,6 @@ export function DeployDialog({ open, onOpenChange, onDeployed }: DeployDialogPro
     setResult(null)
     setNameError('')
     setEulaAgreed(false)
-    setAutoStart(null)
     setCloseConfirmOpen(false)
   }, [open])
 
@@ -260,16 +257,8 @@ export function DeployDialog({ open, onOpenChange, onDeployed }: DeployDialogPro
       const deployed = await deployMutation.mutateAsync(payload)
       setResult(deployed)
       finishDeploy({ ok: true, instanceId: deployed.id })
-      // 启动由服务端在部署收尾时完成（勾了 EULA 才做），结果随响应回来。
-      // 不能再发一次 start：服务端此时已置 isRunning，第二个请求必然撞上
-      // 「already running」→ 每次勾 EULA 的成功部署都会闪一次假的「自动启动失败」。
-      if (eulaAgreed) {
-        setAutoStart(deployed.started ? 'ok' : 'failed')
-        if (deployed.started) {
-          toast.success('部署完成，服务器开始启动')
-        } else {
-          toast.error('服务器未能自动启动，请到实例页手动启动')
-        }
+      if (eulaAgreed && !deployed.started) {
+        toast.error('服务器未能自动启动，请到实例页手动启动')
       }
       if (deployed.warnings.length > 0) {
         // 部署本身成功，但收尾有未完成项：逐条说清，别让「部署成功」盖过去
@@ -282,11 +271,13 @@ export function DeployDialog({ open, onOpenChange, onDeployed }: DeployDialogPro
       // 显示成「部署失败」，走 cancelled 终态；其余错误照旧。
       // details.cleanup 是服务端的收尾明细（收尾未完成时才有）：WS 断线时前端只剩
       // 这条回声，缺了它会把「收尾未完成」显示成「已清理」
+      const detail = e instanceof ApiError ? (e.details as { cleanup?: unknown } | null) : null
+      const cleanup = typeof detail?.cleanup === 'string' ? detail.cleanup : ''
       if (e instanceof ApiError && e.code === ErrorCode.TASK_CANCELLED) {
-        const cleanup = (e.details as { cleanup?: string } | null)?.cleanup
         finishDeploy({ ok: false, cancelled: true, ...(cleanup ? { error: cleanup } : {}) })
       } else {
-        finishDeploy({ ok: false, error: getFriendlyErrorText(e) })
+        const message = getFriendlyErrorText(e)
+        finishDeploy({ ok: false, error: cleanup ? `${message}；清理未完成：${cleanup}` : message })
       }
     }
   }
@@ -375,7 +366,7 @@ export function DeployDialog({ open, onOpenChange, onDeployed }: DeployDialogPro
         )}
 
         {showSuccess && result && (
-          <DeploySuccessView result={result} autoStart={autoStart} onComplete={handleComplete} />
+          <DeploySuccessView result={result} eulaAgreed={eulaAgreed} onComplete={handleComplete} />
         )}
 
         {showCancelled && (

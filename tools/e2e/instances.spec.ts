@@ -28,8 +28,7 @@ test.describe('实例页', () => {
     await page.goto('/instances')
     // 卡片名称（first：顶栏实例选择器同名）+ 运行状态文本
     await expect(page.getByText('E2E 演示实例').first()).toBeVisible()
-    // 侧栏迷你卡与实例卡双渲染「运行中 · N 人在线」→ 取任一
-    await expect(page.getByText(/运行中 · \d+ 人在线/).first()).toBeVisible()
+    await expect(page.getByText(/已就绪 · \d+ 人在线/).first()).toBeVisible()
     // 版本徽章（detailStatuses 拉取）
     await expect(page.getByText('1.21.4')).toBeVisible()
     // 当前实例徽章 + 操作行（启停主操作 + 操作菜单触发器；配置/升级/卸载已收进菜单）
@@ -37,6 +36,127 @@ test.describe('实例页', () => {
     await expect(page.getByRole('button', { name: '停止 E2E 演示实例' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'E2E 演示实例 操作菜单' })).toBeVisible()
     await maybeShot(page, 'instances-cards-dark.png')
+  })
+
+  test('刷新实例页仍区分启动中和已就绪，启动中可停止', async ({ page }) => {
+    await page.setExtraHTTPHeaders({ 'x-mock-instance-startup-state': 'starting' })
+    await setupConnection(page)
+    await page.goto('/instances')
+    for (let visit = 0; visit < 2; visit++) {
+      await expect(page.getByText('启动中', { exact: true }).first()).toBeVisible()
+      await expect(page.getByText(/已就绪 · \d+ 人在线/)).toHaveCount(0)
+      await expect(page.getByRole('button', { name: '停止 E2E 演示实例' })).toBeEnabled()
+      if (visit === 0) await page.reload()
+    }
+    const card = page.getByRole('group', { name: 'E2E 演示实例', exact: true })
+    await maybeShot(page, 'instances-starting-dark.png')
+    await page.route('**/api/v1/instances/e2e-demo/stop', async (route) => {
+      await page.setExtraHTTPHeaders({ 'x-mock-instance-running': 'false' })
+      await route.fulfill({
+        json: {
+          status: 'ok',
+          code: 0,
+          message: 'Server stopping',
+          data: null,
+          timestamp: new Date().toISOString(),
+        },
+      })
+    })
+    await card.getByRole('button', { name: '停止 E2E 演示实例' }).click()
+    const confirm = page.getByRole('dialog', { name: '停止服务器' })
+    await expect(
+      confirm.getByText('如果服务器没有响应，面板将强制结束进程。', { exact: false }),
+    ).toBeVisible()
+    await confirm.getByRole('button', { name: '停止', exact: true }).click()
+    await expect(card.getByText('已停止', { exact: true })).toBeVisible()
+
+    await page.setExtraHTTPHeaders({})
+    await page.reload()
+    await expect(page.getByText(/已就绪 · \d+ 人在线/).first()).toBeVisible()
+  })
+
+  test('再试一次只发启动请求：失败仍暂停，稳定后按服务端状态恢复', async ({ page }) => {
+    await setupConnection(page)
+    await page.clock.install()
+    const id = 'demo-breaker'
+    const name = '待排查示例实例'
+    const instancesPath = '/api/v1/instances'
+    const instancePath = `${instancesPath}/${id}`
+    const startPath = `${instancePath}/start`
+    let state: 'paused' | 'checking' | 'stable' = 'paused'
+    let attempts = 0
+    const writes: string[] = []
+
+    await page.route(/\/api\/v1\/instances(?:\/|$)/, async (route) => {
+      const url = new URL(route.request().url())
+      const method = route.request().method()
+      if (method !== 'GET') {
+        writes.push(`${method} ${url.pathname}`)
+        if (method !== 'POST' || url.pathname !== startPath) return route.abort()
+        const timestamp = new Date().toISOString()
+        if (++attempts === 1) {
+          return route.fulfill({
+            status: 500,
+            json: { status: 'error', code: 50000, message: 'Server start failed', timestamp },
+          })
+        }
+        state = 'checking'
+        return route.fulfill({
+          json: { status: 'ok', code: 0, message: 'Success', data: { started: true }, timestamp },
+        })
+      }
+
+      const isList = url.pathname === instancesPath
+      if (!isList && url.pathname !== instancePath) return route.fallback()
+      if (!isList) url.pathname = `${instancesPath}/e2e-demo`
+      const response = await route.fetch({ url: url.href })
+      const body = await response.json()
+      const status = {
+        ...(isList ? body.data[0] : body.data),
+        id,
+        name,
+        isRunning: state !== 'paused',
+        playerCount: 0,
+        autoStart: true,
+        autoRestart: true,
+        circuitBreakerTripped: state !== 'stable',
+        consecutiveCrashes: state === 'stable' ? 0 : 5,
+        checkingStartupStability: state === 'checking',
+      }
+      await route.fulfill({
+        response,
+        json: { ...body, data: isList ? [...body.data, status] : status },
+      })
+    })
+
+    await page.goto('/instances')
+    const card = page.getByRole('group', { name, exact: true })
+    const retry = card.getByRole('button', { name: `再试一次 ${name}`, exact: true })
+    const stop = card.getByRole('button', { name: `停止 ${name}`, exact: true })
+    const paused = card.getByText('服务器反复退出，已暂停自动启动。')
+    const diagnosis = card.getByRole('link', { name: '查看原因', exact: true })
+    await expect(paused).toBeVisible()
+    await retry.click()
+    await expect(page.getByText(/^启动失败：/)).toBeVisible()
+    await expect(retry).toBeEnabled()
+    await expect(paused).toBeVisible()
+
+    const currentCard = page.getByRole('group', { name: 'E2E 演示实例', exact: true })
+    await expect(currentCard.getByText('当前', { exact: true })).toBeVisible()
+    await diagnosis.click()
+    await expect(page).toHaveURL(`/help?instance=${id}`)
+    await expect(page.getByRole('heading', { name: `自检 · ${name}`, exact: true })).toBeVisible()
+    await page.goBack()
+
+    await retry.click()
+    await expect(card.getByText('正在确认服务器能否稳定运行')).toBeVisible()
+    await expect(diagnosis).toBeVisible()
+
+    state = 'stable'
+    await page.clock.fastForward(30_000)
+    await expect(diagnosis).toBeHidden()
+    await expect(stop).toBeEnabled()
+    expect(writes).toEqual([`POST ${startPath}`, `POST ${startPath}`])
   })
 
   test('部署向导：三步流程到部署成功', async ({ page }) => {
@@ -68,9 +188,7 @@ test.describe('实例页', () => {
     await page.getByRole('button', { name: '部署并启动' }).click()
     // mock 直接成功：结果块 + 自动启动状态（已勾选 EULA → 部署完成自动启动）+ 完成
     await expect(page.getByText('部署成功')).toBeVisible()
-    await expect(
-      page.getByText('已发送启动指令，服务器正在启动（状态可在仪表盘查看）'),
-    ).toBeVisible()
+    await expect(page.getByText('服务器进程已启动，是否就绪请在实例卡片上查看。')).toBeVisible()
     await expect(page.getByText('新部署实例').first()).toBeVisible()
     await maybeShot(page, 'deploy-done-dark.png')
     await page.getByRole('button', { name: '完成' }).click()

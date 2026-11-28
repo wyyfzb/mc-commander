@@ -72,6 +72,19 @@ describe('DatapackPanel', () => {
     expect(await screen.findByText('已启用 file/uatpack.zip')).toBeInTheDocument()
   })
 
+  it('动作仅投递时不刷新数据包列表或提示启用成功', async () => {
+    const send = vi.fn<(command: string) => Promise<string | null>>(async () => LIST_ONE_AND_ONE)
+    renderPanel({ send })
+    await screen.findByText('file/uatpack.zip')
+
+    send.mockResolvedValueOnce(null)
+    await userEvent.click(screen.getByRole('button', { name: '启用' }))
+
+    expect(await screen.findByText('命令已投递，未确认游戏执行')).toBeInTheDocument()
+    expect(send).toHaveBeenCalledTimes(2)
+    expect(screen.queryByText('已启用 file/uatpack.zip')).not.toBeInTheDocument()
+  })
+
   it('置顶/置底走排序位置形态', async () => {
     const send = vi.fn(async () => LIST_ONE_AND_ONE)
     renderPanel({ send })

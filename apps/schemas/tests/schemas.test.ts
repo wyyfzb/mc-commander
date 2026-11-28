@@ -1207,7 +1207,7 @@ describe('版本号解析与比较（契约包唯一一份）', () => {
 // 快照载荷里的 msmpPush 沿用 worldUpgrade 的三态口径：布尔＝权威值、**字段缺席＝未知**
 // （旧服务端）⇒ 客户端保持现状，不能读成「断开」。
 describe('状态快照载荷：msmpPush 可选', () => {
-  const base = { status: 'running', isRunning: true, players: [], tps: 20 }
+  const base = { status: 'running', isRunning: true, startupState: 'ready', players: [], tps: 20 }
 
   it('带上布尔值 ⇒ 解析通过', () => {
     expect(wsStatusSnapshotSchema.parse({ ...base, msmpPush: false }).msmpPush).toBe(false)

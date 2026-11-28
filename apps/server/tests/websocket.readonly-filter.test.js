@@ -188,11 +188,17 @@ describe('只读角色的 WS 事件过滤', () => {
       );
     });
 
-    it('未订阅该实例时两边都收不到（角色过滤不改变订阅语义）', () => {
+    it('只读连接未订阅实例时只收到启停刷新信号，不收快照、日志和存档事件', () => {
       const ro = connect(READONLY_KEY);
       ro.send.mockClear();
       serverManager.emit('instance:status', { instanceId: 's1', event: 'started' });
-      expect(receivedTypes(ro)).not.toContain(WSEvents.STATUS_EVENT);
+      serverManager.emit('instance:status', { instanceId: 's1', event: 'save' });
+      serverManager.emit('instance:log', { instanceId: 's1', text: 'fixture', type: 'stdout' });
+      expect(receivedTypes(ro)).toEqual([WSEvents.STATUS_EVENT]);
+      expect(JSON.parse(ro.send.mock.calls[0][0])).toMatchObject({
+        instanceId: 's1',
+        data: { event: 'started', refreshOnly: true },
+      });
     });
   });
 

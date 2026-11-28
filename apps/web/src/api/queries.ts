@@ -160,7 +160,7 @@ export function useCrashArtifact(instanceId: string | null, fileName?: string) {
     queryKey: [...queryKeys.crashArtifact(instanceId ?? ''), fileName ?? null] as const,
     queryFn: ({ signal }) =>
       apiGet<CrashArtifact | null>(
-        `/api/v1/instances/${instanceId}/crash-report${
+        `/api/v1/instances/${encodeURIComponent(instanceId ?? '')}/crash-report${
           fileName ? `?file=${encodeURIComponent(fileName)}` : ''
         }`,
         config,
@@ -183,7 +183,7 @@ export function useCrashHistory(instanceId: string | null, limit = 20) {
     queryKey: [...queryKeys.crashHistory(instanceId ?? ''), limit] as const,
     queryFn: ({ signal }) =>
       apiGet<CrashArtifactHistory>(
-        `/api/v1/instances/${instanceId}/crash-reports?limit=${limit}`,
+        `/api/v1/instances/${encodeURIComponent(instanceId ?? '')}/crash-reports?limit=${limit}`,
         config,
         signal,
       ),
@@ -197,7 +197,11 @@ export function useInstanceStatus(instanceId: string | null) {
   return useQuery({
     queryKey: queryKeys.instance(instanceId ?? ''),
     queryFn: ({ signal }) =>
-      apiGet<InstanceStatus>(`/api/v1/instances/${instanceId}`, config, signal),
+      apiGet<InstanceStatus>(
+        `/api/v1/instances/${encodeURIComponent(instanceId ?? '')}`,
+        config,
+        signal,
+      ),
     enabled: config.status === 'ready' && Boolean(instanceId),
     refetchInterval: FALLBACK_POLL_INTERVAL_MS,
   })

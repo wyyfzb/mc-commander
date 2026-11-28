@@ -75,6 +75,8 @@ export {
 export {
   MSMP_MIN_MC_VERSION,
   crashArtifactQuerySchema,
+  instanceStartupStateSchema,
+  type InstanceStartupState,
   instanceSummarySchema,
   instanceStatusSchema,
   reachabilitySchema,

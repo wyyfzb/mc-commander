@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { describe, it, expect, beforeEach, afterEach, beforeAll, afterAll, vi } from 'vitest'
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { setupServer } from 'msw/node'
 import { Toaster } from 'sonner'
@@ -114,6 +114,18 @@ describe('McClockCard 世界控制', () => {
     expect(root.className).toContain('p-4')
   })
 
+  it('进程启动中不可调整天气或时间，就绪未确认时按可用通道操作', () => {
+    useServerStore.setState({ status: { ...mockInstanceStatus, startupState: 'starting' } })
+    const { unmount } = renderWithProviders(<McClockCard />)
+    expect(screen.getByRole('radio', { name: '晴天' })).toBeDisabled()
+    expect(screen.getByRole('radio', { name: '白天' })).toBeDisabled()
+
+    unmount()
+    useServerStore.setState({ status: { ...mockInstanceStatus, startupState: 'unknown' } })
+    renderWithProviders(<McClockCard />)
+    expect(screen.getByRole('radio', { name: '晴天' })).toBeEnabled()
+  })
+
   it('实例停止时控件禁用', () => {
     useServerStore.setState({
       status: { ...mockInstanceStatus, isRunning: false, weather: null, worldTime: null },
@@ -193,6 +205,19 @@ describe('AnnouncementCard 公告发送', () => {
     )
   })
 
+  it('确认期间进入启动中时禁止发送公告并保留草稿', () => {
+    renderWithProviders(<AnnouncementCard />)
+    fireEvent.click(screen.getByRole('button', { name: '重启预告' }))
+    fireEvent.click(screen.getByRole('button', { name: '发送公告' }))
+    act(() =>
+      useServerStore.setState({ status: { ...mockInstanceStatus, startupState: 'starting' } }),
+    )
+    expect(screen.getByRole('button', { name: /^发送$/ })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+    expect(screen.getByLabelText('公告内容')).toHaveValue('服务器将在 5 分钟后重启，请及时停靠')
+    expect(screen.getByRole('button', { name: '发送公告' })).toBeDisabled()
+  })
+
   it('空输入不发命令', () => {
     renderWithProviders(<AnnouncementCard />)
     const input = screen.getByLabelText('公告内容')
@@ -201,15 +226,15 @@ describe('AnnouncementCard 公告发送', () => {
     expect(useTerminalStore.getState().buffer.length).toBe(0)
   })
 
-  it('天气/时间 chip 是单选组：方向键移动即选中且焦点跟随', () => {
+  it('天气/时间方向键移动焦点，游戏响应后选中目标值', async () => {
     renderWithProviders(<McClockCard />)
     const weatherGroup = screen.getByRole('radiogroup', { name: '天气' })
     const weathers = within(weatherGroup).getAllByRole('radio')
     expect(weathers[0]).toHaveAttribute('aria-checked', 'true') // mock 天气为 clear
 
     fireEvent.keyDown(weatherGroup, { key: 'ArrowRight' })
-    expect(weathers[1]).toHaveAttribute('aria-checked', 'true')
     expect(document.activeElement).toBe(weathers[1])
+    await waitFor(() => expect(weathers[1]).toHaveAttribute('aria-checked', 'true'))
 
     const timeGroup = screen.getByRole('radiogroup', { name: '时间' })
     const times = within(timeGroup).getAllByRole('radio')
@@ -217,6 +242,11 @@ describe('AnnouncementCard 公告发送', () => {
     const checked = times.findIndex((el) => el.getAttribute('aria-checked') === 'true')
     const from = checked >= 0 ? checked : 0
     fireEvent.keyDown(timeGroup, { key: 'ArrowLeft' })
-    expect(times[(from - 1 + times.length) % times.length]).toHaveAttribute('aria-checked', 'true')
+    await waitFor(() =>
+      expect(times[(from - 1 + times.length) % times.length]).toHaveAttribute(
+        'aria-checked',
+        'true',
+      ),
+    )
   })
 })

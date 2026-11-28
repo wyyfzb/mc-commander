@@ -152,9 +152,8 @@ describe('备份取消（executeBackup 取消分支）', () => {
 
     // executeBackup 启动即注册；取消 API 命中并 abort → spawn mock 收到 kill
     await vi.waitFor(() => expect(mockSpawn).toHaveBeenCalled());
-    // 模拟 rsync 已写入的半成品（取消清理断言的对象）
-    fs.mkdirSync(snapshotDir, { recursive: true });
-    fs.writeFileSync(path.join(snapshotDir, 'partial.dat'), 'half');
+    const stagingDir = mockSpawn.mock.calls[0][1].at(-1);
+    fs.writeFileSync(path.join(stagingDir, 'partial.dat'), 'half');
     const hit = requestCancelBackup('s1');
     expect(hit).toEqual({ kind: 'create', backupId: 77 });
 
@@ -168,7 +167,7 @@ describe('备份取消（executeBackup 取消分支）', () => {
     expect(MockBackupModel.update).not.toHaveBeenCalled();
     expect(failedEvents).toEqual([]);
 
-    // 半成品快照目录被清理
+    expect(fs.existsSync(stagingDir)).toBe(false);
     expect(fs.existsSync(snapshotDir)).toBe(false);
 
     // 注册表项清理：再次请求取消为空

@@ -128,12 +128,12 @@ test.describe('世界页', () => {
     await page.goto('/world')
     // 桌面 rail 与移动抽屉各渲染一份迷你卡：抽屉那份 aria-hidden/inert，仍按名字精确限定
     const rail = page.getByRole('complementary', { name: '主导航', exact: true })
-    const line = rail.getByText('运行中 · 3 人在线 · 轮询')
+    const line = rail.getByText('已就绪 · 3 人在线 · 轮询')
     await expect(line).toBeVisible({ timeout: 10_000 })
     // 逐字比对可见文本（剔除 sr-only）：`getByText` 是**子串**匹配，把标签改成「轮询中」
     // 它照样命中——那种断言咬不住文案本身
-    expect(await visibleText(line)).toBe('运行中 · 3 人在线 · 轮询')
-    // 标签必须短到不截断：该行内容宽实测 149px（「运行中 · 3 人在线」占 90px），带空格的
+    expect(await visibleText(line)).toBe('已就绪 · 3 人在线 · 轮询')
+    // 标签必须短到不截断：该行内容宽实测 149px（「已就绪 · 3 人在线」占 90px），带空格的
     // 整句「每 30 秒刷新」要 172px，会被 ellipsis 吃掉尾巴。这条只有真实布局能量到，jsdom 恒 0
     expect(await line.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(0)
   })
@@ -149,10 +149,10 @@ test.describe('世界页', () => {
     })
     await page.goto('/world')
     const rail = page.getByRole('complementary', { name: '主导航', exact: true })
-    const line = rail.getByText('运行中 · 3 人在线 · 实时')
+    const line = rail.getByText('已就绪 · 3 人在线 · 实时')
     await expect(line).toBeVisible({ timeout: 10_000 })
     // 逐字比对可见文本：子串匹配下「实时更新」这类改法照样命中
-    expect(await visibleText(line)).toBe('运行中 · 3 人在线 · 实时')
+    expect(await visibleText(line)).toBe('已就绪 · 3 人在线 · 实时')
     // 正档同样不得被 ellipsis 吃掉（实测 128px / 内容宽 149px）；jsdom 量不到真实几何
     expect(await line.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(0)
     // 顶栏已不承载这条结果（它只报连接档位）

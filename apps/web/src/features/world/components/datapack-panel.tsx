@@ -5,6 +5,9 @@ import { Chip } from '@/components/mcs/chip'
 import { Card, CardBody, CardHeader, CardTitle } from '@/components/mcs/card'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
 import { Input } from '@/components/ui/input'
+import { ApiError } from '@/api/client'
+import { getFriendlyErrorText } from '@/api/errors'
+import { COMMAND_DELIVERED_WITHOUT_RESPONSE, COMMAND_EMPTY_RESPONSE } from '@/api/players'
 import { useDatapackList } from '../queries'
 import {
   buildDatapackCreateCommand,
@@ -107,10 +110,26 @@ export function DatapackPanel({
     setFeedback(null)
     try {
       const raw = await onSendCommand(built.command)
-      setFeedback(outcomeFeedback(parseDatapackAction(raw ?? '')))
+      if (raw === null) {
+        setFeedback({ tone: 'info', text: COMMAND_DELIVERED_WITHOUT_RESPONSE })
+        return
+      }
+      const outcome = raw.trim() ? parseDatapackAction(raw) : null
+      setFeedback(
+        outcome ? outcomeFeedback(outcome) : { tone: 'info', text: COMMAND_EMPTY_RESPONSE },
+      )
       await listQuery.refetch()
+      return outcome?.outcome
     } catch (e) {
-      setFeedback({ tone: 'error', text: e instanceof Error ? e.message : String(e) })
+      setFeedback({
+        tone: 'error',
+        text:
+          e instanceof ApiError
+            ? getFriendlyErrorText(e)
+            : e instanceof Error
+              ? e.message
+              : String(e),
+      })
     } finally {
       setBusy(null)
     }
@@ -296,7 +315,8 @@ export function DatapackPanel({
                     const id = newId
                     const desc = newDesc
                     void runAction(`create:${id}`, () => buildDatapackCreateCommand(id, desc)).then(
-                      () => {
+                      (outcome) => {
+                        if (outcome !== 'created') return
                         setNewId('')
                         setNewDesc('')
                       },

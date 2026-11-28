@@ -415,7 +415,7 @@ server.listen(config.port, config.host, () => {
         startNext();
         return;
       }
-      if (instance._circuitBreakerTripped) {
+      if (instance.circuitBreakerTripped) {
         logger.info(`[AutoStart] ${inst.id} circuit breaker tripped, skipping`);
         startNext();
         return;
@@ -427,7 +427,7 @@ server.listen(config.port, config.host, () => {
       }
       try {
         instance.start();
-        logger.info(`[AutoStart] ${inst.id} started successfully`);
+        logger.info(`[AutoStart] ${inst.id} start requested`);
       } catch (e) {
         logger.error(`[AutoStart] ${inst.id} failed to start:`, e.message);
       }

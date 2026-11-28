@@ -7,7 +7,7 @@
  */
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { apiPost } from '@/api/client'
+import { apiStopInstance } from '@/api/instances'
 import { getFriendlyErrorText } from '@/api/errors'
 import { queryKeys } from '@/api/queries'
 import { useConnectionStore } from '@/stores/connection'
@@ -21,7 +21,7 @@ export function useStopInstance() {
   return useMutation({
     mutationFn: async (id: string) => {
       setPhase(id, 'stopping')
-      await apiPost(`/api/v1/instances/${id}/stop`, config)
+      await apiStopInstance(config, id)
       return id
     },
     onSuccess: (_data, id) => {

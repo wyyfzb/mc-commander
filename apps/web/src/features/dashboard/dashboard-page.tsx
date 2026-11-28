@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, RefreshCw } from 'lucide-react'
+import { RefreshCw } from 'lucide-react'
 import { BigStatCards, PlayersCard, RuntimeInfoCard } from './components/stat-cards'
 import { ServerTerminal } from './components/server-terminal'
 import { CommandInput } from './components/command-input'
@@ -101,7 +101,7 @@ export function DashboardPage() {
           failedSources.length > 0 && !statusLoading ? (
             /* 查询失败优先于超标告警：前者说的是「这些数可能不是真的」，后者是
                「数是真的但不好」——先讲可信度，否则用户可能拿过期读数做判断 */
-            <NoticeBanner variant="error" icon={AlertTriangle}>
+            <NoticeBanner variant="error">
               {/* 文案成块、动作靠右：文本折行时整句换行不产生孤字，按钮也不被挤进文本流 */}
               <span className="flex items-center justify-between gap-3">
                 <span className="min-w-0">
@@ -155,7 +155,7 @@ export function DashboardPage() {
           <Card
             as="div"
             size="flush"
-            className="flex flex-col divide-y divide-mcs-border-muted overflow-hidden"
+            className="flex shrink-0 flex-col divide-y divide-mcs-border-muted overflow-hidden"
           >
             <McClockCard embedded />
             {/* 状态 → 数据安全 → 主动操作：备份卡排在公告发送之前（蓝本同序） */}

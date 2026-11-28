@@ -8,6 +8,7 @@ import { localDateKey } from '../utils/local-date.js';
 import { BackupModel } from '../db/backup.model.js';
 import {
   BackupService,
+  hasInProgressBackup,
   requestCancelBackup,
   resolveContained,
 } from '../services/backup.service.js';
@@ -35,20 +36,6 @@ import {
 } from '../middleware/validate.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { logger } from '../utils/logger.js';
-
-// 进行中操作互斥检查（restoring 状态机）：同实例存在 creating（备份中）
-// 或 restoring（恢复中）记录时返回 true。创建/恢复/删除三入口统一口径；
-// 卡死恢复先行（崩溃残留记录超时重置），确保路由 409 前卡死记录已自愈
-function hasInProgressBackup(instanceId) {
-  BackupModel.resetStaleInProgress({
-    maxAgeMs: config.backupInProgressTimeoutMs,
-    instanceId,
-  });
-  return (
-    BackupModel.findAll({ instanceId, status: 'creating' }).total > 0 ||
-    BackupModel.findAll({ instanceId, status: 'restoring' }).total > 0
-  );
-}
 
 export function createBackupRoutes(serverManager) {
   const router = Router({ mergeParams: true });
@@ -188,9 +175,7 @@ export function createBackupRoutes(serverManager) {
         targetType: 'backup',
         targetId: String(backup.id),
       });
-      res
-        .status(201)
-        .json(validatedSuccess(backupItemSchema, backup, 'Backup created successfully'));
+      res.status(201).json(validatedSuccess(backupItemSchema, backup, '备份请求已受理'));
     }),
   );
 

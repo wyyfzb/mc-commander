@@ -6,9 +6,31 @@
  *
  * TPS 分级与阈值取自既有唯一声明源，不在这里另写一份：卡片说健康、总览说卡顿属同一类漂移。
  */
+import { AUTO_START_PAUSED_TEXT, SERVER_STARTING_TEXT } from '@/lib/notifications'
 import { TPS_HEALTHY_MIN, tpsLevel } from '@/lib/mc-tps'
-import { instanceLabel } from '@/lib/instance-label'
+import { instanceLabel, STARTUP_STATE_LABELS } from '@/lib/instance-label'
 import type { InstanceStatus } from '@/api/types'
+import type { InstancePhase } from '@/stores/server'
+
+type InstanceLifecycle = InstanceStatus['startupState'] | 'stopping'
+
+export const INSTANCE_LIFECYCLE = {
+  stopped: { label: STARTUP_STATE_LABELS.stopped, tone: 'muted' },
+  starting: { label: STARTUP_STATE_LABELS.starting, tone: 'default' },
+  ready: { label: STARTUP_STATE_LABELS.ready, tone: 'success' },
+  unknown: { label: STARTUP_STATE_LABELS.unknown, tone: 'muted' },
+  stopping: { label: '停止中', tone: 'default' },
+} as const satisfies Record<InstanceLifecycle, { label: string; tone: string }>
+
+export function instanceLifecycle(
+  status: Pick<InstanceStatus, 'startupState'>,
+  phase?: InstancePhase | null,
+): InstanceLifecycle {
+  if (phase === 'stopping') return 'stopping'
+  // 本地启动指令仅填补列表仍显示「已停止」的窗口，不能盖过服务端的就绪确认。
+  if (phase === 'starting' && status.startupState === 'stopped') return 'starting'
+  return status.startupState
+}
 
 export type FleetIssueLevel = 'error' | 'warning'
 
@@ -20,22 +42,27 @@ export interface FleetIssue {
   description: string
 }
 
-/**
- * 严重度序：error 必须先于 warning。同档内运行中排在已停止之前——停着的实例再糟也占不到人，
- * 运行中的才是此刻要处理的。
- */
 const LEVEL_RANK: Record<FleetIssueLevel, number> = { error: 0, warning: 1 }
 
-export function fleetIssue(status: InstanceStatus): FleetIssue | null {
+export function fleetIssue(
+  status: InstanceStatus,
+  lifecycle = instanceLifecycle(status),
+): FleetIssue | null {
   if (status.circuitBreakerTripped) {
-    return {
-      level: 'error',
-      label: '崩溃熔断',
-      description: `连续崩溃 ${status.consecutiveCrashes} 次后自动重启已被禁用，需要人工处理`,
+    if (status.checkingStartupStability) {
+      return {
+        level: 'error',
+        label: '确认稳定中',
+        description: '正在确认服务器能否稳定运行',
+      }
     }
+    if (lifecycle === 'starting') {
+      return { level: 'error', label: '试启中', description: SERVER_STARTING_TEXT }
+    }
+    return { level: 'error', label: '反复退出', description: AUTO_START_PAUSED_TEXT }
   }
-  // 未运行时 tps 是上一次运行的残留读数，拿它判卡顿会把停着的实例整片标成故障
-  if (status.isRunning) {
+  // 就绪前的 TPS 和可达性可能是初值或上一轮进程的读数。
+  if (lifecycle === 'ready' && status.tps != null) {
     const level = tpsLevel(status.tps)
     if (level !== 'healthy') {
       const critical = level === 'critical'
@@ -50,10 +77,10 @@ export function fleetIssue(status: InstanceStatus): FleetIssue | null {
     return {
       level: 'warning',
       label: '近期崩溃',
-      description: `近期崩溃 ${status.consecutiveCrashes} 次，尚未达到熔断阈值`,
+      description: `近期崩溃 ${status.consecutiveCrashes} 次`,
     }
   }
-  if (status.reachability === 'blocked') {
+  if (lifecycle === 'ready' && status.reachability === 'blocked') {
     return {
       level: 'warning',
       label: '连不进来',
@@ -65,22 +92,26 @@ export function fleetIssue(status: InstanceStatus): FleetIssue | null {
 
 export interface FleetRow {
   status: InstanceStatus
+  lifecycle: InstanceLifecycle
   issue: FleetIssue | null
 }
 
-/** 排序档：故障 → 告警 → 健康运行 → 已停止 */
 function rankOf(row: FleetRow): number {
   if (row.issue) return LEVEL_RANK[row.issue.level]
-  return row.status.isRunning ? 2 : 3
+  if (row.lifecycle === 'ready') return 2
+  return row.lifecycle === 'stopped' ? 4 : 3
 }
 
-/**
- * 按「要人管的程度」排序：故障 → 告警 → 健康运行 → 已停止，同档按展示名。
- * 页头与横幅必须交代这条顺序——静默重排会让用户以为清单漏了实例。
- */
-export function buildFleetRows(instances: readonly InstanceStatus[]): FleetRow[] {
+/** 按故障 → 告警 → 已就绪 → 过渡或未知 → 已停止排序，同档按展示名。 */
+export function buildFleetRows(
+  instances: readonly InstanceStatus[],
+  phases?: Record<string, InstancePhase>,
+): FleetRow[] {
   return instances
-    .map((status) => ({ status, issue: fleetIssue(status) }))
+    .map((status) => {
+      const lifecycle = instanceLifecycle(status, phases?.[status.id])
+      return { status, lifecycle, issue: fleetIssue(status, lifecycle) }
+    })
     .sort((a, b) => {
       const diff = rankOf(a) - rankOf(b)
       if (diff !== 0) return diff
@@ -95,10 +126,17 @@ export function buildFleetRows(instances: readonly InstanceStatus[]): FleetRow[]
  * 刻意写成以单位收尾的省略式状态行，而不是句子：它占的是实例名下方一行 10px 角标位，
  * 换成完整句就必然溢出或折行，而折行后每行实例高度不再一致，清单的可扫读性就没了。
  */
-export function fleetRowSummary(status: InstanceStatus): string {
-  if (!status.isRunning) return status.mcVersion ? `已停止 · ${status.mcVersion}` : '已停止'
-  const parts = [`${status.playerCount} 人在线`, `TPS ${status.tps.toFixed(1)}`]
-  if (status.memoryUsage > 0) parts.push(`内存 ${status.memoryUsage} GB`)
+export function fleetRowSummary(
+  status: InstanceStatus,
+  lifecycle = instanceLifecycle(status),
+): string {
+  const parts: string[] = []
+  if (lifecycle === 'ready') {
+    parts.push(`${status.playerCount} 人在线`)
+    if (status.tps != null) parts.push(`TPS ${status.tps.toFixed(1)}`)
+  }
+  if (status.isRunning && status.memoryUsage > 0) parts.push(`内存 ${status.memoryUsage} GB`)
+  if (lifecycle !== 'ready' && status.mcVersion) parts.push(status.mcVersion)
   return parts.join(' · ')
 }
 

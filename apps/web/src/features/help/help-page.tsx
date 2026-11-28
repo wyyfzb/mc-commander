@@ -13,6 +13,7 @@
  */
 import type { ReactNode } from 'react'
 import { ExternalLink, ImageOff } from 'lucide-react'
+import { useSearchParams } from 'react-router'
 import { PageHeader } from '@/components/mcs/page-header'
 import { Card } from '@/components/mcs/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -219,18 +220,20 @@ export function GuideTab(): ReactNode {
 }
 
 export function HelpPage(): ReactNode {
+  const [searchParams] = useSearchParams()
+  const instanceId = searchParams.get('instance') || undefined
   return (
     <div className="@container flex flex-col gap-4 p-4">
       <PageHeader title="帮助中心" description="出问题先自检与查崩溃历史；想学怎么用看使用向导" />
       {/* 两态的心理路径不同：排障是「我遇到问题了」，向导是「我要学怎么用」。
           默认停在排障——进帮助页的人多数是被某个问题推来的 */}
-      <Tabs defaultValue="diagnose" className="flex flex-col gap-4">
+      <Tabs key={instanceId} defaultValue="diagnose" className="flex flex-col gap-4">
         <TabsList>
           <TabsTrigger value="diagnose">排障</TabsTrigger>
           <TabsTrigger value="guide">使用向导</TabsTrigger>
         </TabsList>
         <TabsContent value="diagnose">
-          <DiagnosticsPanel />
+          <DiagnosticsPanel targetInstanceId={instanceId} />
         </TabsContent>
         <TabsContent value="guide">
           <GuideTab />

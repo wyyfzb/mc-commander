@@ -47,7 +47,7 @@ import { usePlayersUiStore } from '@/features/players/store'
 import { useCreateBackup } from '@/features/backup/queries'
 import { useStopInstance } from '@/hooks/use-instance-stop'
 import { usePanelPreferencesStore } from '@/stores/panel-preferences'
-import { apiPost } from '@/api/client'
+import { apiRestartInstance, INSTANCE_RESTART_SPAWNED } from '@/api/instances'
 import { getFriendlyErrorText } from '@/api/errors'
 import { instanceLabel } from '@/lib/instance-label'
 import { queryKeys } from '@/api/queries'
@@ -95,14 +95,13 @@ export function CommandPalette() {
   const [pendingAction, setPendingAction] = useState<'重启' | '停止' | null>(null)
   const [confirmExecuting, setConfirmExecuting] = useState(false)
 
-  /** 重启：与实例页同源 apiPost；发令成功后失效实例状态（WS status 事件后续驱动） */
   const restartMutation = useMutation({
     mutationFn: async (id: string) => {
-      await apiPost(`/api/v1/instances/${id}/restart`, config)
+      await apiRestartInstance(config, id)
       return id
     },
     onSuccess: (_data, id) => {
-      toast.success('重启指令已发送')
+      toast.success(INSTANCE_RESTART_SPAWNED)
       void queryClient.invalidateQueries({ queryKey: queryKeys.instance(id) })
       void queryClient.invalidateQueries({ queryKey: queryKeys.instances() })
     },

@@ -236,13 +236,9 @@ export function _parseOutput(text) {
       this._emitPerformance();
     }
 
-    if (line.includes('Done') && line.includes('For help, type')) {
-      // 启动完成（世界生成/首次写入结束）：标记存档大小缓存失效
-      this._worldSizeDirty = true;
-      // 就绪**不**因推送在线而让位：推送面是在服务器 `Done` 之后才开始守通道的
-      // （`_msmpNotifStart` 在 `_finalizeStartup`），`notification/server/started`
-      // 对面板自己的启动必然已经错过——让位就等于永远收不到「就绪」
-      this.emit('status', { event: 'ready' });
+    if (/^Done \(\d+(?:\.\d+)?s\)! For help, type "help"(?: or "\?")?$/.test(body.trim())) {
+      // 接管续读可能从轮转文件头补读，不能用文件里的 Done 证明当前进程就绪。
+      if (this.process && !this.adopted) this._markStartupReady();
     }
 
     // ── 天气变化日志解析 ──

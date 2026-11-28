@@ -23,7 +23,8 @@ vi.mock('../src/db/backup.model.js', () => ({
     resetStaleInProgress: vi.fn(() => 0),
   },
 }));
-vi.mock('../src/services/backup.service.js', () => ({
+vi.mock('../src/services/backup.service.js', async (importOriginal) => ({
+  ...(await importOriginal()),
   // 判据导出：upgrade.service 用它决定要不要跑前置备份。既有用例都走「有世界」路径
   hasWorldData: vi.fn(() => true),
   BackupService: class {

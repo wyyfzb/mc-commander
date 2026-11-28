@@ -58,13 +58,16 @@ vi.mock('child_process', async (importOriginal) => {
   const events = await import('node:events');
   return {
     ...actual,
-    spawnSync: vi.fn(actual.spawnSync),
+    spawnSync: vi.fn(),
     spawn: vi.fn(() => {
       const proc = new events.EventEmitter();
       proc.stdout = new events.EventEmitter();
       proc.stderr = new events.EventEmitter();
       proc.pid = 42424;
-      proc.kill = vi.fn();
+      proc.kill = vi.fn(() => {
+        queueMicrotask(() => proc.emit('exit', null, 'SIGKILL'));
+        return true;
+      });
       if (testState.spawnBehavior === 'exit0') {
         queueMicrotask(() => proc.emit('exit', 0));
       }
@@ -298,14 +301,15 @@ describe('取消在途部署', () => {
     expect(streamOpts?.signal).toBeInstanceOf(AbortSignal);
   });
 
-  it('首启阶段取消：已入库的行一并回滚（不留指向已删目录的幽灵实例）', async () => {
+  it('首启期间不发布恢复记录，取消后清除部署目录', async () => {
     testState.spawnBehavior = 'hang';
+    vi.spyOn(process, 'kill').mockReturnValue(true);
     const { app, manager } = buildApp();
     const deploying = startDeploy(app, { ...DEPLOY_BODY, eula: true });
     const id = await waitFor(() => deployId(manager));
-    // 停在首启：DB 行已写入（首启窗口是取消与「已入库」重叠的唯一阶段）
     await waitFor(() => stages(manager).includes('first_launch'));
-    expect(InstanceModel.create).toHaveBeenCalledTimes(1);
+    const wroteDb = InstanceModel.create.mock.calls.length > 0;
+    const wroteJson = fs.existsSync(`${testState.serversDir}/${id}/instance.json`);
 
     await request(app).post('/api/instances/deploy/cancel').send({ instanceId: id });
     const res = await deploying;
@@ -314,7 +318,8 @@ describe('取消在途部署', () => {
     expect(res.body.code).toBe(40915);
     httpState.manifestPromise = null;
     expect(stages(manager)).toContain('cancelled');
-    expect(InstanceModel.delete).toHaveBeenCalledWith(id);
+    expect({ wroteDb, wroteJson }).toEqual({ wroteDb: false, wroteJson: false });
+    expect(InstanceModel.delete).not.toHaveBeenCalled();
     expect(fs.existsSync(`${testState.serversDir}/${id}`)).toBe(false);
   });
 

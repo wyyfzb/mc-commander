@@ -18,27 +18,33 @@ import { buildFleetRows, countIssues } from './fleet-health'
 import { useFleetData } from './use-fleet-data'
 import { FleetIssueSummary, FleetSummary } from './components/fleet-summary'
 import { FleetTable } from './components/fleet-table'
+import { useServerStore } from '@/stores/server'
 
 export function FleetPage() {
-  const { instances, overview, isLoading, phase, listError, refetchList } = useFleetData()
+  const { instances, overview, isLoading, phase, listError, refetchList, refetchAll } =
+    useFleetData()
 
-  const rows = buildFleetRows(instances)
+  const phases = useServerStore((s) => s.phase)
+  const rows = buildFleetRows(instances, phases)
   const { total: issueCount, errors: errorCount } = countIssues(rows)
-  const empty = !isLoading && instances.length === 0
 
   return (
     <div className="@container flex h-full min-h-0 flex-col gap-4 p-4">
       <PageHeader
         title="实例总览"
         description={
-          empty ? (
+          phase === 'loading' ? (
+            '正在加载实例状态'
+          ) : phase === 'failed' ? (
+            '无法获取实例状态'
+          ) : rows.length === 0 ? (
             '还没有已安装的实例'
           ) : (
             <FleetIssueSummary total={issueCount} errors={errorCount} />
           )
         }
         actions={
-          <Button size="sm" variant="outline" onClick={refetchList} disabled={isLoading}>
+          <Button size="sm" variant="outline" onClick={refetchAll} disabled={isLoading}>
             刷新
           </Button>
         }
@@ -56,7 +62,11 @@ export function FleetPage() {
         }
       />
 
-      <FleetSummary instances={instances} overview={overview} isLoading={isLoading} />
+      <FleetSummary
+        rows={rows}
+        overview={overview}
+        listUnavailable={isLoading || phase === 'failed'}
+      />
 
       {/* 顺序在清单上方交代一句：静默重排会让用户以为清单漏了实例 */}
       {rows.length > 1 && (

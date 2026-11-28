@@ -20,7 +20,7 @@ import { PageHeader } from '@/components/mcs/page-header'
 import { DataTableShell } from '@/components/mcs/data-table-shell'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { useAuditLogs, useCommandHistory, useInstances } from '@/api/queries'
-import { apiSendCommand } from '@/api/players'
+import { apiSendCommand, COMMAND_DELIVERED_WITHOUT_RESPONSE } from '@/api/players'
 import { getFriendlyErrorText } from '@/api/errors'
 import { instanceLabel } from '@/lib/instance-label'
 import type { CommandHistoryItem } from '@/api/types'
@@ -272,8 +272,9 @@ export function AuditPage() {
     }
     setReplayingId(target.id)
     try {
-      await apiSendCommand(config, target.instanceId, target.command, 'replay')
-      toast.success('命令已重发')
+      const response = await apiSendCommand(config, target.instanceId, target.command, 'replay')
+      if (response === null) toast.info(COMMAND_DELIVERED_WITHOUT_RESPONSE)
+      else toast.success('命令已重发，游戏已响应')
       // 新行由服务端落库，重取才看得到
       void cmdQuery.refetch()
     } catch (err) {
@@ -476,7 +477,7 @@ export function AuditPage() {
              遮蔽的既有取舍，此处如实告知，不假装重发一定等价于当初那次。 */
           replayTarget && MASKED_COMMAND_RE.test(replayTarget.command)
             ? '这条命令含被遮蔽的敏感值（如 ***），重发会把遮蔽后的文本原样发出，多半会失败'
-            : '历史里可能含 stop / ban 等不可逆命令，重发会真实执行'
+            : '历史里可能含 stop / ban 等不可逆命令，重发会向实例再次发送命令'
         }
         confirmText="重发"
         loading={replaying}

@@ -21,6 +21,8 @@ vi.mock('../src/db/scheduled_task.model.js', () => ({
     create: vi.fn(),
     update: vi.fn(),
     delete: vi.fn(),
+    updateLastRun: vi.fn(),
+    updateLastRunStatus: vi.fn(),
   },
 }));
 
@@ -37,6 +39,7 @@ vi.mock('../src/utils/audit.js', async (importOriginal) => {
 });
 
 import { createTaskRoutes } from '../src/routes/tasks.js';
+import { TaskScheduler } from '../src/services/task_scheduler.js';
 import { ScheduledTaskModel } from '../src/db/scheduled_task.model.js';
 import { recordAudit } from '../src/utils/audit.js';
 import { errorHandler } from '../src/middleware/error_handler.js';
@@ -393,6 +396,62 @@ describe('DELETE /tasks/:id（删除）', () => {
 });
 
 describe('POST /tasks/:id/run（立即执行）', () => {
+  function buildAppWithScheduler(instance) {
+    const getInstance = vi.fn().mockReturnValue(instance);
+    const taskScheduler = new TaskScheduler({ getInstance, emit: vi.fn() });
+    return buildApp({ getInstance, taskScheduler });
+  }
+
+  it.each(['start', 'restart'])('自动启动暂停时拒绝手动 %s 并提示到实例页重试', async (type) => {
+    ScheduledTaskModel.findById.mockReturnValue(makeTask({ type }));
+    const instance = { isRunning: false, circuitBreakerTripped: true, [type]: vi.fn() };
+    const app = buildAppWithScheduler(instance);
+
+    const res = await request(app).post('/api/v1/tasks/7/run');
+
+    expect(res.status).toBe(409);
+    expect(res.body).toMatchObject({
+      status: 'error',
+      code: 40921,
+      message: '服务器多次意外退出，任务未执行。请到实例页再试一次。',
+    });
+    expect(instance[type]).not.toHaveBeenCalled();
+    expect(recordAudit).not.toHaveBeenCalled();
+  });
+
+  it('自动启动暂停期间仍可手动执行 stop 任务', async () => {
+    ScheduledTaskModel.findById.mockReturnValue(makeTask({ type: 'stop' }));
+    const stop = vi.fn();
+    const app = buildAppWithScheduler({ isRunning: true, circuitBreakerTripped: true, stop });
+
+    const res = await request(app).post('/api/v1/tasks/7/run');
+
+    expect(res.status).toBe(200);
+    expect(stop).toHaveBeenCalledOnce();
+  });
+
+  it('命令结果在途时立即返回触发回执', async () => {
+    const { promise, resolve } = Promise.withResolvers();
+    ScheduledTaskModel.findById.mockReturnValue(makeTask({ type: 'command', command: 'list' }));
+    const sendCommand = vi.fn(() => promise);
+    const app = buildAppWithScheduler({ isRunning: true, sendCommand });
+
+    try {
+      const res = await request(app).post('/api/v1/tasks/7/run');
+
+      expect(res.status).toBe(200);
+      expect(res.body.message).toBe('Task execution triggered');
+      expect(sendCommand).toHaveBeenCalledExactlyOnceWith('list', {
+        source: 'scheduler',
+        requireResponse: true,
+      });
+      expect(ScheduledTaskModel.updateLastRunStatus).not.toHaveBeenCalled();
+    } finally {
+      resolve();
+      await promise;
+    }
+  });
+
   it('taskScheduler 注入：await runTask + 审计 TASK_EXECUTE', async () => {
     ScheduledTaskModel.findById.mockReturnValue(makeTask({ id: 7, instanceId: 'inst-1' }));
     const runTask = vi.fn().mockResolvedValue(undefined);

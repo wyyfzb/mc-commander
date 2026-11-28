@@ -214,6 +214,26 @@ test.describe('仪表盘右栏面板窄屏可达', () => {
  * 仪表盘首屏高度预算（页头紧凑化）：页头必须单行，终端可见高度不得退回旧值。
  * 口径用「页头高 ≤ 页头标题行高的 1.2 倍」——描述换行回标题下方时会立刻翻倍。
  */
+test('1440×600：滚轮能在仪表盘右栏滚到公告输入', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 600 })
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await setupConnection(page)
+  await page.goto('/dashboard')
+  const aside = page.getByTestId('dashboard-aside')
+  const clock = aside.getByRole('heading', { name: 'MC 时钟 · 世界控制' })
+  const input = aside.getByLabel('公告内容')
+  await expect(clock).toBeInViewport()
+  await expect(aside.getByRole('heading', { name: '最近备份' })).toBeVisible()
+  await page.evaluate(() => document.fonts.ready)
+  await expect(input).not.toBeInViewport()
+
+  await clock.hover()
+  await page.mouse.wheel(0, 1200)
+  await expect(input).toBeInViewport({ ratio: 1 })
+  await input.fill('右栏滚轮可达性验证')
+  await expect(aside.getByRole('button', { name: '发送公告' })).toBeEnabled()
+})
+
 test.describe('仪表盘首屏高度预算（1440×900）', () => {
   test('页头单行 + 终端可见高度 ≥ 400px', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })

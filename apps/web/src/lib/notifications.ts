@@ -7,6 +7,10 @@ import { TPS_WARNING_MIN } from './mc-tps'
  * 纯函数设计：无 I/O、无依赖，Vitest 直接单测
  */
 
+export const SERVER_STARTING_TEXT = '服务器正在启动'
+export const AUTO_START_PAUSED_TEXT = '服务器反复退出，已暂停自动启动。'
+export const AUTO_START_RESUMED_TEXT = '服务器已稳定运行。'
+
 export type NotificationCategory = 'game' | 'server' | 'management'
 
 export type NotificationType =
@@ -87,7 +91,7 @@ export const NOTIFICATION_TYPE_META: Record<
   serverStart: { label: '启动', category: 'server', severity: 'info' },
   serverStop: { label: '停止', category: 'server', severity: 'warning' },
   serverCrash: { label: '崩溃', category: 'server', severity: 'severe' },
-  circuitBreaker: { label: '熔断保护', category: 'server', severity: 'severe' },
+  circuitBreaker: { label: '反复退出', category: 'server', severity: 'severe' },
   save: { label: '保存', category: 'server', severity: 'info' },
   lowTps: { label: 'TPS 过低', category: 'server', severity: 'warning' },
   highCpu: { label: 'CPU 过高', category: 'server', severity: 'warning' },
@@ -246,8 +250,8 @@ export function buildNotifications(
       ]
     case 'statusEvent': {
       const ev = d.event as string | undefined
-      if (ev === 'started') {
-        return [{ type: 'serverStart', category: 'server', content: '服务器已启动' }]
+      if (ev === 'started' && d.startupState !== 'unknown') {
+        return [{ type: 'serverStart', category: 'server', content: SERVER_STARTING_TEXT }]
       }
       if (ev === 'ready') {
         return [{ type: 'serverStart', category: 'server', content: '服务器已就绪' }]
@@ -260,19 +264,15 @@ export function buildNotifications(
           {
             type: 'serverCrash',
             category: 'server',
-            content: d.autoRestart ? '服务器意外退出，正在自动重启' : '服务器意外退出',
+            content: d.autoRestart ? '服务器意外退出，即将自动重启' : '服务器意外退出',
           },
         ]
       }
       if (ev === 'circuit_breaker') {
-        const crashes = Number(d.consecutiveCrashes ?? 0)
-        return [
-          {
-            type: 'circuitBreaker',
-            category: 'server',
-            content: `连续崩溃 ${crashes} 次，已触发熔断保护（自动重启暂停，请检查日志）`,
-          },
-        ]
+        return [{ type: 'circuitBreaker', category: 'server', content: AUTO_START_PAUSED_TEXT }]
+      }
+      if (ev === 'auto_start_resumed') {
+        return [{ type: 'serverStart', category: 'server', content: AUTO_START_RESUMED_TEXT }]
       }
       if (ev === 'save') {
         return [{ type: 'save', category: 'server', content: '世界已保存' }]

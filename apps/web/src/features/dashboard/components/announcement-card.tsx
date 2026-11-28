@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/dialog'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useSendCommand } from '@/hooks/use-send-command'
+import { useServerStore } from '@/stores/server'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { Card, CardHeader, CardTitle } from '@/components/mcs/card'
 import { cn } from '@/lib/utils'
@@ -50,6 +51,8 @@ export function AnnouncementCard({ embedded = false }: { embedded?: boolean }) {
   const [text, setText] = useState('')
   const [confirmOpen, setConfirmOpen] = useState(false)
   const { send, isRunning, sending } = useSendCommand()
+  const isStarting = useServerStore((s) => s.status?.startupState === 'starting')
+  const canSend = isRunning && !isStarting
   // 预设列表直接派生自面板偏好：另存本地副本会在拉取完成前读到默认值，
   // 此时保存会把默认值整份写回，覆盖用户已有预设
   const presets = usePanelPreferencesStore((s) => s.remote?.announcementPresets ?? DEFAULT_PRESETS)
@@ -93,13 +96,13 @@ export function AnnouncementCard({ embedded = false }: { embedded?: boolean }) {
   }
 
   const requestSend = () => {
-    if (!text.trim()) return
+    if (!canSend || !text.trim()) return
     setConfirmOpen(true)
   }
 
   const confirmSend = () => {
     const t = text.trim()
-    if (!t) return
+    if (!canSend || !t) return
     // 多行公告用 tellraw（JSON 文本组件支持 \n），单行保持 say
     const cmd = t.includes('\n') ? `tellraw @a ${JSON.stringify({ text: t })}` : `say ${t}`
     if (send(cmd)) setText('')
@@ -124,7 +127,7 @@ export function AnnouncementCard({ embedded = false }: { embedded?: boolean }) {
           variant="outline"
           size="sm"
           onClick={requestSend}
-          disabled={!isRunning || sending || !text.trim()}
+          disabled={!canSend || sending || !text.trim()}
           aria-label="发送公告"
           className="ml-auto"
         >
@@ -141,7 +144,7 @@ export function AnnouncementCard({ embedded = false }: { embedded?: boolean }) {
           if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') requestSend()
         }}
         placeholder={`输入公告内容…（${primaryModifierLabel()}+Enter 发送，支持多行）`}
-        disabled={!isRunning}
+        disabled={!canSend}
         aria-label="公告内容"
         className="min-h-16 w-full"
       />
@@ -256,6 +259,7 @@ export function AnnouncementCard({ embedded = false }: { embedded?: boolean }) {
         description="将向全体在线玩家广播，确认发送？"
         confirmText="发送"
         loading={sending}
+        confirmDisabled={!canSend}
         onConfirm={confirmSend}
         warning="此公告将立即广播给全体在线玩家"
       >

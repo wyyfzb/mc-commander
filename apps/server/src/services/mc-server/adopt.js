@@ -181,6 +181,7 @@ export function adoptFromPidFile() {
   this.adopted = true;
   this.adoptedPid = pid;
   this.process = null;
+  this._startupReady = false;
   this.isRunning = true;
   // 启动时刻取进程自己的（不是接管时刻）：uptime 才与真实运行时长一致
   this.startTime = this._procStartTimeMs(pid) || Date.now();
@@ -191,7 +192,7 @@ export function adoptFromPidFile() {
   this._startStatsCollection();
   this._startAdoptWatchdog();
   logger.info(`[${this.id}] Adopted orphan server process (pid ${pid})`);
-  this.emit('status', { event: 'started' });
+  this.emit('status', { event: 'started', startupState: 'unknown' });
   return true;
 }
 

@@ -132,7 +132,9 @@ describe('CommandPalette 实例操作分组', () => {
     expect(await screen.findByText('重启服务器')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: '重启' }))
     await waitFor(() => expect(restartCalled).toBe(true))
-    await waitFor(() => expect(screen.getByText('重启指令已发送')).toBeInTheDocument())
+    await waitFor(() =>
+      expect(screen.getByText('新进程已启动，游戏就绪状态待确认')).toBeInTheDocument(),
+    )
   })
 
   it('备份：无确认直接执行 POST backups', async () => {

@@ -8,17 +8,24 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router'
 import { Block, GuideBlocks, GuideTab, HelpPage, Inline } from '@/features/help/help-page'
 import { parseGuide } from '@/features/help/guide-markdown'
 
 // 页面壳用例只关心「两个标签 + 默认停在哪」；排障面板自己要连网络，另有独立用例（含 MSW）
 vi.mock('@/features/help/diagnostics-panel', () => ({
-  DiagnosticsPanel: () => <div data-testid="diagnostics-panel" />,
+  DiagnosticsPanel: ({ targetInstanceId }: { targetInstanceId?: string }) => (
+    <div data-testid="diagnostics-panel">{targetInstanceId}</div>
+  ),
 }))
 
 describe('HelpPage 页面壳', () => {
   it('页头是「帮助中心」，两个标签都在，默认停在排障', () => {
-    render(<HelpPage />)
+    render(
+      <MemoryRouter>
+        <HelpPage />
+      </MemoryRouter>,
+    )
     expect(screen.getByRole('heading', { name: '帮助中心' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: '排障' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: '使用向导' })).toBeInTheDocument()
@@ -26,9 +33,23 @@ describe('HelpPage 页面壳', () => {
     expect(screen.getByTestId('diagnostics-panel')).toBeInTheDocument()
   })
 
+  it('来自实例卡的链接在排障标签传入解码后的目标实例', () => {
+    render(
+      <MemoryRouter initialEntries={['/help?instance=beta%3Atest']}>
+        <HelpPage />
+      </MemoryRouter>,
+    )
+    expect(screen.getByRole('tab', { name: '排障' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByTestId('diagnostics-panel')).toHaveTextContent('beta:test')
+  })
+
   it('切到使用向导才渲染文档（默认不挂在 DOM 里）', async () => {
     const user = userEvent.setup()
-    render(<HelpPage />)
+    render(
+      <MemoryRouter>
+        <HelpPage />
+      </MemoryRouter>,
+    )
     expect(screen.queryByRole('heading', { name: /部署面板/ })).toBeNull()
 
     await user.click(screen.getByRole('tab', { name: '使用向导' }))

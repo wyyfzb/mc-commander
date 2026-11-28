@@ -1,9 +1,8 @@
 /**
  * 运维韧性测试
- * - 崩溃循环熔断（滑动窗口计数 + 达阈值禁用 autoRestart + 持久化 + WS 事件）
+ * - 崩溃熔断与自启配置
  * - 磁盘使用率（getDiskUsage 缓存 + 去重 + statfsSync 返回值）
  * - check-update 端点（releases 版本源 / 离线回退）
- * - autoStart 恢复（面板重启后逐个错峰启动，跳过熔断/已运行/缺失）
  *
  * 超时余量：本节里三例在 it() 内动态 import 模块图（routes/index.js 是整棵路由树、
  * services/mc_server.js 是服务实例图），耗时是模块图求值而非用例逻辑——三泳道并行下
@@ -15,85 +14,10 @@ import { describe, it, expect, vi } from 'vitest';
 
 // ── 1. 崩溃循环熔断 ──────────────────────────────────────
 describe('崩溃循环熔断', () => {
-  // MCServerInstance 构造需要数据库等重量依赖，通过模拟子集测试熔断逻辑
-  // 这里直接测试 config.crashLoop 配置解析 + 熔断计数器逻辑
-
   it('config.crashLoop 有默认值', async () => {
     const config = (await import('../src/config.js')).default;
     expect(config.crashLoop.windowMs).toBe(300000);
     expect(config.crashLoop.maxCrashes).toBe(5);
-  });
-
-  it('滑动窗口：窗口内计数达阈值触发熔断', () => {
-    // 纯逻辑测试（不依赖实例构造）
-    const windowMs = 300000;
-    const maxCrashes = 5;
-    let consecutiveCrashes = 0;
-    let crashWindowStart = null;
-    let circuitBreakerTripped = false;
-    const now = Date.now();
-
-    // 模拟 maxCrashes 次崩溃
-    for (let i = 0; i < maxCrashes; i++) {
-      if (crashWindowStart && now - crashWindowStart > windowMs) {
-        consecutiveCrashes = 0;
-        crashWindowStart = null;
-      }
-      consecutiveCrashes++;
-      if (!crashWindowStart) crashWindowStart = now;
-      if (consecutiveCrashes >= maxCrashes && !circuitBreakerTripped) {
-        circuitBreakerTripped = true;
-      }
-    }
-    expect(circuitBreakerTripped).toBe(true);
-    expect(consecutiveCrashes).toBe(maxCrashes);
-  });
-
-  it('滑动窗口：窗口过期后计数重置', () => {
-    const windowMs = 300000;
-    const maxCrashes = 3;
-    let consecutiveCrashes = 0;
-    let crashWindowStart = null;
-    let circuitBreakerTripped = false;
-
-    // 第 1 次崩溃
-    const t1 = Date.now();
-    consecutiveCrashes++;
-    if (!crashWindowStart) crashWindowStart = t1;
-
-    // 模拟窗口过期（t2 远超窗口）→ 计数清零、窗口起点重置
-    const t2 = t1 + windowMs + 1;
-    if (crashWindowStart && t2 - crashWindowStart > windowMs) {
-      consecutiveCrashes = 0;
-      crashWindowStart = null;
-    }
-    // 窗口过期后再崩溃 maxCrashes-1 次（不足以触发熔断）
-    for (let i = 0; i < maxCrashes - 1; i++) {
-      consecutiveCrashes++;
-      if (!crashWindowStart) crashWindowStart = t2;
-      if (consecutiveCrashes >= maxCrashes && !circuitBreakerTripped) {
-        circuitBreakerTripped = true;
-      }
-    }
-
-    expect(consecutiveCrashes).toBe(maxCrashes - 1);
-    expect(circuitBreakerTripped).toBe(false);
-    expect(crashWindowStart).toBe(t2);
-  });
-
-  it('成功启动重置熔断器', () => {
-    let consecutiveCrashes = 5;
-    let crashWindowStart = Date.now();
-    let circuitBreakerTripped = true;
-
-    // 模拟 start() 重置
-    consecutiveCrashes = 0;
-    crashWindowStart = null;
-    circuitBreakerTripped = false;
-
-    expect(consecutiveCrashes).toBe(0);
-    expect(circuitBreakerTripped).toBe(false);
-    expect(crashWindowStart).toBeNull();
   });
 });
 

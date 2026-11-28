@@ -226,7 +226,9 @@ export function _msmpNotifConnect() {
     this._msmpNotifHeartbeat.unref?.();
     this._emitPushChannelState();
   });
-  socket.on('message', (data) => this._msmpNotifHandleMessage(data));
+  socket.on('message', (data) => {
+    if (this._msmpNotifSocket === socket) this._msmpNotifHandleMessage(data);
+  });
   socket.on('pong', () => {
     this._msmpNotifAlive = true;
     if (this._msmpNotifPongTimer) {
@@ -268,14 +270,19 @@ export function _msmpNotifConnect() {
  * 一个轮询周期才把「实时」翻成「轮询」，期间它在说一件已经不再成立的事。快照是推送的，
  * 连上/断开各广播一次即可即时对齐。载荷与订阅时那份快照同形（无 `event` ⇒ 走快照分支）。
  */
+export function buildStatusSnapshot(instance) {
+  return {
+    status: instance.isRunning ? 'running' : 'stopped',
+    isRunning: Boolean(instance.isRunning),
+    startupState: instance.startupState,
+    players: Array.from(instance.players?.values?.() ?? []),
+    tps: instance.tps ?? null,
+    msmpPush: Boolean(instance.isRunning && instance._msmpNotifConnected),
+  };
+}
+
 export function _emitPushChannelState() {
-  this.emit('status', {
-    status: this.isRunning ? 'running' : 'stopped',
-    isRunning: Boolean(this.isRunning),
-    players: Array.from(this.players?.values?.() ?? []),
-    tps: typeof this.tps === 'number' ? this.tps : null,
-    msmpPush: Boolean(this.isRunning && this._msmpNotifConnected),
-  });
+  this.emit('status', buildStatusSnapshot(this));
 }
 
 /**
@@ -396,9 +403,7 @@ export function _msmpNotifHandleMessage(data) {
     this._worldSizeDirty = true;
     this.emit('status', { event: 'save' });
   } else if (method === 'minecraft:notification/server/started') {
-    // 通常收不到（推送面在 `Done` 之后才开始守通道），收到就按就绪处理，幂等
-    this._worldSizeDirty = true;
-    this.emit('status', { event: 'ready' });
+    this._markStartupReady();
   }
   // `server/saving` 刻意不做事：面板与存档相关的用户可见状态只有「上次保存时刻」，
   // 那是完成时刻；它也没有 stdout 对应物，没有要去重的东西。

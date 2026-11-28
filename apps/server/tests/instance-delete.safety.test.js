@@ -22,6 +22,10 @@ vi.mock('../src/db/index.js', () => ({
   },
 }));
 
+vi.mock('../src/db/backup.model.js', async () => ({
+  BackupModel: (await import('../src/db/index.js')).BackupModel,
+}));
+
 vi.mock('../src/utils/audit.js', async (importOriginal) => {
   const actual = await importOriginal();
   return { ...actual, recordAudit: vi.fn() };

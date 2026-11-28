@@ -1,3 +1,4 @@
+import type { WsStatusEventName } from '@mc-commander/schemas'
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import type {
@@ -17,7 +18,7 @@ const STORAGE_KEY = 'mcs-server'
  */
 
 export interface StatusEvent {
-  event: 'started' | 'stopped' | 'ready' | 'crash' | 'save' | 'circuit_breaker'
+  event: WsStatusEventName
   timestamp: number
 }
 
@@ -68,7 +69,10 @@ export const useServerStore = create<ServerState>()(
 
       setStatus: (status) => set({ status }),
       setSystemStats: (systemStats) => set({ systemStats }),
-      setInstanceId: (instanceId) => set({ instanceId }),
+      setInstanceId: (instanceId) =>
+        set((s) =>
+          s.instanceId === instanceId ? s : { instanceId, status: null, lastStatusEvent: null },
+        ),
       setSocketConnected: (socketConnected) => set({ socketConnected }),
       setHasConnectedOnce: (hasConnectedOnce) => set({ hasConnectedOnce }),
 
@@ -91,7 +95,10 @@ export const useServerStore = create<ServerState>()(
               ? {
                   ...s.status,
                   isRunning: snapshot.isRunning,
-                  tps: snapshot.tps ?? s.status.tps,
+                  startupState: snapshot.startupState,
+                  tps: snapshot.tps,
+                  players: snapshot.players,
+                  playerCount: snapshot.players.length,
                 }
               : null,
           }

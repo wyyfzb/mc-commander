@@ -4,6 +4,8 @@
  */
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/api/queries'
+import { ApiError } from '@/api/client'
+import { ErrorCode } from '@/api/errors'
 import { useConnectionStore } from '@/stores/connection'
 import {
   apiAddWhitelist,
@@ -95,8 +97,13 @@ export function usePlayerAction(instanceId: string | null) {
           return apiAddWhitelist(config, instanceId, req.playerName!)
         case 'whitelistRemove':
           return apiRemoveWhitelist(config, instanceId, req.playerName!)
-        case 'command':
-          return apiSendCommand(config, instanceId, req.command!)
+        case 'command': {
+          const response = await apiSendCommand(config, instanceId, req.command!, undefined, {
+            requireResponse: true,
+          })
+          if (response === null) throw new ApiError(ErrorCode.COMMAND_UNCONFIRMED, 503, '', null)
+          return response
+        }
       }
     },
     onSuccess: () => {

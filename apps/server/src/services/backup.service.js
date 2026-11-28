@@ -307,36 +307,22 @@ export class BackupService {
     return dir;
   }
 
-  // 创建备份
   async createBackup(instanceId, options = {}) {
+    if (hasInProgressBackup(instanceId)) throw new AppError(ErrorCodes.BACKUP_IN_PROGRESS);
+    this._assertBackupLifecycle(this.serverManager?.getInstance(instanceId));
+
+    // 预检会异步扫描目录，必须在第一次 await 前占位，且与执行共用同一把锁。
+    const operation = beginBackupOperation(instanceId, 'create', null);
+    try {
+      return await this._prepareBackup(instanceId, options, operation);
+    } finally {
+      if (operation.backupId === null) endBackupOperation(instanceId, operation);
+    }
+  }
+
+  async _prepareBackup(instanceId, options, operation) {
     const { name, description, type = 'manual', createdBy, taskId } = options;
-
-    // 卡死恢复 + 互斥检查（服务层兜底，与 routes/backups.js 的
-    // BACKUP_IN_PROGRESS(40901) 检查一致）：同一实例已有进行中操作
-    // （status IN creating/restoring）时拒绝创建。下沉到服务层可同时覆盖
-    // HTTP 路由、定时任务调度器两条入口，防止手动备份与定时备份并发执行
-    // （save-off/save-all flush/save-on 序列交错 → 备份捕获不一致世界状态，
-    // Windows 下还因文件占用压缩失败）。检查与 BackupModel.create 之间无
-    // await（better-sqlite3 同步调用），Node 单线程下天然原子，同时消除
-    // 路由层前置检查与创建间的 TOCTOU 窗口。
-    BackupModel.resetStaleInProgress({ maxAgeMs: config.backupInProgressTimeoutMs, instanceId });
-    const busyCount =
-      BackupModel.findAll({ instanceId, status: 'creating' }).total +
-      BackupModel.findAll({ instanceId, status: 'restoring' }).total;
-    if (busyCount > 0) {
-      throw new AppError(ErrorCodes.BACKUP_IN_PROGRESS);
-    }
-
     const instance = this.serverManager?.getInstance(instanceId);
-
-    // 运行中实例的在线备份依赖 RCON（save-off→save-all flush→save-on 原子
-    // 序列）：RCON 不可用（原版默认 enable-rcon=false）时静默直压运行中
-    // 世界会产出不一致包，Windows 下还因文件占用失败——显式拒绝并提示
-    // 用户（停止服务器 或 启用 RCON），不静默降级。
-    if (instance?.isRunning && !instance.isRconConnected) {
-      throw new AppError(ErrorCodes.BACKUP_RCON_UNAVAILABLE);
-    }
-
     const worldName = resolveWorldName(instance, options.worldName);
 
     // worldName 白名单校验——level-name 未经校验时 ../ 可指向
@@ -414,24 +400,17 @@ export class BackupService {
       createdBy,
     });
 
-    // 异步执行备份（fire-and-forget：互斥由 status='creating' 记录承担，
-    // 进程崩溃时该记录由 resetStaleInProgress 按超时重置）
+    operation.backupId = backupRecord.id;
     this.executeBackup(instanceId, instanceDir, backupRecord.id, snapshotDir, {
       estimateBytes,
       jarFile: instance?.jarFile || null,
       taskId,
-    }).catch((err) => {
-      // 取消已在 executeBackup 内自行收敛（删记录 + 事件），此处不再按 id 回写：
-      // 记录已删，UPDATE 只会空转；且 SQLite 复用被删的最大 rowid，回写窗口
-      // 内新发起的备份可能拿到同一 id 被误标 failed
-      if (err?.code === 'CANCELLED') return;
-      logger.error('Backup failed:', err);
-      try {
-        BackupModel.update(backupRecord.id, { status: 'failed' });
-      } catch (e) {
-        logger.error('Failed to update backup status:', e);
-      }
-    });
+      operation,
+    })
+      .catch((err) => {
+        if (err?.code !== 'CANCELLED') logger.error('Backup failed:', err);
+      })
+      .finally(() => endBackupOperation(instanceId, operation));
 
     return backupRecord;
   }
@@ -461,17 +440,15 @@ export class BackupService {
     instanceDir,
     backupId,
     snapshotDir,
-    { estimateBytes = 0, jarFile = null, taskId = null } = {},
+    { estimateBytes = 0, jarFile = null, taskId = null, operation = null } = {},
   ) {
-    // 执行起点：定时备份结果回写历史时换算 duration_ms（快照耗时是排障关键指标）
     const startTs = Date.now();
-    const controller = new AbortController();
-    const activeEntry = { controller, backupId, kind: 'create' };
-    activeOperations.set(instanceId, activeEntry);
-    // 本轮是否真的发出过 save-off：只有发过才欠一个 save-on。
-    // 不能拿「此刻 isRconConnected」倒推——RCON 可能在 save-off 之后掉线，
-    // 那时服务器已停止自动保存，而连接状态已看不出这件事
-    let saveOffSent = false;
+    const activeEntry = operation ?? beginBackupOperation(instanceId, 'create', backupId);
+    const { signal } = activeEntry.controller;
+    let failurePhase = 'execution';
+    let stagingDir;
+    let published = false;
+    let committed = false;
     // 进度推送（1s 节流）；robocopy/ditto 降级路径无 stdout 进度，前端保持不确定态
     const pushProgress = this.serverManager
       ? createProgressPush(this.serverManager, instanceId, backupId, 'instance:backupProgress')
@@ -486,62 +463,106 @@ export class BackupService {
         });
       }
 
-      // 安全备份流程：通过 RCON 暂停自动保存，确保数据一致性。
-      // 运行中+RCON 不可用已在 createBackup 拒绝；此处保留守卫（防御
-      // 实例在创建与执行之间启停的竞态，RCON 掉线时 save 序列失败不致命，
-      // 压缩继续进行——save-off 未生效过则无需 save-on）
-      if (this.serverManager) {
-        const instance = this.serverManager.getInstance(instanceId);
-        if (instance && instance.isRconConnected) {
+      const instance = this.serverManager?.getInstance(instanceId);
+      this._assertBackupLifecycle(instance);
+      const isRunning = Boolean(instance?.isRunning);
+      const process = instance?.process;
+      const adoptedPid = instance?.adoptedPid;
+      const startTime = instance?.startTime;
+      const sameGeneration = () =>
+        this.serverManager?.getInstance(instanceId) === instance &&
+        Boolean(instance?.isRunning) === isRunning &&
+        instance?.process === process &&
+        instance?.adoptedPid === adoptedPid &&
+        instance?.startTime === startTime;
+      const assertSourceStable = () => {
+        if (!sameGeneration()) throw new Error('备份期间服务器运行状态发生变化');
+        this._assertBackupLifecycle(instance);
+      };
+
+      let restoreAutoSave = false;
+      let captureError;
+      let resumeError;
+      try {
+        throwIfBackupCancelled(signal);
+        if (isRunning) {
+          // 命令超时不代表未执行；发起暂停前就登记恢复义务。
+          restoreAutoSave = true;
+          await instance.setAutoSave(false);
+          assertSourceStable();
+          throwIfBackupCancelled(signal);
           try {
-            logger.info(`[Backup] Sending save-off for ${instanceId}...`);
-            await instance.sendCommandWithResponse('save-off', { timeout: 3000 });
-            saveOffSent = true;
-            logger.info(`[Backup] Sending save-all flush for ${instanceId}...`);
-            await instance.saveWorld();
-            // 等待磁盘写入完成
-            await new Promise((resolve) => setTimeout(resolve, 2000));
-          } catch (rconErr) {
-            logger.warn(`[Backup] RCON save commands failed (non-fatal): ${rconErr.message}`);
+            await instance.saveWorld({ force: true });
+          } catch (err) {
+            throw new Error(
+              `无法确认世界已强制落盘：${err.message}。请检查 RCON 连接，或停服后备份`,
+              {
+                cause: err,
+              },
+            );
+          }
+        }
+
+        assertSourceStable();
+        throwIfBackupCancelled(signal);
+        const timeout = Math.min(
+          config.backupSpawnTimeoutMs,
+          Math.max(300000, Math.round((estimateBytes / 1024 / 1024) * 4000)),
+        );
+        // 暂存目录不进入实例归档清单；半成品即使清理失败也不能被挂载。
+        this.ensureBackupsDir();
+        stagingDir = fs.mkdtempSync(path.join(this.backupsDir, '.staging-'));
+        assertSourceStable();
+        throwIfBackupCancelled(signal);
+        await this._createSnapshot(instanceId, instanceDir, stagingDir, {
+          jarFile,
+          timeout,
+          signal,
+          strict: isRunning,
+          onStdout: pushProgress ? createRsyncProgressParser(pushProgress) : null,
+        });
+        assertSourceStable();
+      } catch (err) {
+        captureError = err;
+      } finally {
+        if (restoreAutoSave && sameGeneration()) {
+          try {
+            await instance.setAutoSave(true);
+          } catch (err) {
+            if (sameGeneration()) {
+              failurePhase = 'save-on';
+              const detail = `恢复自动保存失败：${err.message}。请在服务器控制台执行 save-on`;
+              resumeError = new Error(
+                captureError ? `${captureError.message}；${detail}` : detail,
+                {
+                  cause: captureError ? new AggregateError([captureError, err]) : err,
+                },
+              );
+            }
           }
         }
       }
-
-      // 快照子进程超时按预估规模动态计算（每 MB 约 4s，下限 5min，
-      // 上限配置值）：固定 300s 会误杀 GB 级世界的定时备份。
-      // 快照（rsync 增量/robocopy 复制）耗时估算偏保守
-      // 但不会误杀（timeout 是上限而非目标）
-      const timeout = Math.min(
-        config.backupSpawnTimeoutMs,
-        Math.max(300000, Math.round((estimateBytes / 1024 / 1024) * 4000)),
-      );
-
-      // 创建快照：Windows 优先 rsync（MSYS2，硬链接增量，与 Linux 参数
-      // 完全同构），未安装时自动降级为系统自带 robocopy 全量镜像；
-      // Linux 固定 rsync。返回实际使用的工具（robocopy 降级时记录日志）
-      await this._createSnapshot(instanceId, instanceDir, snapshotDir, {
-        jarFile,
-        timeout,
-        signal: controller.signal,
-        onStdout: pushProgress ? createRsyncProgressParser(pushProgress) : null,
-      });
+      if (resumeError) throw resumeError;
+      if (captureError) throw captureError;
+      assertSourceStable();
+      throwIfBackupCancelled(signal);
 
       // 快照完整性校验：快照 = 实例目录镜像，必须有世界数据（level.dat 位于
       // level-name 目录直接层）且非空。rsync 退出 0/24 已保证文件完整，
       // 此处拦截"空快照/无世界"的无效备份（半成品快照目录
       // 在失败路径统一清理）
-      await this._verifySnapshot(snapshotDir);
+      await this._verifySnapshot(stagingDir);
 
-      // 获取快照大小：递归统计目录总字节（= 单快照逻辑大小，恢复该快照
-      // 所需的容量；硬链接共享 inode 在单目录统计时天然全部计入，与
-      // du -sb <快照>/ 语义一致）。跨平台免 du 命令依赖
-      const size = await estimateDirSize(snapshotDir, { jarFile: null });
+      // 硬链接按单快照的逻辑大小计费，恢复仍需要容纳完整目录树。
+      const size = await estimateDirSize(stagingDir, { jarFile: null });
+      throwIfBackupCancelled(signal);
+      activeEntry.cancellable = false;
 
-      // 更新备份记录
-      BackupModel.update(backupId, {
-        status: 'completed',
-        size,
-      });
+      ensureDir(path.dirname(snapshotDir));
+      fs.renameSync(stagingDir, snapshotDir);
+      published = true;
+      BackupModel.update(backupId, { status: 'completed', size });
+      committed = true;
 
       // 定时备份任务的结果回写：真实成功（快照完成+校验通过）而非 createBackup
       // 触发即成功（createBackup fire-and-forget，resolve 早于快照完成）
@@ -574,6 +595,10 @@ export class BackupService {
         });
       }
     } catch (err) {
+      if (committed) {
+        logger.error('[Backup] 已发布快照，成功结果回报失败:', err);
+        return;
+      }
       const cancelled = err?.code === 'CANCELLED';
       // 用户取消不是故障：ERROR 级堆栈会误导排障（取消在日志里应一眼可辨）
       if (cancelled) {
@@ -588,10 +613,13 @@ export class BackupService {
       // 独立 try/catch：取消是刚 kill 子进程后立即删目录（Windows 上 EBUSY/
       // EPERM 概率高于既有失败路径），清理失败不得吞掉下方的取消记账
       // （记录删除 + backupCancelled 事件）——那会让用户看到「取消无反应」
-      try {
-        fs.rmSync(snapshotDir, { recursive: true, force: true });
-      } catch (cleanupErr) {
-        logger.warn(`[Backup] 清理半成品快照失败 ${snapshotDir}: ${cleanupErr.message}`);
+      const incompleteDir = published ? snapshotDir : stagingDir;
+      if (incompleteDir) {
+        try {
+          fs.rmSync(incompleteDir, { recursive: true, force: true });
+        } catch (cleanupErr) {
+          logger.warn(`[Backup] 清理半成品快照失败 ${incompleteDir}: ${cleanupErr.message}`);
+        }
       }
 
       if (cancelled) {
@@ -623,7 +651,7 @@ export class BackupService {
           instanceId,
           backupId,
           error: err.message,
-          phase: 'execution',
+          phase: failurePhase,
           content: `备份失败: ${err.message}`,
         });
       }
@@ -647,15 +675,14 @@ export class BackupService {
 
       throw err;
     } finally {
-      // 取消注册表项仅当仍是本操作时移除（防误删后来者——现经互斥状态机
-      // 不可能并发，判定为防御）
-      if (activeOperations.get(instanceId) === activeEntry) {
-        activeOperations.delete(instanceId);
-      }
-      // 恢复自动保存：save-off 与 save-on 必须成对。
-      // 无论快照/统计成功与否都补发 save-on，否则异常路径会
-      // 让 MC 服务器永久停留在自动保存关闭状态，崩溃/断电时世界数据回退。
-      await this._restoreSaveOn(instanceId, saveOffSent);
+      endBackupOperation(instanceId, activeEntry);
+    }
+  }
+
+  _assertBackupLifecycle(instance) {
+    if (instance?.startupState === 'starting') throw new AppError(ErrorCodes.INSTANCE_STARTING);
+    if (instance?.lifecycleInProgress || (instance?.isRunning && instance._manualStop)) {
+      throw new AppError(ErrorCodes.BACKUP_FAILED, '服务器状态正在切换，请等待完成后重试备份');
     }
   }
 
@@ -669,7 +696,7 @@ export class BackupService {
     instanceId,
     instanceDir,
     snapshotDir,
-    { jarFile = null, timeout = 300000, signal = null, onStdout = null } = {},
+    { jarFile = null, timeout = 300000, signal = null, onStdout = null, strict = false } = {},
   ) {
     if (process.platform === 'win32') {
       try {
@@ -679,6 +706,7 @@ export class BackupService {
           signal,
           onStdout,
           progressInfo: true,
+          strict,
         });
         return 'rsync';
       } catch (err) {
@@ -695,6 +723,7 @@ export class BackupService {
         jarFile,
         timeout,
         signal,
+        strict,
       });
     }
     await this._rsyncSnapshot(instanceId, instanceDir, snapshotDir, {
@@ -703,6 +732,7 @@ export class BackupService {
       signal,
       onStdout,
       progressInfo: true,
+      strict,
     });
     return 'rsync';
   }
@@ -721,7 +751,7 @@ export class BackupService {
     instanceId,
     instanceDir,
     snapshotDir,
-    { jarFile = null, timeout = 300000, signal = null } = {},
+    { jarFile = null, timeout = 300000, signal = null, strict = false } = {},
   ) {
     const instanceBackupDir = this.getInstanceBackupDir(instanceId);
     let linkDest = null;
@@ -751,6 +781,7 @@ export class BackupService {
         timeout,
         signal,
         linkDest,
+        strict,
       });
     } catch (err) {
       if (err.code === 'ENOENT') {
@@ -762,7 +793,7 @@ export class BackupService {
         await spawnProcess('ditto', [instanceDir, snapshotDir], { timeout, signal });
         return 'ditto';
       }
-      if (linkDest) {
+      if (linkDest && err.code !== 'CANCELLED') {
         // openrsync 对 --link-dest 报错的兜底：退全量 rsync（无 --link-dest）
         logger.warn(`[Backup] macOS rsync --link-dest 失败（${err.message}），退全量 rsync 重试`);
         await this._rsyncSnapshot(instanceId, instanceDir, snapshotDir, {
@@ -770,6 +801,7 @@ export class BackupService {
           timeout,
           signal,
           linkDest: null,
+          strict,
         });
         return 'rsync';
       }
@@ -803,6 +835,7 @@ export class BackupService {
       signal = null,
       onStdout = null,
       progressInfo = false,
+      strict = false,
     } = {},
   ) {
     const instanceBackupDir = this.getInstanceBackupDir(instanceId);
@@ -835,7 +868,8 @@ export class BackupService {
     const args = buildRsyncArgs(instanceDir, snapshotDir, { linkDest, jarFile, progressInfo });
     const code = await spawnProcess(rsyncBin(), args, {
       timeout,
-      okCodes: [0, 24],
+      // 在线快照的源应已静止，不能把传输中消失的文件当作完整备份。
+      okCodes: strict ? [0] : [0, 24],
       signal,
       onStdout,
     });
@@ -882,42 +916,6 @@ export class BackupService {
     }
     if (!this._hasLevelData(snapshotDir)) {
       throw new Error('Snapshot has no level.dat (backup may be corrupted)');
-    }
-  }
-
-  // 恢复自动保存（save-off 的对称操作）。
-  // save-on 失败时通过 backupFailed 事件暴露（phase='save-on'）——若只
-  // console.warn 静默跳过，save-off 已生效后 RCON 断连，MC 服务器
-  // 会永久停留在自动保存关闭状态，崩溃/断电时世界数据回退且无人知晓。
-  async _restoreSaveOn(instanceId, saveOffSent = false) {
-    if (!this.serverManager) return;
-    const instance = this.serverManager.getInstance(instanceId);
-    if (!instance) return;
-    if (!instance.isRconConnected) {
-      // 本轮发过 save-off 却补不上 save-on：服务器已停自动保存，必须让用户知道
-      // 要手动执行 save-on，否则崩溃/断电时世界数据回退且无人知晓
-      if (saveOffSent) {
-        logger.error(`[Backup] save-on 无法补发（RCON 已断开），${instanceId} 已停止自动保存`);
-        this.serverManager.emit('instance:backupFailed', {
-          instanceId,
-          error: 'RCON 连接已断开，自动保存仍处于关闭状态，请在服务器控制台执行 save-on',
-          phase: 'save-on',
-        });
-      }
-      return;
-    }
-    try {
-      logger.info(`[Backup] Sending save-on for ${instanceId}...`);
-      await instance.sendCommandWithResponse('save-on', { timeout: 3000 });
-    } catch (rconErr) {
-      logger.warn(`[Backup] RCON save-on failed (non-fatal): ${rconErr.message}`);
-      this.serverManager.emit('instance:backupFailed', {
-        instanceId,
-        error: rconErr.message,
-        phase: 'save-on',
-        content:
-          '备份已完成，但恢复自动保存失败（服务器可能停留在自动保存关闭状态，请手动执行 save-on）',
-      });
     }
   }
 
@@ -980,16 +978,7 @@ export class BackupService {
 
     const instanceId = backup.instance_id;
 
-    // 互斥（restoring 状态机）：同实例任何进行中操作
-    // （creating=备份中 / restoring=恢复中）都拒绝新的恢复。
-    // 卡死恢复先行：进程崩溃残留的 restoring 记录超时重置回 completed
-    BackupModel.resetStaleInProgress({ maxAgeMs: config.backupInProgressTimeoutMs, instanceId });
-    const busyCount =
-      BackupModel.findAll({ instanceId, status: 'creating' }).total +
-      BackupModel.findAll({ instanceId, status: 'restoring' }).total;
-    if (busyCount > 0) {
-      throw new AppError(ErrorCodes.RESTORE_IN_PROGRESS);
-    }
+    if (hasInProgressBackup(instanceId)) throw new AppError(ErrorCodes.RESTORE_IN_PROGRESS);
 
     // 实例必须处于停止状态：恢复会整体替换实例目录，运行中重命名/删除
     // 被 MC 占用的文件（Windows 下 EPERM）或覆盖正在写入的世界
@@ -1078,9 +1067,8 @@ export class BackupService {
     // 掩盖原始失败并让实例目录永久消失
     let swappedToPreRestore = false;
     // 取消通道：注册表模块级共享（见 executeBackup 注释）；进度 1s 节流推送
-    const controller = new AbortController();
-    const activeEntry = { controller, backupId, kind: 'restore' };
-    activeOperations.set(instanceId, activeEntry);
+    const activeEntry = beginBackupOperation(instanceId, 'restore', backupId);
+    const { controller } = activeEntry;
     const pushProgress = this.serverManager
       ? createProgressPush(this.serverManager, instanceId, backupId, 'instance:restoreProgress')
       : null;
@@ -1230,9 +1218,7 @@ export class BackupService {
       }
       throw err;
     } finally {
-      if (activeOperations.get(instanceId) === activeEntry) {
-        activeOperations.delete(instanceId);
-      }
+      endBackupOperation(instanceId, activeEntry);
     }
   }
 
@@ -1522,11 +1508,42 @@ export function spawnProcess(cmd, args, options = {}) {
   });
 }
 
-// ── 进行中操作的取消注册表（模块级）─────────────────────────────
-// BackupService 在备份路由、定时调度器、升级服务里各自实例化，进行中
-// 操作必须登记在模块层，取消 API 才能命中任意入口发起的操作。key=实例 id：
-// 同实例的创建/恢复经 status 互斥状态机保证同时至多一个，无需复合键
+// 路由、调度器与升级服务各自实例化 BackupService，同一实例共用一个操作租约。
 const activeOperations = new Map();
+
+export function isBackupInProgress(instanceId) {
+  return activeOperations.has(instanceId);
+}
+
+export function hasInProgressBackup(instanceId) {
+  // 运行中的操作不受数据库陈旧记录回收影响。
+  if (isBackupInProgress(instanceId)) return true;
+  BackupModel.resetStaleInProgress({ maxAgeMs: config.backupInProgressTimeoutMs, instanceId });
+  return (
+    BackupModel.findAll({ instanceId, status: 'creating' }).total +
+      BackupModel.findAll({ instanceId, status: 'restoring' }).total >
+    0
+  );
+}
+
+function beginBackupOperation(instanceId, kind, backupId) {
+  if (isBackupInProgress(instanceId)) {
+    throw new AppError(
+      kind === 'restore' ? ErrorCodes.RESTORE_IN_PROGRESS : ErrorCodes.BACKUP_IN_PROGRESS,
+    );
+  }
+  const entry = { kind, backupId, controller: new AbortController(), cancellable: true };
+  activeOperations.set(instanceId, entry);
+  return entry;
+}
+
+function endBackupOperation(instanceId, entry) {
+  if (activeOperations.get(instanceId) === entry) activeOperations.delete(instanceId);
+}
+
+function throwIfBackupCancelled(signal) {
+  if (signal.aborted) throw Object.assign(new Error('操作已被取消'), { code: 'CANCELLED' });
+}
 
 /**
  * 正在进行中的备份/恢复操作快照（实例 id → 类型）。
@@ -1545,7 +1562,7 @@ export function inFlightBackupOps() {
 /** 请求取消该实例进行中的备份/恢复；无进行中操作返回 null */
 export function requestCancelBackup(instanceId) {
   const entry = activeOperations.get(instanceId);
-  if (!entry) return null;
+  if (!entry || entry.backupId === null || !entry.cancellable) return null;
   entry.controller.abort();
   return { kind: entry.kind, backupId: entry.backupId };
 }

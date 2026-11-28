@@ -138,8 +138,8 @@ export class CommandHistoryModel {
         data.command,
         data.source || 'api',
         data.success ? 1 : 0,
-        data.response || null,
-        data.durationMs || null,
+        data.response ?? null,
+        data.durationMs ?? null,
       );
     return this.findById(result.lastInsertRowid);
   }

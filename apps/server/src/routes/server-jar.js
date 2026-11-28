@@ -2,6 +2,7 @@ import express from 'express';
 import path from 'path';
 import fs from 'fs';
 import { spawn } from 'child_process';
+import { once } from 'node:events';
 import crypto from 'crypto';
 import { httpJson, httpStream } from '../utils/http-client.js';
 import { listVanillaReleases, resolveVanillaDownload } from '../services/vanilla-manifest.js';
@@ -23,6 +24,7 @@ import { MC_VERSION_REGEX, LOADER_VERSION_REGEX } from '../services/upgrade.serv
 import { recordAudit, AuditActions } from '../utils/audit.js';
 import {
   allocateGamePort,
+  probeBindable,
   rconPortFor,
   GAME_PORT_START,
   GAME_PORT_COUNT,
@@ -337,78 +339,83 @@ max-world-size=29999984
 `;
 }
 
-/**
- * 首启生成世界与配置（60s 上限）。
- * 取消（用户中断部署）与超时不共用回声：超时按「配置可能已生成」放行（首启只求
- * 生成配置，失败不阻塞部署），取消则必须以错误结束整个部署。
- * @param {{ signal?: AbortSignal|null }} [opts]
- */
-async function runFirstLaunch(instancePath, javaPath, jarFile, maxMemory, { signal = null } = {}) {
+/** 发出终止请求不等于进程已退出；未收到确认时保留部署目录。 */
+function runDeployJava(
+  javaPath,
+  args,
+  { cwd, signal, timeoutMs, timeoutMessage, processName, detached = false },
+) {
   return new Promise((resolve, reject) => {
-    const logsDir = path.join(instancePath, 'logs');
-    if (fs.existsSync(logsDir)) {
-      return resolve();
-    }
-
-    const args = [`-Xmx${maxMemory}`, `-Xms${maxMemory}`, '-jar', jarFile, 'nogui'];
-
     const proc = spawn(javaPath, args, {
-      cwd: instancePath,
-      // 不用 spawn 的 timeout 选项：Node 内部超时仅杀主进程（Windows 上
-      // TerminateProcess），且其内部定时器先于自定义定时器触发——根进程先死
-      // 反而让后来者无法递归定位整棵树。超时与取消统一由下方自定义定时器
-      // 走 killProcessTree（见 utils/process-tree.js）。
-      // Linux/macOS：以独立进程组启动（pid 即 PGID），终止时按进程组处理；
-      // Windows 不设 detached（无进程组信号概念），进程树由 taskkill /T 终止。
-      ...(process.platform !== 'win32' ? { detached: true } : {}),
+      cwd,
+      ...(detached && process.platform !== 'win32' ? { detached: true } : {}),
     });
 
     let output = '';
-    proc.stdout.on('data', (data) => (output += data.toString()));
-    proc.stderr.on('data', (data) => (output += data.toString()));
+    function capture(data) {
+      if (output.length < 500) output = (output + data.toString()).slice(0, 500);
+    }
+    proc.stdout.on('data', capture);
+    proc.stderr.on('data', capture);
 
-    // 超时与取消可能同时到达（取消恰好落在 60s 边界）：单次落定，先到者胜
     let settled = false;
-    function settle(err) {
+    let stopping = false;
+    let exitConfirmTimeout;
+    function settle(result) {
       if (settled) return;
       settled = true;
       clearTimeout(timeout);
-      signal?.removeEventListener('abort', onCancel);
-      if (err) reject(err);
-      else resolve();
+      clearTimeout(exitConfirmTimeout);
+      signal?.removeEventListener('abort', stop);
+      if (signal?.aborted || result.unconfirmed) {
+        const err = signal?.aborted ? new TaskCancelledError() : new Error(timeoutMessage);
+        if (result.unconfirmed) err.unconfirmedProcess = processName;
+        reject(err);
+      } else {
+        resolve(result);
+      }
     }
 
-    const timeout = setTimeout(() => {
-      // 进程树终止：MC 1.18+/26.x 的 server.jar 会派生真正运行的 JVM，
-      // 只杀主进程会留下孤儿继续占端口/写世界数据（见 utils/process-tree.js）
-      killProcessTree(proc, { detached: true });
-      logger.warn('First launch timed out (60s), but config may have been generated');
-      settle();
-    }, 60000);
+    function stop() {
+      if (stopping || settled) return;
+      stopping = true;
+      exitConfirmTimeout = setTimeout(() => settle({ unconfirmed: true }), 5000);
+      killProcessTree(proc, { detached });
+    }
 
-    // 取消（用户中断部署）：与超时同样是进程树终止，但以取消错误结束——超时按
-    // 「配置可能已生成」放行，取消必须打断整个部署（不能留下半成品实例）
-    const onCancel = () => {
-      killProcessTree(proc, { detached: true });
-      settle(new TaskCancelledError());
-    };
-    signal?.addEventListener('abort', onCancel, { once: true });
-
-    proc.on('exit', (code) => {
-      if (settled) return;
-      if (fs.existsSync(logsDir) || code === 0) {
-        settle();
-      } else {
-        logger.warn(`First launch exited with code ${code}. Output: ${output.substring(0, 500)}`);
-        settle();
-      }
+    const timeout = setTimeout(stop, timeoutMs);
+    proc.once('exit', (code, exitSignal) =>
+      settle({ code, exitSignal, timedOut: stopping, output }),
+    );
+    proc.on('error', (spawnError) => {
+      // 已创建的进程也能发出 error；这不代表它已经退出。
+      if (!proc.pid) settle({ spawnError });
     });
-
-    proc.on('error', (err) => {
-      logger.warn('First launch error:', err.message);
-      settle();
-    });
+    signal?.addEventListener('abort', stop, { once: true });
+    if (signal?.aborted) stop();
   });
+}
+
+async function runFirstLaunch(instancePath, javaPath, jarFile, maxMemory, { signal }) {
+  if (fs.existsSync(path.join(instancePath, 'logs'))) return;
+  const { code, exitSignal, timedOut, output, spawnError } = await runDeployJava(
+    javaPath,
+    [`-Xmx${maxMemory}`, `-Xms${maxMemory}`, '-jar', jarFile, 'nogui'],
+    {
+      cwd: instancePath,
+      signal,
+      timeoutMs: 60000,
+      timeoutMessage: '首次启动超时，未确认进程退出',
+      processName: '首启进程',
+      // MC 引导 JAR 可能派生实际运行服务器的 JVM。
+      detached: true,
+    },
+  );
+  if (timedOut) return '首次启动超时：已终止首启进程，世界可能尚未生成';
+  if (code === 0) return;
+  const reason = spawnError?.message ?? (code === null ? `信号 ${exitSignal}` : `退出码 ${code}`);
+  logger.warn(`First launch failed (${reason}). Output: ${output ?? ''}`);
+  return `首次启动失败（${reason}）：世界可能尚未生成`;
 }
 
 export function createServerJarRoutes(serverManager) {
@@ -727,41 +734,22 @@ export function createServerJarRoutes(serverManager) {
             transferred: 0,
             total: 0,
           });
-          const extractArgs = ['-Xmx512M', '-jar', downloadJarName, '--installServer'];
-          const extractProc = spawn(javaPath, extractArgs, { cwd: instancePath });
-          await new Promise((resolve, reject) => {
-            // 超时与取消单次落定：取消（abort）先到则 exit 事件的 resolve 已是空操作
-            let settled = false;
-            function settle(err) {
-              if (settled) return;
-              settled = true;
-              clearTimeout(timer);
-              task.signal.removeEventListener('abort', onCancel);
-              if (err) reject(err);
-              else resolve();
-            }
-            // 15 分钟：安装器要下载 100MB+ 的 libraries，实测 1.21.4-54.1.22 约 5 分钟、
-            // 1.20.1-47.4.28 约 2 分钟（同版本重装因 libraries 已在本地只要 6 秒）。
-            // 耗时几乎全在下行带宽上，慢线路会成倍放大，按实测最慢值留 3 倍余量
-            const timer = setTimeout(() => {
-              killProcessTree(extractProc);
-              settle(new Error('Forge installer timed out (900s)'));
-            }, 900000);
-            // Forge 安装器是单进程 java 程序（未 detached），故不做进程组终止
-            const onCancel = () => {
-              killProcessTree(extractProc);
-              settle(new TaskCancelledError());
-            };
-            task.signal.addEventListener('abort', onCancel, { once: true });
-            extractProc.on('exit', (code) => {
-              if (settled) return;
-              if (code !== 0) logger.warn(`Forge installer exited with code ${code}`);
-              settle();
-            });
-            extractProc.on('error', (err) => {
-              settle(err);
-            });
-          });
+          const timeoutMessage = 'Forge installer timed out (900s)';
+          const { code, timedOut, spawnError } = await runDeployJava(
+            javaPath,
+            ['-Xmx512M', '-jar', downloadJarName, '--installServer'],
+            {
+              cwd: instancePath,
+              signal: task.signal,
+              // 安装器要下载 100MB+ 的 libraries；1.21.4-54.1.22 实测约 5 分钟，留 3 倍余量。
+              timeoutMs: 900000,
+              timeoutMessage,
+              processName: 'Forge 安装器',
+            },
+          );
+          if (spawnError) throw spawnError;
+          if (timedOut) throw new Error(timeoutMessage);
+          if (code !== 0) logger.warn(`Forge installer exited with code ${code}`);
 
           const forgeJar = fs
             .readdirSync(instancePath)
@@ -787,17 +775,31 @@ export function createServerJarRoutes(serverManager) {
         // 端口在写盘前就定下来：properties 与 DB 必须同源，否则实例跑在 A 端口、
         // 面板显示 B 端口，用户照着面板给的地址发出去没人连得上
         const existingInstances = InstanceModel.getAll();
-        const persistedPorts = new Map(existingInstances.map(({ id, port }) => [id, port]));
+        const configuredPorts = new Set();
         for (const instance of serverManager.instances?.values() ?? []) {
-          const livePort = Number(instance.properties?.['server-port']);
-          if (!Number.isInteger(livePort)) continue;
-          // DB 端口可能过期（旧 JSON 恢复的默认值、手工改过 server.properties），
-          // 而实时端口才是当前监听值；两者不一致时都保留，避免新部署撞上任一占用。
-          if (persistedPorts.get(instance.id) !== livePort) {
-            existingInstances.push({ id: instance.id, port: livePort });
+          // 停机期间也能修改配置；缓存和磁盘分别保留运行期值与下次启动值。
+          for (const props of [instance.properties, instance._loadProperties?.()]) {
+            for (const key of ['server-port', 'rcon.port']) {
+              const port = Number(props?.[key]);
+              if (Number.isInteger(port) && port > 0) configuredPorts.add(port);
+            }
           }
         }
-        const gamePort = allocateGamePort(existingInstances, instanceId);
+        let gamePort = allocateGamePort(existingInstances, instanceId);
+        while (gamePort !== null) {
+          const rconPort = rconPortFor(gamePort);
+          if (
+            !configuredPorts.has(gamePort) &&
+            !configuredPorts.has(rconPort) &&
+            (await probeBindable(gamePort)) &&
+            (await probeBindable(rconPort))
+          )
+            break;
+          task.throwIfCancelled();
+          existingInstances.push({ id: 'occupied', port: gamePort });
+          gamePort = allocateGamePort(existingInstances, instanceId);
+        }
+        task.throwIfCancelled();
         if (gamePort === null) {
           throw new AppError(
             ErrorCodes.DEPLOY_PORTS_EXHAUSTED,
@@ -818,10 +820,6 @@ export function createServerJarRoutes(serverManager) {
           port: gamePort,
         };
 
-        atomicWriteFile(
-          path.join(instancePath, 'instance.json'),
-          JSON.stringify(instanceConfig, null, 2),
-        );
         fs.writeFileSync(
           path.join(instancePath, 'eula.txt'),
           eulaAgreed ? 'eula=true\n' : 'eula=false\n',
@@ -831,6 +829,27 @@ export function createServerJarRoutes(serverManager) {
           generateServerProperties(instanceId, mcVersion, gamePort),
         );
 
+        // 首启用于生成世界与校验 jar，而 MC 首启强制要求 eula=true；
+        // 未同意时跳过，待用户在实例上确认 EULA 后首次启动自然完成，避免写入未获同意的 eula=true
+        if (eulaAgreed) {
+          trackDeployProgress(serverManager, deployMeta, {
+            stage: 'first_launch',
+            percent: 0,
+            transferred: 0,
+            total: 0,
+          });
+          const warning = await runFirstLaunch(instancePath, javaPath, jarFile, ramSize, {
+            signal: task.signal,
+          });
+          if (warning) deployWarnings.push(warning);
+        }
+
+        task.throwIfCancelled();
+        // 恢复记录只能在首启阶段结束后发布，避免面板重启时加载在途部署。
+        atomicWriteFile(
+          path.join(instancePath, 'instance.json'),
+          JSON.stringify(instanceConfig, null, 2),
+        );
         try {
           InstanceModel.create({ ...instanceConfig, serverPath: instancePath });
           instanceCreatedInDb = true;
@@ -842,30 +861,6 @@ export function createServerJarRoutes(serverManager) {
           logger.warn('Failed to write instance to DB:', dbErr.message);
           deployWarnings.push(`实例未能写入数据库（${dbErr.message}）：部分管理功能可能受限`);
         }
-
-        // 首启用于生成世界与校验 jar，而 MC 首启强制要求 eula=true；
-        // 未同意时跳过，待用户在实例上确认 EULA 后首次启动自然完成，避免写入未获同意的 eula=true
-        if (eulaAgreed) {
-          trackDeployProgress(serverManager, deployMeta, {
-            stage: 'first_launch',
-            percent: 0,
-            transferred: 0,
-            total: 0,
-          });
-          try {
-            logger.info('Running first launch to generate config...');
-            await runFirstLaunch(instancePath, javaPath, jarFile, ramSize, { signal: task.signal });
-            logger.info('First launch completed');
-          } catch (e) {
-            // 首启失败可以放行（配置多半已生成），但取消必须打断整个部署：
-            // 否则「取消」会走到下面的 complete 分支，用户看到的是部署成功
-            if (e.cancelled) throw e;
-            logger.warn('First launch failed (may require manual setup):', e.message);
-            deployWarnings.push(`首次启动失败（${e.message}）：世界可能未生成，需手动启动一次`);
-          }
-        }
-
-        task.throwIfCancelled();
         launched = serverManager.createInstance({ ...instanceConfig, serverPath: instancePath });
       } catch (e) {
         // 取消与执行失败共用同一清理（磁盘目录 + 注册表 + DB 行），只在终态事件与
@@ -876,7 +871,11 @@ export function createServerJarRoutes(serverManager) {
         // async rejection，Express 4 不捕获 → 请求挂起 + unhandledRejection 崩溃。
         // 但也不能吞掉：取消的终态会向用户声称「已清理」，收尾没做成时必须据实回报
         const cleanupProblems = [];
-        if (directoryCreated) {
+        if (e?.unconfirmedProcess) {
+          cleanupProblems.push(
+            `未确认进程退出（${e.unconfirmedProcess}），已保留实例目录；请检查进程后再清理`,
+          );
+        } else if (directoryCreated) {
           try {
             fs.rmSync(instancePath, { recursive: true, force: true });
           } catch (cleanupErr) {
@@ -897,8 +896,7 @@ export function createServerJarRoutes(serverManager) {
             }
           }
         }
-        // 首启前已入库的行必须回滚（取消可落在首启窗口内）：否则留下指向已删目录的
-        // 幽灵实例，列表里可见、点进去全是 404
+        // 只回滚本次部署写入的记录；主键冲突时已有记录不属于本次部署。
         if (instanceCreatedInDb) {
           try {
             InstanceModel.delete(instanceId);
@@ -970,8 +968,9 @@ export function createServerJarRoutes(serverManager) {
         });
         try {
           launched.start();
+          await once(launched.process, 'spawn');
           autoStarted = true;
-          logger.info(`Instance ${instanceId} auto-started after deploy`);
+          logger.info(`Instance ${instanceId} start requested after deploy`);
         } catch (e) {
           logger.warn(`Auto-start after deploy failed: ${e.message}`);
           deployWarnings.push(`服务器未能自动启动（${e.message}）：请到实例页手动启动`);

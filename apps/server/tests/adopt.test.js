@@ -176,7 +176,11 @@ describe('adoptFromPidFile 接管', { timeout: 30_000 }, () => {
     // 接管对用户无感：不向终端注入任何提示行（日志由 log-tail 续读 latest.log）
     expect(inst.logBuffer).toHaveLength(0);
     expect(inst._logTailTimer).not.toBeNull();
-    expect(events.some((e) => e.event === 'started')).toBe(true);
+    expect(inst.startupState).toBe('unknown');
+    inst._ingestLogText('[12:00:00] [Server thread/INFO]: Done (2.345s)! For help, type "help"');
+    expect(inst.startupState).toBe('unknown');
+    expect(events).toContainEqual({ event: 'started', startupState: 'unknown' });
+    expect(events.some((e) => e.event === 'ready')).toBe(false);
     inst._stopAdoptWatchdog();
     inst._stopAdoptedLogTail();
     inst._stopStatsCollection();

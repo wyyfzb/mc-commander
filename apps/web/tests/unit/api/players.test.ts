@@ -59,7 +59,7 @@ const server = setupServer(
   http.delete('*/api/v1/instances/inst1/players/Alex/whitelist', () => ok(null)),
   http.post('*/api/v1/instances/inst1/command', async ({ request }) => {
     lastBody = await request.json()
-    return ok(null)
+    return ok((lastBody as { requireResponse?: boolean }).requireResponse ? '' : null)
   }),
   // 错误传播专用玩家（正常用例不可见，仅错误用例命中）
   http.post('*/api/v1/instances/inst-err/players/Ghost/op', () =>
@@ -128,6 +128,13 @@ describe('players API · 操作端点契约', () => {
     const res = await apiSendCommand(config, 'inst1', 'give Steve diamond 64')
     expect(res).toBeNull()
     expect(lastBody).toEqual({ command: 'give Steve diamond 64' })
+  })
+
+  it('需要游戏回执时保留来源与布尔字段，空字符串仍是回执', async () => {
+    await expect(
+      apiSendCommand(config, 'inst1', 'list', 'replay', { requireResponse: true }),
+    ).resolves.toBe('')
+    expect(lastBody).toEqual({ command: 'list', source: 'replay', requireResponse: true })
   })
 })
 

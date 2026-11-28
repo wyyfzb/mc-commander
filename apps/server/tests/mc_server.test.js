@@ -1331,6 +1331,7 @@ describe('MCServerManager', () => {
       instance.properties = { 'enable-rcon': 'true', 'rcon.password': 'x' };
       instance.isRunning = true;
       instance.process = {};
+      instance._startupReady = true;
       return instance;
     }
 
@@ -1422,6 +1423,7 @@ describe('MCServerManager', () => {
       });
       instance.isRunning = true;
       instance.process = {};
+      instance._startupReady = true;
       vi.spyOn(instance, 'sendCommand').mockResolvedValue(null);
       instance.stop();
       expect(instance._manualStop).toBe(true);

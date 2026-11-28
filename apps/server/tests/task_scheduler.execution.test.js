@@ -5,6 +5,7 @@ import { TaskScheduler } from '../src/services/task_scheduler.js';
 vi.mock('../src/db/scheduled_task.model.js', () => ({
   ScheduledTaskModel: {
     getEnabledTasks: vi.fn(() => []),
+    findById: vi.fn(),
     updateLastRun: vi.fn(),
     updateLastRunStatus: vi.fn(),
   },
@@ -21,7 +22,8 @@ vi.mock('../src/db/backup.model.js', () => ({
     resetStaleInProgress: vi.fn(() => 0),
   },
 }));
-vi.mock('../src/services/backup.service.js', () => ({
+vi.mock('../src/services/backup.service.js', async (importOriginal) => ({
+  ...(await importOriginal()),
   // 判据导出：upgrade.service 用它决定要不要跑前置备份。既有用例都走「有世界」路径
   hasWorldData: vi.fn(() => true),
   BackupService: class {
@@ -65,6 +67,36 @@ describe('TaskScheduler - executeTask 完整结果语义', () => {
       100,
       expect.any(String),
       'success',
+    );
+  });
+
+  it.each(['start', 'restart'])('自动启动暂停时跳过定时 %s 并记录原因', (type) => {
+    const instance = { isRunning: false, circuitBreakerTripped: true, [type]: vi.fn() };
+    mockManager.getInstance.mockReturnValue(instance);
+
+    scheduler.executeTask(makeTask({ type }));
+
+    expect(instance[type]).not.toHaveBeenCalled();
+    expect(ScheduledTaskModel.updateLastRun).toHaveBeenCalledExactlyOnceWith(
+      100,
+      expect.any(String),
+      'skipped',
+      '服务器多次意外退出',
+    );
+  });
+
+  it.each(['start', 'restart'])('自动启动暂停时拒绝手动 %s 并记录跳过', (type) => {
+    const instance = { isRunning: false, circuitBreakerTripped: true, [type]: vi.fn() };
+    mockManager.getInstance.mockReturnValue(instance);
+    ScheduledTaskModel.findById.mockReturnValue(makeTask({ type }));
+
+    expect(() => scheduler.runTask(100)).toThrow(expect.objectContaining({ code: 40921 }));
+    expect(instance[type]).not.toHaveBeenCalled();
+    expect(ScheduledTaskModel.updateLastRun).toHaveBeenCalledExactlyOnceWith(
+      100,
+      expect.any(String),
+      'skipped',
+      '服务器多次意外退出',
     );
   });
 

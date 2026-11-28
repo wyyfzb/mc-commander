@@ -17,6 +17,7 @@ const COLUMN_TO_FIELD = {
   port: 'port',
   auto_start: 'autoStart',
   auto_restart: 'autoRestart',
+  circuit_breaker_crash_count: 'circuitBreakerCrashCount',
   total_uptime: 'totalUptime',
   jvm_args: 'jvmArgs',
   created_at: 'createdAt',
@@ -38,6 +39,7 @@ const FIELD_TO_COLUMN = {
   port: 'port',
   autoStart: 'auto_start',
   autoRestart: 'auto_restart',
+  circuitBreakerCrashCount: 'circuit_breaker_crash_count',
   totalUptime: 'total_uptime',
   jvmArgs: 'jvm_args',
 };
@@ -166,21 +168,24 @@ export class InstanceModel {
 
   static migrateFromJson(instanceConfig, serverPath) {
     const db = getDb();
-    const existing = db.prepare('SELECT id FROM instances WHERE id = ?').get(instanceConfig.id);
-    if (existing) {
-      return false;
-    }
-    this.create({ ...instanceConfig, serverPath });
-    // create 只写实例身份与启动所需的基础列；instance.json 里由设置页同步过来的
-    // 运行期偏好需要补一次 update，否则 DB 丢失后恢复出来的实例会回到默认值。
-    const restore = {};
-    for (const key of ['description', 'startCommand', 'jvmArgs', 'autoStart', 'autoRestart']) {
-      if (instanceConfig[key] !== undefined) restore[key] = instanceConfig[key];
-    }
-    if (Object.keys(restore).length > 0) {
-      this.update(instanceConfig.id, restore);
-    }
-    return true;
+    return db.transaction(() => {
+      if (db.prepare('SELECT id FROM instances WHERE id = ?').get(instanceConfig.id)) {
+        return false;
+      }
+      this.create({ ...instanceConfig, serverPath });
+      const restore = {};
+      for (const key of ['description', 'startCommand', 'jvmArgs', 'autoStart', 'autoRestart']) {
+        if (instanceConfig[key] !== undefined) restore[key] = instanceConfig[key];
+      }
+      if (
+        Number.isSafeInteger(instanceConfig.circuitBreakerCrashCount) &&
+        instanceConfig.circuitBreakerCrashCount > 0
+      ) {
+        restore.circuitBreakerCrashCount = instanceConfig.circuitBreakerCrashCount;
+      }
+      if (Object.keys(restore).length > 0) this.update(instanceConfig.id, restore);
+      return true;
+    })();
   }
 }
 

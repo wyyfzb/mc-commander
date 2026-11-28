@@ -12,14 +12,19 @@ import { Card, CardHeader, CardTitle } from '@/components/mcs/card'
 import { CountBadge } from '@/components/mcs/count-badge'
 import { StatusPill } from '@/components/mcs/status-pill'
 import { cn } from '@/lib/utils'
-import { allocatableMemoryGB, sumAllocatedGB } from '@/lib/instance-memory'
-import type { InstanceStatus, OverviewData } from '@/api/types'
+import {
+  allocatableMemoryGB,
+  hasHostMemoryTotal,
+  readHostMemoryPercent,
+  sumAllocatedGB,
+} from '@/lib/instance-memory'
+import type { OverviewData } from '@/api/types'
+import type { FleetRow } from '../fleet-health'
 
 export interface FleetSummaryProps {
-  instances: InstanceStatus[]
+  rows: FleetRow[]
   overview: OverviewData | undefined
-  /** 实例列表是否在途（数值位给骨架） */
-  isLoading: boolean
+  listUnavailable: boolean
 }
 
 /**
@@ -59,17 +64,33 @@ function MetricCard({
   )
 }
 
-export function FleetSummary({ instances, overview, isLoading }: FleetSummaryProps) {
-  const total = instances.length
-  const running = instances.filter((i) => i.isRunning).length
-  const stopped = total - running
-  const players = instances.reduce((sum, i) => sum + (i.isRunning ? i.playerCount : 0), 0)
+export function FleetSummary({ rows, overview, listUnavailable }: FleetSummaryProps) {
+  const counts = { ready: 0, starting: 0, unknown: 0, stopped: 0, stopping: 0 }
+  let players = 0
+  for (const { lifecycle, status } of rows) {
+    counts[lifecycle] += 1
+    if (lifecycle === 'ready') players += status.playerCount
+  }
+  const otherStates = [
+    counts.starting > 0 && `${counts.starting} 台启动中`,
+    counts.unknown > 0 && `${counts.unknown} 台就绪未知`,
+    counts.stopping > 0 && `${counts.stopping} 台停止中`,
+    counts.stopped > 0 && `${counts.stopped} 台已停止`,
+  ].filter(Boolean)
+  const readyHint =
+    rows.length === 0
+      ? '暂无实例'
+      : otherStates.length > 0
+        ? otherStates.join(' · ')
+        : '全部实例均已就绪'
+  const playersHint = counts.ready > 0 ? `仅统计 ${counts.ready} 台已就绪实例` : '暂无已就绪实例'
 
   /* 内存账：可分配 = 整机总量 − 系统保留，已分配按 -Xmx 合计（不是 RSS）。
      总量读不到时不给余量数字——算不出来还说「已分完」会让人照着去卸载实例 */
   const totalMemGB = overview?.systemMemoryTotal ?? null
-  const allocatableGB = totalMemGB != null ? allocatableMemoryGB(totalMemGB) : null
-  const allocatedGB = sumAllocatedGB(instances.map((i) => i.maxMemory))
+  const allocatableGB = hasHostMemoryTotal(totalMemGB) ? allocatableMemoryGB(totalMemGB) : null
+  const memoryPercent = readHostMemoryPercent(totalMemGB, overview?.systemMemoryPercent)
+  const allocatedGB = sumAllocatedGB(rows.map(({ status }) => status.maxMemory))
   const remainingGB = allocatableGB != null ? Math.max(0, allocatableGB - allocatedGB) : null
   const memoryHint =
     allocatableGB == null
@@ -86,28 +107,34 @@ export function FleetSummary({ instances, overview, isLoading }: FleetSummaryPro
        四列要 @5xl 才给，否则每卡 159px 放不住「已分配 12 GB，可分配 14 GB」这句 */
     <div className="grid shrink-0 grid-cols-2 gap-3 @5xl:grid-cols-4">
       <MetricCard
-        label="运行中"
-        value={`${running}`}
-        hint={stopped > 0 ? `另有 ${stopped} 台已停止` : '全部实例都在运行'}
-        isLoading={isLoading}
+        label="已就绪实例"
+        value={`${counts.ready}`}
+        hint={listUnavailable ? '实例清单暂不可用' : readyHint}
+        isLoading={listUnavailable}
       />
       <MetricCard
         label="在线玩家"
-        value={`${players}`}
-        hint={running > 0 ? `分布在 ${running} 台运行中的实例` : '没有实例在运行'}
-        isLoading={isLoading}
+        value={counts.ready > 0 || counts.stopped === rows.length ? `${players}` : '—'}
+        hint={listUnavailable ? '实例清单暂不可用' : playersHint}
+        isLoading={listUnavailable}
       />
       <MetricCard
         label="可分配内存余量"
         value={remainingGB != null ? `${remainingGB.toFixed(1)} GB` : '—'}
-        hint={memoryHint}
-        isLoading={isLoading}
+        hint={listUnavailable ? '实例清单暂不可用' : memoryHint}
+        isLoading={listUnavailable}
       />
       <MetricCard
         label="整机负载"
         value={overview ? `${overview.systemCpuUsage.toFixed(1)}%` : '—'}
-        hint={overview ? `内存 ${overview.systemMemoryPercent.toFixed(1)}%` : '整机读数未取到'}
-        isLoading={isLoading || overview === undefined}
+        hint={
+          !overview
+            ? '整机读数未取到'
+            : memoryPercent == null
+              ? '内存暂无数据'
+              : `内存 ${memoryPercent.toFixed(1)}%`
+        }
+        isLoading={overview === undefined}
       />
     </div>
   )
@@ -122,7 +149,7 @@ export function FleetSummary({ instances, overview, isLoading }: FleetSummaryPro
  */
 export function FleetIssueSummary({ total, errors }: { total: number; errors: number }) {
   if (total === 0) {
-    return <span className="text-mcs-text-muted">全部实例健康</span>
+    return <span className="text-mcs-text-muted">暂无故障或告警</span>
   }
   return (
     <span className="inline-flex flex-wrap items-center gap-1.5">

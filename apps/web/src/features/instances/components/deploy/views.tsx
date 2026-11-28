@@ -13,7 +13,6 @@ import { DialogFooter } from '@/components/ui/dialog'
 import { SERVER_TYPE_LABELS, recommendedJavaVersion, type ServerType } from '@/lib/mc-deploy'
 import { DEPLOY_STAGE_LABELS } from '@/stores/deploy'
 import type { DeployProgress, DeployResult } from '@/api/types'
-import type { AutoStartState } from './types'
 import { formatMB } from './utils'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
 
@@ -80,13 +79,12 @@ export function DeployProgressView({ progress, cancelling, onCancel }: DeployPro
 
 interface DeploySuccessViewProps {
   result: DeployResult
-  /** 自动启动状态（null = 未同意 EULA，未尝试启动——此时必须交代「尚未启动」） */
-  autoStart: AutoStartState
+  eulaAgreed: boolean
   onComplete: () => void
 }
 
 /** 成功视图：结果块（实例 id/名称/版本/Java 推荐）+ 自动启动状态 +「完成」 */
-export function DeploySuccessView({ result, autoStart, onComplete }: DeploySuccessViewProps) {
+export function DeploySuccessView({ result, eulaAgreed, onComplete }: DeploySuccessViewProps) {
   return (
     <div className="flex flex-col gap-3">
       <NoticeBanner variant="success" form="card" icon={CheckCircle2}>
@@ -103,28 +101,18 @@ export function DeploySuccessView({ result, autoStart, onComplete }: DeploySucce
           </p>
         </div>
       </NoticeBanner>
-      {/* autoStart === null 表示「未同意 EULA，故未尝试启动」。
-          这一支必须渲染：只显示「部署成功」会让用户以为服务器能跑，直到去点「启动」
-          才被拦下——而那一刻被呈现为「启动失败」。结果必须交代清楚，
-          否则「成功」是误导。 */}
-      {autoStart === null ? (
+      {!eulaAgreed ? (
         <NoticeBanner variant="info" icon={Info}>
           实例已创建，但服务器尚未启动：Minecraft 要求先同意 EULA 才能运行。
           到实例页点「启动」会弹出同意提示，同意后即自动开始运行。
         </NoticeBanner>
+      ) : result.started ? (
+        <NoticeBanner variant="neutral" icon={Info}>
+          服务器进程已启动，是否就绪请在实例卡片上查看。
+        </NoticeBanner>
       ) : (
-        <NoticeBanner
-          /* pending 是中性在途态（既非成功也非失败）——走 neutral 档而非 info 蓝：
-             染成 info 会读成「有消息要看」，而它要说的只是「还没结束，请稍候」 */
-          variant={autoStart === 'ok' ? 'success' : autoStart === 'failed' ? 'warning' : 'neutral'}
-          icon={autoStart === 'pending' ? Loader2 : autoStart === 'ok' ? CheckCircle2 : XCircle}
-          iconClassName={autoStart === 'pending' ? 'animate-spin' : undefined}
-        >
-          <span aria-live="polite">
-            {autoStart === 'pending' && '正在启动服务器…'}
-            {autoStart === 'ok' && '已发送启动指令，服务器正在启动（状态可在仪表盘查看）'}
-            {autoStart === 'failed' && '自动启动失败，可稍后在实例页手动启动'}
-          </span>
+        <NoticeBanner variant="warning" icon={XCircle}>
+          自动启动失败，可稍后在实例页手动启动
         </NoticeBanner>
       )}
       {/* 收尾未完成项：部署本身成功，但这些事没做成，用户必须知道。
@@ -145,7 +133,7 @@ export function DeploySuccessView({ result, autoStart, onComplete }: DeploySucce
           ⇒ 不先加人，谁都会被服务端在登录期拦下，包括服主自己。enforce-whitelist=false 只管
           运行中重载时把非名单玩家踢出，登录期照样拦，指望不上它。
           「服务器启动后」不是客套：加白名单的入口走 RCON（玩家页那个按钮在 RCON 未就绪时禁用），
-          而本视图在 autoStart 为 null/failed 时恰好就是服务器没起来的状态——少这一句，用户当场做不到。
+          部署结果不确认游戏就绪，故白名单提示须交代启动前置条件。
           图标取 UserPlus 而非 Info：与同屏「未同意 EULA」那条同为 info 档，靠语义图标区分
           （与玩家页那个按钮同记号），否则两条同图标同 tint 会被读成「一条两块」。 */}
       <NoticeBanner variant="info" icon={UserPlus}>

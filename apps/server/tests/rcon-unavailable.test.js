@@ -1,6 +1,6 @@
 /**
  * RCON_UNAVAILABLE 错误码 + world gameDays null 降级测试
- * - 命令路由 RCON 断开时返回 50302 而非 500
+ * - 需要回执但命令通道不可用时返回 50302
  * - world info gameDays 查询失败返回 null 而非 0
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -14,6 +14,7 @@ vi.mock('../src/db/index.js', () => ({
 
 import { createStatusRoutes } from '../src/routes/status.js';
 import { errorHandler } from '../src/middleware/error_handler.js';
+import { AppError, ErrorCodes } from '../src/utils/response.js';
 
 describe('RCON_UNAVAILABLE 错误码', () => {
   let app, mockManager;
@@ -31,18 +32,18 @@ describe('RCON_UNAVAILABLE 错误码', () => {
   });
 
   describe('POST /api/instances/:id/command', () => {
-    it('RCON 断开后命令失败返回 50302 而非 500', async () => {
+    it('需要命令回执但 RCON 不可用时返回 50302', async () => {
       const mockInstance = {
         id: 's1',
         isRunning: true,
         isRconConnected: false,
-        sendCommand: vi.fn().mockRejectedValue(new Error('RCON connection closed')),
+        sendCommand: vi.fn().mockRejectedValue(new AppError(ErrorCodes.RCON_UNAVAILABLE)),
       };
       mockManager.getInstance.mockReturnValue(mockInstance);
 
       const res = await request(app)
         .post('/api/instances/s1/command')
-        .send({ command: 'time set day' });
+        .send({ command: 'time set day', requireResponse: true });
 
       expect(res.status).toBe(503);
       expect(res.body.code).toBe(50302);

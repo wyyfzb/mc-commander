@@ -115,14 +115,19 @@ describe.skipIf(!snapshotTool)(
 
       manager = new EventEmitter();
       // 真实实例对象必带 id 与 serverPath：判据与备份前置校验都从 serverPath 取目录
-      manager.getInstance = vi.fn((id) => ({
-        id,
-        serverPath: path.join(serversDir, id),
-        isRunning: false,
-        isRconConnected: false,
-        properties: { 'level-name': 'world' },
-        jarFile: 'server.jar',
-      }));
+      const instances = new Map();
+      manager.getInstance = vi.fn((id) => {
+        if (!instances.has(id))
+          instances.set(id, {
+            id,
+            serverPath: path.join(serversDir, id),
+            isRunning: false,
+            isRconConnected: false,
+            properties: { 'level-name': 'world' },
+            jarFile: 'server.jar',
+          });
+        return instances.get(id);
+      });
 
       vi.clearAllMocks();
       MockBackupModel.findAll.mockReturnValue({ total: 0, backups: [] });
@@ -229,18 +234,25 @@ describe.skipIf(!snapshotTool)(
       expect(snapshots).toEqual([]);
     });
 
-    it('运行中 + RCON 不可用：拒绝在线备份（40902），不再静默直备运行中世界', async () => {
+    it('运行中无法确认暂停自动保存：记录失败，不复制世界目录', async () => {
       createTestInstance(serversDir);
       manager.getInstance.mockReturnValue({
         isRunning: true,
-        isRconConnected: false,
+        serverPath: path.join(serversDir, 's1'),
+        setAutoSave: vi.fn().mockRejectedValueOnce(new Error('无法确认暂停自动保存')),
         properties: { 'level-name': 'world' },
         jarFile: 'server.jar',
       });
       const service = new BackupService(manager);
+      const failure = waitForEvent(manager, 'instance:backupFailed');
 
-      await expect(service.createBackup('s1', {})).rejects.toMatchObject({ code: 40902 });
-      expect(MockBackupModel.create).not.toHaveBeenCalled();
+      await service.createBackup('s1');
+      await expect(failure).resolves.toMatchObject({
+        phase: 'execution',
+        error: '无法确认暂停自动保存',
+      });
+      expect(MockBackupModel.update).toHaveBeenCalledWith(1, { status: 'failed' });
+      expect(fs.readdirSync(path.join(backupsDir, 's1'))).toEqual([]);
     });
 
     it('磁盘剩余空间不足：预检拒绝创建（磁盘满截断是世界损坏第一大诱因）', async () => {
@@ -469,14 +481,19 @@ describe.skipIf(!isLinux || !hasRsync)('硬链接增量（Linux rsync --link-des
 
     manager = new EventEmitter();
     // 真实实例对象必带 id 与 serverPath：判据与备份前置校验都从 serverPath 取目录
-    manager.getInstance = vi.fn((id) => ({
-      id,
-      serverPath: path.join(serversDir, id),
-      isRunning: false,
-      isRconConnected: false,
-      properties: { 'level-name': 'world' },
-      jarFile: 'server.jar',
-    }));
+    const instances = new Map();
+    manager.getInstance = vi.fn((id) => {
+      if (!instances.has(id))
+        instances.set(id, {
+          id,
+          serverPath: path.join(serversDir, id),
+          isRunning: false,
+          isRconConnected: false,
+          properties: { 'level-name': 'world' },
+          jarFile: 'server.jar',
+        });
+      return instances.get(id);
+    });
 
     vi.clearAllMocks();
     MockBackupModel.findAll.mockReturnValue({ total: 0, backups: [] });

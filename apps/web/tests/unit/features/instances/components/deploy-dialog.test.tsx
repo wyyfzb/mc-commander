@@ -12,6 +12,7 @@ import { describe, it, expect, beforeEach, afterAll, beforeAll, vi } from 'vites
 import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { http, HttpResponse } from 'msw'
 import { setupServer } from 'msw/node'
 import { Toaster, toast } from 'sonner'
 import {
@@ -175,15 +176,14 @@ describe('DeployDialog', () => {
     expect(screen.getByText('推荐 Java 版本：21')).toBeInTheDocument()
     // 首启闭环：EULA 同意随部署请求下发（服务端据此写 eula.txt），随后只发启动指令
     expect(
-      await screen.findByText('已发送启动指令，服务器正在启动（状态可在仪表盘查看）'),
+      await screen.findByText('服务器进程已启动，是否就绪请在实例卡片上查看。'),
     ).toBeInTheDocument()
-    // 自动启动状态块的档位：成功走 success 档，且不得混入 info 前景——它是「已受理」
-    // 而非「有消息要看」。断言色类而非仅存在性：走查发现该处曾被染色错档，
-    // 而存在性断言抓不到（文案对、颜色错）
+    // 进程已拉起不能当作 Minecraft 就绪的成功信号。
     const autoStartBanner = screen
-      .getByText('已发送启动指令，服务器正在启动（状态可在仪表盘查看）')
+      .getByText('服务器进程已启动，是否就绪请在实例卡片上查看。')
       .closest('[role="status"]') as HTMLElement
-    expect(autoStartBanner.className).toContain('border-l-mcs-success-fg')
+    expect(autoStartBanner.className).toContain('bg-mcs-bg-muted')
+    expect(autoStartBanner.className).not.toContain('border-l-mcs-success-fg')
     expect(autoStartBanner.className).not.toContain('border-l-mcs-info-fg')
     expect(deployMock.lastBody?.eula).toBe(true)
     expect(eulaMock.calls).toBe(0)
@@ -324,6 +324,32 @@ describe('DeployDialog', () => {
     expect(screen.getAllByRole('radio')).toHaveLength(5)
     expect(screen.getByRole('button', { name: '下一步' })).toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('未收到 WebSocket 终态时，仍显示部署失败响应里的清理明细', async () => {
+    server.use(
+      http.post('*/api/v1/instances/deploy', () =>
+        HttpResponse.json(
+          {
+            status: 'error',
+            code: 50000,
+            message: 'Deployment failed',
+            details: { cleanup: '实例目录未能删除' },
+            timestamp: new Date().toISOString(),
+          },
+          { status: 502 },
+        ),
+      ),
+    )
+    try {
+      renderDialog()
+      const user = userEvent.setup()
+      await gotoStep3AndAgreeEula(user)
+      await user.click(screen.getByRole('button', { name: '部署并启动' }))
+      expect(await screen.findByRole('alert')).toHaveTextContent('实例目录未能删除')
+    } finally {
+      server.resetHandlers()
+    }
   })
 
   it('dirty 关闭拦截：修改后关闭弹确认；继续编辑保留；放弃配置后关闭并 resetDeploy', async () => {
@@ -542,7 +568,14 @@ describe('DeployDialog 取消部署', () => {
   it('内存吃紧：滑块上限就是「还能分配」的量，分母不是整机内存', async () => {
     // 16 GB 机器上已有一个 8G 实例 ⇒ 可分配 14 − 8 = 6 GB
     overviewMock.instances = [
-      { id: 'demo', name: '演示实例', isRunning: true, playerCount: 0, maxMemory: '8G' },
+      {
+        id: 'demo',
+        name: '演示实例',
+        isRunning: true,
+        startupState: 'ready',
+        playerCount: 0,
+        maxMemory: '8G',
+      },
     ]
     renderDialog()
     const user = userEvent.setup()
@@ -567,8 +600,22 @@ describe('DeployDialog 取消部署', () => {
 
   it('内存已分完：给出超卖警示并阻断「下一步」', async () => {
     overviewMock.instances = [
-      { id: 'a', name: '甲服', isRunning: true, playerCount: 0, maxMemory: '8G' },
-      { id: 'b', name: '乙服', isRunning: false, playerCount: 0, maxMemory: '8G' },
+      {
+        id: 'a',
+        name: '甲服',
+        isRunning: true,
+        startupState: 'ready',
+        playerCount: 0,
+        maxMemory: '8G',
+      },
+      {
+        id: 'b',
+        name: '乙服',
+        isRunning: false,
+        startupState: 'stopped',
+        playerCount: 0,
+        maxMemory: '8G',
+      },
     ]
     renderDialog()
     const user = userEvent.setup()

@@ -26,6 +26,8 @@ import request from 'supertest';
 const testState = vi.hoisted(() => ({
   serversDir: null,
   spawnBehavior: 'exit0',
+  runtimeSpawnError: null,
+  onFirstLaunch: null,
   latestBuild: {},
   mcCoreVersions: [],
   mcCoreThrow: false,
@@ -60,6 +62,11 @@ vi.mock('../src/db/index.js', () => ({
 
 vi.mock('../src/config.js', () => ({ default: { serversDir: null } }));
 
+vi.mock('../src/services/port-allocator.js', async (importOriginal) => ({
+  ...(await importOriginal()),
+  probeBindable: vi.fn(async () => true),
+}));
+
 vi.mock('../src/utils/java-detector.js', () => ({
   getRecommendedJavaVersion: vi.fn(() => '21'),
   findJavaPath: vi.fn(() => '/usr/bin/java'),
@@ -85,15 +92,30 @@ vi.mock('child_process', async (importOriginal) => {
       if (options.stdio) {
         proc.stdin = new events.EventEmitter();
         proc.stdin.write = vi.fn();
-        testState.runtimeChildren.add(proc);
+        const spawnError = testState.runtimeSpawnError;
+        if (spawnError) {
+          proc.pid = undefined;
+          process.nextTick(() => proc.emit('error', spawnError));
+        } else {
+          testState.runtimeChildren.add(proc);
+          process.nextTick(() => proc.emit('spawn'));
+        }
         return proc;
       }
-      if (testState.spawnBehavior === 'exit0') queueMicrotask(() => proc.emit('exit', 0));
-      if (testState.spawnBehavior === 'exit1') queueMicrotask(() => proc.emit('exit', 1));
+      const exit = (code) => {
+        proc.emit('exit', code);
+        proc.emit('close', code);
+      };
+      if (testState.spawnBehavior === 'exit0') queueMicrotask(() => exit(0));
+      if (testState.spawnBehavior === 'exit1-with-logs') {
+        fs.mkdirSync(path.join(options.cwd, 'logs'));
+        queueMicrotask(() => exit(1));
+      }
       if (testState.spawnBehavior === 'error') {
+        proc.pid = undefined;
         queueMicrotask(() => proc.emit('error', new Error('spawn java ENOENT')));
       }
-      // 'hang'：不发射任何事件，等待测试用 fake timers 推进超时分支
+      testState.onFirstLaunch?.(proc);
       return proc;
     }),
   };
@@ -172,6 +194,7 @@ const { errorHandler } = await import('../src/middleware/error_handler.js');
 const { default: config } = await import('../src/config.js');
 const { MCServerManager, MCServerInstance } = await import('../src/services/mc_server.js');
 const instanceIds = await import('../src/utils/instance-id.js');
+const { probeBindable, rconPortFor } = await import('../src/services/port-allocator.js');
 
 /** 注入假 jar 字节流的默认下载实现（可被单个用例覆写 httpState.streamImpl） */
 function defaultStreamImpl(jarBytes) {
@@ -215,6 +238,8 @@ function lastDeployInstanceId() {
 beforeEach(() => {
   vi.clearAllMocks();
   testState.spawnBehavior = 'exit0';
+  testState.runtimeSpawnError = null;
+  testState.onFirstLaunch = null;
   testState.latestBuild = {};
   testState.mcCoreVersions = [];
   testState.mcCoreThrow = false;
@@ -578,6 +603,30 @@ describe('POST /instances/deploy · 实例所有权', () => {
     ).toContain(`server-port=${GAME_PORT_START + 2}`);
   });
 
+  it('部署跳过已占用的游戏端口、RCON 端口和停机实例的新配置端口', async () => {
+    const existingPath = path.join(testState.serversDir, id);
+    fs.mkdirSync(existingPath);
+    testState.dbInstances.set(id, { id, name: '停机实例', serverPath: existingPath });
+    const { app } = buildApp();
+    fs.writeFileSync(
+      path.join(existingPath, 'server.properties'),
+      `server-port=${GAME_PORT_START + 2}\nrcon.port=${rconPortFor(GAME_PORT_START + 3)}\n`,
+    );
+    const busy = new Set([GAME_PORT_START, rconPortFor(GAME_PORT_START + 1)]);
+    probeBindable.mockImplementation(async (port) => !busy.has(port));
+    try {
+      const res = await request(app).post('/api/instances/deploy').send({
+        type: 'vanilla',
+        mcVersion: '1.21.4',
+        instanceName: '可用端口对',
+      });
+      expect(res.status).toBe(200);
+      expect(InstanceModel.getById(res.body.data.id)?.port).toBe(GAME_PORT_START + 4);
+    } finally {
+      probeBindable.mockResolvedValue(true);
+    }
+  });
+
   it('DB 的 serverPath 过期时，按同名磁盘目录恢复实例', () => {
     const existingId = 'vanilla-00000004';
     const actualPath = path.join(testState.serversDir, existingId);
@@ -599,6 +648,54 @@ describe('POST /instances/deploy · 实例所有权', () => {
     expect(instance.serverPath).toBe(actualPath);
     // 目录名只修正路径，配置仍以 DB 为准
     expect(instance.name).toBe('数据库配置');
+    expect(InstanceModel.migrateFromJson).not.toHaveBeenCalled();
+  });
+
+  it('磁盘存在同 ID 副本时，实例仍使用有效的 DB 路径', () => {
+    const serverPath = path.join(testState.serversDir, id);
+    const copyPath = path.join(testState.serversDir, '副本');
+    fs.mkdirSync(serverPath);
+    fs.mkdirSync(copyPath);
+    fs.writeFileSync(path.join(copyPath, 'instance.json'), JSON.stringify({ id, name: '副本' }));
+    testState.dbInstances.set(id, { id, name: '已登记', serverPath });
+
+    expect(new MCServerManager().getInstance(id)?.serverPath).toBe(serverPath);
+  });
+
+  it('DB 路径指向另一个实例时，改用唯一匹配该 ID 的目录', () => {
+    const wrongPath = path.join(testState.serversDir, 'vanilla-00000009');
+    const actualPath = path.join(testState.serversDir, id);
+    for (const [directory, instanceId] of [
+      [wrongPath, 'vanilla-00000009'],
+      [actualPath, id],
+    ]) {
+      fs.mkdirSync(directory);
+      fs.writeFileSync(
+        path.join(directory, 'instance.json'),
+        JSON.stringify({ id: instanceId, name: instanceId }),
+      );
+    }
+    testState.dbInstances.set(id, { id, name: '已登记', serverPath: wrongPath });
+
+    expect(new MCServerManager().getInstance(id)?.serverPath).toBe(actualPath);
+  });
+
+  it('只剩 DB 记录时不重建已删除的实例目录', () => {
+    const serverPath = path.join(testState.serversDir, id);
+    testState.dbInstances.set(id, { id, name: '已删除', serverPath });
+
+    expect(new MCServerManager().getInstance(id)).toBeUndefined();
+    expect(fs.existsSync(serverPath)).toBe(false);
+  });
+
+  it('没有 DB 记录且存在同 ID 的多个目录时不猜测归属', () => {
+    for (const dir of [id, '副本']) {
+      const target = path.join(testState.serversDir, dir);
+      fs.mkdirSync(target);
+      fs.writeFileSync(path.join(target, 'instance.json'), JSON.stringify({ id, name: dir }));
+    }
+
+    expect(new MCServerManager().getInstance(id)).toBeUndefined();
     expect(InstanceModel.migrateFromJson).not.toHaveBeenCalled();
   });
 
@@ -1397,8 +1494,8 @@ describe('runFirstLaunch 首启行为', () => {
     };
   });
 
-  it('首启退出码非 0 且无 logs 目录 → 记录告警但不阻断部署（resolve）', async () => {
-    testState.spawnBehavior = 'exit1';
+  it('首启退出码非 0，即使有 logs 目录也返回告警', async () => {
+    testState.spawnBehavior = 'exit1-with-logs';
     const { app } = buildApp();
 
     const res = await request(app)
@@ -1406,10 +1503,10 @@ describe('runFirstLaunch 首启行为', () => {
       .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: 'Exit1 Server', eula: true });
 
     expect(res.status).toBe(200);
-    expect(res.body.data.id).toMatch(/^vanilla-[0-9a-f]{8}$/);
+    expect(res.body.data.warnings).toEqual([expect.stringContaining('退出码 1')]);
   });
 
-  it('首启 spawn 出错（如 java 缺失）→ 记录告警但不阻断部署（resolve）', async () => {
+  it('首启 spawn 出错时把错误交给部署告警', async () => {
     testState.spawnBehavior = 'error';
     const { app } = buildApp();
 
@@ -1421,6 +1518,48 @@ describe('runFirstLaunch 首启行为', () => {
     });
 
     expect(res.status).toBe(200);
+    expect(res.body.data.warnings).toEqual([expect.stringContaining('spawn java ENOENT')]);
+  });
+
+  it('首启超时终止后未确认退出 → 失败且不注册实例', async () => {
+    testState.spawnBehavior = 'hang';
+    testState.onFirstLaunch = (proc) => {
+      proc.pid = undefined;
+    };
+    const { app, manager } = buildApp();
+    const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
+    const pending = Promise.resolve(
+      request(app).post('/api/instances/deploy').send({
+        type: 'vanilla',
+        mcVersion: '1.21.4',
+        instanceName: 'Timeout Failure',
+        eula: true,
+      }),
+    );
+
+    let timeoutCall = null;
+    for (let i = 0; i < 200 && !timeoutCall; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      timeoutCall = setTimeoutSpy.mock.calls.find(([, ms]) => ms === 60000) || null;
+    }
+    expect(timeoutCall).not.toBeNull();
+    const callIdx = setTimeoutSpy.mock.calls.findIndex(([, ms]) => ms === 60000);
+    clearTimeout(setTimeoutSpy.mock.results[callIdx].value);
+    timeoutCall[0]();
+    const confirmIdx = setTimeoutSpy.mock.calls.findIndex(([, ms]) => ms === 5000);
+    expect(confirmIdx).toBeGreaterThanOrEqual(0);
+    clearTimeout(setTimeoutSpy.mock.results[confirmIdx].value);
+    setTimeoutSpy.mock.calls[confirmIdx][0]();
+
+    const res = await pending;
+    const deployedId = lastDeployInstanceId();
+    const directory = path.join(testState.serversDir, deployedId);
+    expect(res.status).toBe(502);
+    expect(res.body.message).toContain('未确认进程退出');
+    expect(manager.getInstance(deployedId)).toBeUndefined();
+    expect(InstanceModel.create).not.toHaveBeenCalled();
+    expect(fs.existsSync(directory)).toBe(true);
+    expect(fs.existsSync(path.join(directory, 'instance.json'))).toBe(false);
   });
 
   it('首启 60s 超时 → 按进程组终止（kill(-pid, SIGKILL)）+ 单进程兜底 + 部署完成', async () => {
@@ -1448,19 +1587,20 @@ describe('runFirstLaunch 首启行为', () => {
       }
       expect(timeoutCall, 'runFirstLaunch 应注册 60s 首启定时器').not.toBeNull();
 
-      // 模拟 60s 到期：取消真实定时器后手动触发超时回调（进程树终止 + resolve）
       const callIdx = setTimeoutSpy.mock.calls.findIndex(([, ms]) => ms === 60000);
       clearTimeout(setTimeoutSpy.mock.results[callIdx].value);
       timeoutCall[0]();
 
+      const { spawn } = await import('child_process');
+      const firstProcess = spawn.mock.results[0].value;
+      expect(killSpy).toHaveBeenCalledWith(-42424, 'SIGKILL');
+      expect(firstProcess.kill).toHaveBeenCalledWith('SIGKILL');
+      expect(InstanceModel.create).not.toHaveBeenCalled();
+      firstProcess.emit('exit', null, 'SIGKILL');
+
       const res = await inflight;
       expect(res.status).toBe(200);
-      expect(res.body.data.id).toMatch(/^vanilla-[0-9a-f]{8}$/);
-      // 进程树终止：Linux/macOS spawn 带 detached（pid 即 PGID）→ 负 pid 发组信号
-      expect(killSpy).toHaveBeenCalledWith(-42424, 'SIGKILL');
-      // 单进程 SIGKILL 兜底
-      const { spawn } = await import('child_process');
-      expect(spawn.mock.results[0].value.kill).toHaveBeenCalledWith('SIGKILL');
+      expect(res.body.data.warnings).toContainEqual(expect.stringContaining('首次启动超时'));
     } finally {
       Object.defineProperty(process, 'platform', origPlatform);
     }
@@ -1520,6 +1660,22 @@ describe('runFirstLaunch 首启行为', () => {
       expect(res.body.data.warnings.join()).toContain('未能自动启动');
       expect(res.body.data.warnings.join()).toContain('手动启动');
       expect(manager.getInstance(res.body.data.id).isRunning).toBe(false);
+    });
+
+    it('自动启动异步失败时不登记运行态，保留已部署实例', async () => {
+      testState.runtimeSpawnError = new Error('spawn java ENOENT');
+      const { app, manager } = buildApp();
+      const res = await request(app)
+        .post('/api/instances/deploy')
+        .send({ type: 'vanilla', mcVersion: '1.21.4', instanceName: '启动失败', eula: true });
+
+      expect(res.status).toBe(200);
+      expect(res.body.data.started).toBe(false);
+      expect(res.body.data.warnings).toContainEqual(expect.stringContaining('spawn java ENOENT'));
+      expect(manager.getInstance(res.body.data.id)?.isRunning).toBe(false);
+      expect(InstanceModel.update).not.toHaveBeenCalledWith(res.body.data.id, {
+        status: 'running',
+      });
     });
 
     it('启动成功时 started 为 true 且没有启动相关警告', async () => {

@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { deployProgressSchema, upgradeStageSchema } from './deploy'
 import { systemStatsSchema } from './system'
 import { scheduledTaskTypeSchema } from './task'
+import { instanceStartupStateSchema } from './instance'
 
 export const WS_EVENT_TYPES = [
   'log',
@@ -64,6 +65,7 @@ export const wsMessageSchema = z.object({
 export const wsStatusSnapshotSchema = z.object({
   status: z.string(),
   isRunning: z.boolean(),
+  startupState: instanceStartupStateSchema,
   players: z.array(z.unknown()),
   tps: z.number().nullable(),
   /**
@@ -90,7 +92,7 @@ export const wsStatusSnapshotSchema = z.object({
 export const wsPerformancePayloadSchema = z.object({
   cpu: z.number(),
   memory: z.number(),
-  tps: z.number(),
+  tps: z.number().nullable(),
   mspt: z.number(),
   worldTime: z.number().nullable(),
   worldDay: z.number().nullable(),
@@ -112,6 +114,7 @@ export const WS_STATUS_EVENT_NAMES = [
   'crash',
   'save',
   'circuit_breaker',
+  'auto_start_resumed',
 ] as const
 
 export type WsStatusEventName = (typeof WS_STATUS_EVENT_NAMES)[number]
@@ -130,6 +133,8 @@ export const CRITICAL_STATUS_EVENTS: ReadonlySet<WsStatusEventName> = new Set([
 
 export const wsStatusEventPayloadSchema = z.object({
   event: z.enum(WS_STATUS_EVENT_NAMES),
+  refreshOnly: z.literal(true).optional(),
+  startupState: instanceStartupStateSchema.optional(),
   code: z.number().nullable().optional(),
   autoRestart: z.boolean().optional(),
   consecutiveCrashes: z.number().optional(),

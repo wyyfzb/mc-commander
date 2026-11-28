@@ -37,7 +37,8 @@ vi.mock('../src/db/backup.model.js', () => ({
     resetStaleInProgress: vi.fn(() => 0),
   },
 }));
-vi.mock('../src/services/backup.service.js', () => ({
+vi.mock('../src/services/backup.service.js', async (importOriginal) => ({
+  ...(await importOriginal()),
   // 判据导出：upgrade.service 用它决定要不要跑前置备份。既有用例都走「有世界」路径
   hasWorldData: vi.fn(() => true),
   BackupService: class {
@@ -315,7 +316,7 @@ describe('TaskScheduler - 调度主链（启停 / 主循环 / 解封 / 任务分
       await flush();
 
       expect(mockManager.getInstance).toHaveBeenCalledWith('s1');
-      expect(inst.sendCommand).toHaveBeenCalledWith('pardon-ip 1.2.3.4');
+      expect(inst.sendCommand).toHaveBeenCalledWith('pardon-ip 1.2.3.4', { requireResponse: true });
       expect(BanModel.deactivate).toHaveBeenCalledWith(7);
       expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Auto-pardoned ip 1.2.3.4'));
     });
@@ -328,7 +329,7 @@ describe('TaskScheduler - 调度主链（启停 / 主循环 / 解封 / 任务分
       scheduler.checkExpiredBans();
       await flush();
 
-      expect(inst.sendCommand).toHaveBeenCalledWith('pardon Steve');
+      expect(inst.sendCommand).toHaveBeenCalledWith('pardon Steve', { requireResponse: true });
       expect(BanModel.deactivate).toHaveBeenCalledWith(8);
     });
 
@@ -422,7 +423,7 @@ describe('TaskScheduler - 调度主链（启停 / 主循环 / 解封 / 任务分
       );
     });
 
-    it('restart：实例缺失不炸，仍落 success（restart 延迟 3s 启动，成败由实例反映）', () => {
+    it('restart：实例缺失时记跳过', () => {
       mockManager.getInstance.mockReturnValue(undefined);
 
       scheduler.executeTask({ ...baseTask, type: 'restart' });
@@ -430,7 +431,7 @@ describe('TaskScheduler - 调度主链（启停 / 主循环 / 解封 / 任务分
       expect(ScheduledTaskModel.updateLastRun).toHaveBeenCalledWith(
         1,
         expect.any(String),
-        'success',
+        'skipped',
       );
     });
 
@@ -476,7 +477,7 @@ describe('TaskScheduler - 调度主链（启停 / 主循环 / 解封 / 任务分
       );
     });
 
-    it('stop：实例未运行则不下发', () => {
+    it('stop：实例未运行时不下发并记跳过', () => {
       const inst = { isRunning: false, stop: vi.fn() };
       mockManager.getInstance.mockReturnValue(inst);
 
@@ -486,7 +487,7 @@ describe('TaskScheduler - 调度主链（启停 / 主循环 / 解封 / 任务分
       expect(ScheduledTaskModel.updateLastRun).toHaveBeenCalledWith(
         1,
         expect.any(String),
-        'success',
+        'skipped',
       );
     });
 
@@ -499,7 +500,10 @@ describe('TaskScheduler - 调度主链（启停 / 主循环 / 解封 / 任务分
       expect(ScheduledTaskModel.updateLastRun).toHaveBeenCalledWith(1, expect.any(String));
 
       await flush();
-      expect(inst.sendCommand).toHaveBeenCalledWith('say hi');
+      expect(inst.sendCommand).toHaveBeenCalledWith('say hi', {
+        source: 'scheduler',
+        requireResponse: true,
+      });
       expect(ScheduledTaskModel.updateLastRunStatus).toHaveBeenCalledWith(
         1,
         'success',

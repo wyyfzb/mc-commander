@@ -1,3 +1,5 @@
+import type { InstanceStartupState } from '@mc-commander/schemas'
+
 /**
  * 实例展示名：名称为空或纯空白时回退到 id。
  *
@@ -27,3 +29,10 @@ export function serverTypeLabel(value: string | null | undefined): string {
   const key = (value ?? '').toLowerCase()
   return SERVER_TYPE_LABELS[key] ?? key
 }
+
+export const STARTUP_STATE_LABELS = {
+  stopped: '已停止',
+  starting: '启动中',
+  ready: '已就绪',
+  unknown: '就绪未知',
+} satisfies Record<InstanceStartupState, string>

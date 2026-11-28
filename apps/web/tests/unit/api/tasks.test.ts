@@ -16,6 +16,7 @@ import {
   apiUpdateTask,
 } from '@/api/tasks'
 import { ApiError, NetworkError, type ConnectionConfig } from '@/api/client'
+import { ErrorCode, getFriendlyErrorText } from '@/api/errors'
 import type { ScheduledTask, TaskRunHistory } from '@/api/types'
 
 const mockTask: ScheduledTask = {
@@ -138,6 +139,17 @@ describe('tasks API', () => {
   it('POST 立即执行：/tasks/:id/run，data=null 解包', async () => {
     const res = await apiRunTaskNow(config, 7)
     expect(res).toBeNull()
+  })
+
+  it('服务器反复退出时保留服务端的恢复操作提示', async () => {
+    const message = '服务器多次意外退出，任务未执行。请到实例页再试一次。'
+    server.use(
+      http.post('*/api/v1/tasks/7/run', () =>
+        err(ErrorCode.TASK_BLOCKED_BY_CIRCUIT_BREAKER, message, 409),
+      ),
+    )
+
+    await expect(apiRunTaskNow(config, 7).catch(getFriendlyErrorText)).resolves.toBe(message)
   })
 
   it('GET 执行历史：limit=10 倒序约定 + 数组解包', async () => {

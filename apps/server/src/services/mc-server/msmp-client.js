@@ -96,7 +96,12 @@ export function _msmpPortFromLog() {
  * @returns {Promise<unknown | null>} 失败一律 null（调用方按「取不到」处理）；服务端回了
  *   JSON-RPC 错误响应时，错误码与消息落一条 warn 日志，供排障区分失败原因
  */
-export function _msmpRequest(method, params = [], timeoutMs = MSMP_QUERY_TIMEOUT_MS) {
+export function _msmpRequest(
+  method,
+  params = [],
+  timeoutMs = MSMP_QUERY_TIMEOUT_MS,
+  { canSend } = {},
+) {
   const endpoint = this._msmpResolveEndpoint();
   if (!endpoint) return Promise.resolve(null);
 
@@ -132,6 +137,7 @@ export function _msmpRequest(method, params = [], timeoutMs = MSMP_QUERY_TIMEOUT
     }
 
     socket.on('open', () => {
+      if (canSend && !canSend()) return finish(null);
       socket.send(JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }));
     });
     socket.on('message', (data) => {

@@ -7,7 +7,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
-import { apiSendCommand } from '@/api/players'
+import { apiSendCommand, commandResponseText } from '@/api/players'
+import type { ConnectionConfig } from '@/api/client'
 import { getFriendlyErrorText } from '@/api/errors'
 import { useCommandBus } from '@/stores/command-bus'
 import { useConnectionStore } from '@/stores/connection'
@@ -35,6 +36,15 @@ export function isSafeCommand(command: string): boolean {
   return SAFE_COMMAND_PATTERNS.some((re) => re.test(command.trim()))
 }
 
+async function sendCommand(config: ConnectionConfig, instanceId: string, command: string) {
+  try {
+    const response = await apiSendCommand(config, instanceId, command)
+    toast.info(commandResponseText(response))
+  } catch (e) {
+    toast.error(getFriendlyErrorText(e))
+  }
+}
+
 export function CommandBridge() {
   const config = useConnectionStore()
   const instanceId = useServerStore((s) => s.instanceId)
@@ -52,31 +62,14 @@ export function CommandBridge() {
       return
     }
     setBaseRunner((command) => {
-      void (async () => {
-        // 二次确认偏好开启且命令不在安全白名单 → 挂起等待确认
-        if (confirmRef.current && !isSafeCommand(command)) {
-          setPendingCommand(command)
-          return
-        }
-        try {
-          await apiSendCommand(config, instanceId, command)
-          // 成功不弹 toast：RCON 回显进终端日志流（失败仍 toast 告警）
-        } catch (e) {
-          toast.error(getFriendlyErrorText(e))
-        }
-      })()
+      if (confirmRef.current && !isSafeCommand(command)) {
+        setPendingCommand(command)
+        return
+      }
+      void sendCommand(config, instanceId, command)
     })
     return () => setBaseRunner(null)
   }, [config, instanceId, setBaseRunner])
-
-  const doSend = async (command: string) => {
-    try {
-      await apiSendCommand(config, instanceId ?? '', command)
-      // 同上：成功静默，终端日志流为反馈源
-    } catch (e) {
-      toast.error(getFriendlyErrorText(e))
-    }
-  }
 
   return (
     <ConfirmDialog
@@ -89,7 +82,7 @@ export function CommandBridge() {
       onConfirm={() => {
         const cmd = pendingCommand
         setPendingCommand(null)
-        if (cmd) void doSend(cmd)
+        if (cmd && instanceId) void sendCommand(config, instanceId, cmd)
       }}
     />
   )

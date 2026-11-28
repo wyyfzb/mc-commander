@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
+import { instanceStartupStateSchema, type WsStatusEventName } from '@mc-commander/schemas'
 import { McSocket } from '@/api/ws'
 import { queryKeys } from '@/api/queries'
 import { useConnectionStore } from '@/stores/connection'
@@ -17,8 +18,10 @@ import {
 import { useNotificationStore } from '@/stores/notifications'
 import { useTerminalStore } from '@/stores/terminal'
 import { useUiStore } from '@/stores/ui'
+import { AUTO_START_PAUSED_TEXT, AUTO_START_RESUMED_TEXT } from '@/lib/notifications'
+import { readHostMemoryPercent } from '@/lib/instance-memory'
 import { sessionAppliesToPanel } from '@/lib/mc-connection'
-import type { InstanceSummary } from '@/api/types'
+import type { InstanceStatus, InstanceSummary } from '@/api/types'
 import type { Player, UpgradeStage, WsMessage } from '@/api/types'
 import { validateWsPayload } from '@/api/ws-payload-validation'
 
@@ -137,13 +140,14 @@ export function useServerSocket(instanceId: string | null) {
            ⚠️ memoryPercent 是**整机**已用 ÷ 整机总量，不是 MC 进程 RSS（那是
            performanceUpdate 的 memory 字段，分子分母不同源、不可当比例用），也不是 JVM 堆。 */
         const stats = data as {
+          totalMemory?: number
           memoryPercent?: number
           diskUsage?: { primary?: { percent?: number } }
           diskAlert?: { warningPercent?: number; errorPercent?: number }
           memoryAlert?: { warningPercent?: number }
         }
         const diskPercent = stats.diskUsage?.primary?.percent
-        const memoryPercent = stats.memoryPercent
+        const memoryPercent = readHostMemoryPercent(stats.totalMemory, stats.memoryPercent)
         // 阈值必须**合并进同一个对象**再下发：dispatchPerformance 只读一个 thresholds 键，
         // 若把磁盘与内存各写一个 thresholds 键（对象字面量里后者覆盖前者），磁盘阈值会
         // 被静默丢掉——表现是「磁盘告警消失」而内存告警照常，很难回溯。
@@ -172,12 +176,7 @@ export function useServerSocket(instanceId: string | null) {
         return
       }
 
-      // ── critical 事件全局广播：非当前实例的 crash/熔断不丢弃 ──
-      // 用户切到其他页面/实例时，崩溃与熔断仍入通知中心（可跳转回溯）。
-      // 失败类事件（备份失败/任务失败/Webhook 投递失败）与服务端同口径走
-      // 无订阅全局播发（broadcastCriticalInstanceEvent，instanceId 可空＝
-      // 无归属 webhook 的投递失败），此处同样旁路实例门控——出事实例未必
-      // 是当前视图，跨实例丢弃会让失败只有控制台读者可见
+      // 失败事件全局广播，出事的实例未必是当前视图。
       const isFailureEvent =
         msg.type === 'backupFailed' ||
         msg.type === 'taskFailed' ||
@@ -190,22 +189,47 @@ export function useServerSocket(instanceId: string | null) {
         })
         return
       }
-      if (msg.instanceId && msg.instanceId !== instanceRef.current) {
-        /* 非当前实例的 started 也要消费它的「待重启」：放在门控之前，否则逐台徽章撤不掉 */
-        if (msg.type === 'statusEvent' && data.event === 'started') {
-          clearRestartPending(msg.instanceId)
+      if (msg.type === 'statusEvent' && msg.instanceId && typeof data.event === 'string') {
+        const id = msg.instanceId
+        const ev = data.event
+        const isCurrent = id === instanceRef.current
+        const crash = ev === 'crash'
+        const paused = ev === 'circuit_breaker'
+        const resumed = ev === 'auto_start_resumed'
+        // 待重启标记与启停阶段按实例归属，不跟随当前视图。
+        if (ev === 'started') clearRestartPending(id)
+        if (ev === 'started' || ev === 'stopped' || crash || paused) clearPhase(id, null)
+        void queryClient.invalidateQueries({ queryKey: queryKeys.instances(), exact: true })
+        void queryClient.invalidateQueries({ queryKey: queryKeys.instance(id), exact: true })
+        if (data.refreshOnly === true || (!isCurrent && !crash && !paused && !resumed)) return
+
+        if (isCurrent) applyWsStatusEvent(ev as WsStatusEventName)
+        if (crash) {
+          void queryClient.invalidateQueries({ queryKey: queryKeys.crashArtifact(id) })
+          void queryClient.invalidateQueries({ queryKey: queryKeys.crashHistory(id) })
         }
-        const isCriticalStatus =
-          msg.type === 'statusEvent' && (data.event === 'crash' || data.event === 'circuit_breaker')
-        if (isCriticalStatus) {
-          dispatchEvent({
-            type: msg.type,
-            data: msg.data as Record<string, unknown>,
-            instanceId: msg.instanceId,
-          })
+        dispatchEvent({ type: msg.type, data, instanceId: id })
+
+        const pauseToastId = `auto-start-paused:${id}`
+        if (resumed) toast.dismiss(pauseToastId)
+        if (!isCurrent) return
+        if (resumed) {
+          toast.success(`实例「${getInstanceName(queryClient, id)}」${AUTO_START_RESUMED_TEXT}`)
+        } else if (paused || (crash && !data.autoRestart)) {
+          toast.error(
+            `实例「${getInstanceName(queryClient, id)}」${paused ? AUTO_START_PAUSED_TEXT : '服务器意外退出'}`,
+            {
+              ...(paused ? { id: pauseToastId, duration: Infinity } : {}),
+              action: {
+                label: '查看末尾日志',
+                onClick: () => setLastOutputInstanceId(id),
+              },
+            },
+          )
         }
         return
       }
+      if (msg.instanceId && msg.instanceId !== instanceRef.current) return
 
       // 全局进度事件（部署：创建新实例前即有进度，无实例归属）。
       // 归属字段（instanceId/instanceName 等）透传：连接补发恢复显示、部署横幅
@@ -274,96 +298,55 @@ export function useServerSocket(instanceId: string | null) {
       if (!msg.instanceId || msg.instanceId !== instanceRef.current) return
 
       switch (msg.type) {
-        case 'statusEvent': {
-          // 跃迁是**事件**（发生过的瞬间事实）；快照走 `statusSnapshot`（见下一个 case）。
-          // 缺 `event` 字段说明不是跃迁（旧服务端或形状漂移）：当跃迁处理会给出一堆 undefined 跃迁
-          if (!data.event || typeof data.event !== 'string') break
-          const ev = data.event as
-            | 'started'
-            | 'stopped'
-            | 'ready'
-            | 'crash'
-            | 'save'
-            | 'circuit_breaker'
-          applyWsStatusEvent(ev)
-          /* 实例已启动 ⇒ 启动配置已生效，清「待重启」标记。
-               判据取 started 而非 stopped：服务端保存启动配置后不改运行中进程，
-               只有「重新起来」才算生效——stopped 只说明停下来了，此刻配置仍未被应用。 */
-          if (ev === 'started') {
-            clearRestartPending(msg.instanceId)
-          }
-          // 启停中间态确认清除：started/stopped 为终态确认，crash/熔断为异常终态
-          if (ev === 'started' || ev === 'stopped' || ev === 'crash' || ev === 'circuit_breaker') {
-            clearPhase(msg.instanceId, null)
-          }
-          // 实例列表状态变化时刷新列表（runningCount 等）
-          void queryClient.invalidateQueries({ queryKey: queryKeys.instances() })
-          // 详情同步失效：isRunning 镜像自详情 query（server store），只刷列表会让
-          // 面板外停止（如终端输 stop）后的停止状态条滞后到 30s 轮询才翻转
-          void queryClient.invalidateQueries({ queryKey: queryKeys.instance(msg.instanceId) })
-          // 崩溃产物与崩溃历史都是事后新增的文件，轮询没有意义（每次都要枚举目录 + 解析），
-          // 只在崩溃事件到达时失效一次。放在这里而不是页面里：帮助页、仪表盘都可能正开着，
-          // 页面级失效只对「当时挂载着的那个页面」生效。
-          if (ev === 'crash') {
-            void queryClient.invalidateQueries({
-              queryKey: queryKeys.crashArtifact(msg.instanceId),
-            })
-            void queryClient.invalidateQueries({ queryKey: queryKeys.crashHistory(msg.instanceId) })
-          }
-          // critical 事件（当前实例）：入通知中心 + 持久 toast（手动关闭防错过）
-          if (ev === 'crash' || ev === 'circuit_breaker') {
-            dispatchEvent({
-              type: 'statusEvent',
-              data: msg.data as Record<string, unknown>,
-              instanceId: msg.instanceId,
-            })
-            const name = getInstanceName(queryClient, msg.instanceId)
-            const crashedInstanceId = msg.instanceId
-            toast.error(
-              ev === 'crash'
-                ? `实例「${name}」服务器意外退出${data.autoRestart ? '，正在自动重启' : ''}`
-                : `实例「${name}」连续崩溃 ${Number(data.consecutiveCrashes ?? 0)} 次，已触发熔断保护`,
-              {
-                duration: Infinity,
-                // 深入链接：一键查看进程末尾日志（消费 lastOutput）
-                action: {
-                  label: '查看末尾日志',
-                  onClick: () => setLastOutputInstanceId(crashedInstanceId),
-                },
-              },
-            )
-          } else {
-            // started/stopped/ready/save 常规跃迁：入通知中心（文案映射见
-            // lib/notifications buildNotifications），不弹 toast 防打断
-            dispatchEvent({
-              type: 'statusEvent',
-              data: msg.data as Record<string, unknown>,
-              instanceId: msg.instanceId,
-            })
-          }
-          break
-        }
         case 'statusSnapshot': {
-          // 快照是**状态**（此刻的值）：订阅时补发 + 周期性广播，客户端直接覆盖即可
+          // 订阅和生命周期变化推送当前值，不从历史事件还原状态。
+          const startupState = instanceStartupStateSchema.safeParse(data.startupState)
+          const isRunning = Boolean(data.isRunning)
+          const currentStartupState = startupState.data ?? (isRunning ? 'unknown' : 'stopped')
+          const tps = typeof data.tps === 'number' ? data.tps : null
+          const players = Array.isArray(data.players) ? data.players : []
+          if (currentStartupState !== 'ready') resetAlerts('instance')
           applyWsSnapshot(msg.instanceId, {
             status: String(data.status ?? ''),
-            isRunning: Boolean(data.isRunning),
-            players: (data.players as unknown[]) ?? [],
-            tps: typeof data.tps === 'number' ? data.tps : null,
+            isRunning,
+            startupState: currentStartupState,
+            players,
+            tps,
           })
           // 推送面连通状态（`capabilities.msmpPush`）也随快照回来：REST 详情是轮询取的，
           // 断连不会让它失效，界面会滞后一个轮询周期才把「实时」翻成「轮询」——期间它在说一件
           // 已经不再成立的事。快照是推送的 ⇒ 就地写进详情缓存，界面即时对齐。
           // 三态同 `worldUpgrade`：布尔＝权威值、**字段缺席＝未知**（旧服务端）⇒ 保持现状。
-          if (typeof data.msmpPush === 'boolean') {
-            queryClient.setQueryData(queryKeys.instance(msg.instanceId), (prev) => {
-              if (!prev || typeof prev !== 'object') return prev
-              const detail = prev as { capabilities?: Record<string, unknown> }
-              return {
-                ...detail,
-                capabilities: { ...detail.capabilities, msmpPush: data.msmpPush },
-              }
-            })
+          queryClient.setQueryData<InstanceStatus>(queryKeys.instance(msg.instanceId), (detail) => {
+            if (!detail) return detail
+            return {
+              ...detail,
+              isRunning,
+              startupState: currentStartupState,
+              players,
+              playerCount: players.length,
+              tps,
+              capabilities:
+                typeof data.msmpPush === 'boolean'
+                  ? { ...detail.capabilities, msmpPush: data.msmpPush }
+                  : detail.capabilities,
+            }
+          })
+          if (startupState.success) {
+            queryClient.setQueryData<InstanceStatus[]>(queryKeys.instances(), (list) =>
+              list?.map((item) =>
+                item.id === msg.instanceId
+                  ? {
+                      ...item,
+                      isRunning,
+                      startupState: currentStartupState,
+                      players,
+                      playerCount: players.length,
+                      tps,
+                    }
+                  : item,
+              ),
+            )
           }
           // 世界格式升级属 state 类事件（契约 WS_EVENT_KINDS），权威读法随快照回来。
           // 三态必须分开：对象＝在途、null＝**确认空闲**（清掉本地残留）、
@@ -380,7 +363,7 @@ export function useServerSocket(instanceId: string | null) {
           const p = {
             cpu: Number(data.cpu ?? 0),
             memory: Number(data.memory ?? 0),
-            tps: Number(data.tps ?? 0),
+            tps: typeof data.tps === 'number' ? data.tps : null,
             mspt: Number(data.mspt ?? 0),
             worldTime: data.worldTime == null ? null : Number(data.worldTime),
             worldDay: data.worldDay == null ? null : Number(data.worldDay),
@@ -398,7 +381,14 @@ export function useServerSocket(instanceId: string | null) {
              阈值 80% 因此在本链路上无可靠输入，highMemory 结构性不可触发；
              补这条通道要先由服务端提供真实堆使用率（如 JMX / /proc 的堆指标），
              属独立的能力项，不在前端接线范围内。 */
-          dispatchPerformance({ tps: p.tps, cpu: p.cpu })
+          const startupState =
+            useServerStore.getState().status?.startupState ??
+            queryClient.getQueryData<InstanceStatus>(queryKeys.instance(msg.instanceId))
+              ?.startupState
+          dispatchPerformance({
+            ...(startupState === 'ready' && p.tps !== null ? { tps: p.tps } : {}),
+            cpu: p.cpu,
+          })
           break
         }
         case 'log': {
@@ -571,6 +561,7 @@ export function useServerSocket(instanceId: string | null) {
     applyDeployProgress,
     pushLog,
     clearPhase,
+    resetAlerts,
     clearRestartPending,
     setLastOutputInstanceId,
     queryClient,
@@ -582,7 +573,7 @@ export function useServerSocket(instanceId: string | null) {
   // 会因已在集合里而吞掉真实告警。清空后首个 performanceUpdate 会重新判定（该告警就告警）。
   useEffect(() => {
     const socket = socketSingleton
-    resetAlerts()
+    resetAlerts('instance')
     if (!socket || !connectionReady || !instanceId) return
     socket.subscribe(instanceId)
   }, [instanceId, connectionReady, resetAlerts])

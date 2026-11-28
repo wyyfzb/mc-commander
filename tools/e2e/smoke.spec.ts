@@ -1,5 +1,5 @@
 import path from 'node:path'
-import { test, expect, type Page } from '@playwright/test'
+import { test, expect, type Locator, type Page } from '@playwright/test'
 
 /**
  * 冒烟 E2E（基本可跑 / Cmd+K 可跳转 / 主题切换）
@@ -21,7 +21,99 @@ async function setupConnection(page: Page) {
   })
 }
 
+async function controlBorderContrast(control: Locator) {
+  return control.evaluate((el) => {
+    const style = getComputedStyle(el)
+    let host = el.parentElement
+    while (host && getComputedStyle(host).backgroundColor === 'rgba(0, 0, 0, 0)') {
+      host = host.parentElement
+    }
+    if (!host) throw new Error('控件缺少实底宿主')
+    const canvas = document.createElement('canvas')
+    canvas.width = canvas.height = 1
+    const ctx = canvas.getContext('2d')!
+    const fill = (color: string) => {
+      ctx.fillStyle = color
+      ctx.fillRect(0, 0, 1, 1)
+    }
+    const luminance = () => {
+      const [r, g, b] = Array.from(ctx.getImageData(0, 0, 1, 1).data, (channel) => {
+        const value = channel / 255
+        return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
+      })
+      return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!
+    }
+    fill(getComputedStyle(host).backgroundColor)
+    const surface = luminance()
+    if (style.backgroundClip === 'border-box') fill(style.backgroundColor)
+    fill(style.borderTopColor)
+    const edge = luminance()
+    return (Math.max(surface, edge) + 0.05) / (Math.min(surface, edge) + 0.05)
+  })
+}
+
 test.describe('冒烟', () => {
+  test('暗色控件：输入框、下拉框、多行输入和命令搜索的外边界至少 3:1', async ({ page }) => {
+    await setupConnection(page)
+    await page.emulateMedia({ reducedMotion: 'reduce' })
+    await page.goto('/settings/device')
+    await expect(page.locator('html')).toHaveClass(/dark/)
+    const input = page.getByLabel('面板地址')
+    const select = page.getByRole('combobox', { name: '界面主题' })
+    await expect(input).toBeVisible()
+    await expect.soft(await controlBorderContrast(input), '面板地址').toBeGreaterThanOrEqual(3)
+    await expect.soft(await controlBorderContrast(select), '界面主题').toBeGreaterThanOrEqual(3)
+
+    await page.goto('/dashboard')
+    const textarea = page.getByLabel('公告内容')
+    await expect(textarea).toBeVisible()
+    await expect.soft(await controlBorderContrast(textarea), '公告内容').toBeGreaterThanOrEqual(3)
+
+    await page.keyboard.press('Control+k')
+    const search = page.getByPlaceholder('输入页面名称或命令…')
+    await expect(search).toBeFocused()
+    // 命令面板把键盘焦点留在输入框；单独测量无焦点时的外边界。
+    await search.evaluate(async (el: HTMLInputElement) => {
+      el.blur()
+      const view = el.ownerDocument.defaultView
+      if (!view) return
+      await new Promise<void>((resolve) =>
+        view.requestAnimationFrame(() => view.requestAnimationFrame(() => resolve())),
+      )
+    })
+    const group = search.locator('xpath=ancestor::*[@data-slot="input-group"]')
+    await expect(search).not.toBeFocused()
+    await expect.soft(await controlBorderContrast(group), '命令搜索').toBeGreaterThanOrEqual(3)
+  })
+  test('强制颜色：Tab 聚焦表单与命令搜索时仍有轮廓', async ({ page }) => {
+    await setupConnection(page)
+    await page.emulateMedia({ forcedColors: 'active', reducedMotion: 'reduce' })
+    await page.goto('/settings/device')
+    const expectOutline = async (locator: Locator, label: string) => {
+      const outline = await locator.evaluate((el) => getComputedStyle(el).outlineStyle)
+      expect.soft(outline, label).toBe('solid')
+    }
+    const address = page.getByLabel('面板地址')
+    await address.focus()
+    await page.keyboard.press('Shift+Tab')
+    await page.keyboard.press('Tab')
+    await expect(address).toBeFocused()
+    await expectOutline(address, '面板地址')
+
+    const theme = page.getByRole('combobox', { name: '界面主题' })
+    await theme.focus()
+    await expectOutline(theme, '界面主题')
+
+    await page.goto('/dashboard')
+    const announcement = page.getByLabel('公告内容')
+    await announcement.focus()
+    await expectOutline(announcement, '公告内容')
+    await page.keyboard.press('Control+k')
+    const search = page.getByPlaceholder('输入页面名称或命令…')
+    await expect(search).toBeFocused()
+    await expectOutline(search.locator('xpath=ancestor::*[@data-slot="input-group"]'), '命令搜索')
+  })
+
   /* 字体子集覆盖（中文标点等）**不在 e2e 锁**：量宽与 `document.fonts.check()` 都
      证不了「某码位在不在字体里」——前者对着一串字符求和时，子集里只要留任意一枚字形就通过
      （实测：只含 `…` 的字体仍绿）；后者对子集外字符也返回 true。码位级覆盖由

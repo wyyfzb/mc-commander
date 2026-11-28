@@ -2,6 +2,7 @@
  * 玩家管理 API 函数（对照服务端 routes/players.js 契约）
  * 操作类端点全部实时落地命令；给予/传送/gamemode/clear/tell 等走通用 command 端点。
  */
+import type { CommandResponse, InstanceCommandRequestBody } from '@mc-commander/schemas'
 import { apiDelete, apiPost, type ConnectionConfig } from './client'
 import type { BanRequestBody } from './types'
 
@@ -73,19 +74,26 @@ export function apiRemoveWhitelist(
   return apiDelete<null>(`${base(instanceId)}/players/${playerName}/whitelist`, config)
 }
 
-/**
- * 发送任意命令（POST /instances/:id/command；给予/传送/gamemode/clear/tell/effect 的通用落点）
- * @param source 命令史来源标记。`replay` 用于审计页的行内重发，使重发在命令史里可辨认
- *   （白名单枚举，见 instanceCommandRequestBodySchema）；省略即 `api`。
- */
+export const COMMAND_DELIVERED_WITHOUT_RESPONSE = '命令已投递，未确认游戏执行'
+export const COMMAND_EMPTY_RESPONSE = '游戏已响应，未返回文字'
+
+export function commandResponseText(response: CommandResponse) {
+  return response === null
+    ? COMMAND_DELIVERED_WITHOUT_RESPONSE
+    : response.trim() || COMMAND_EMPTY_RESPONSE
+}
+
+/** 字符串（含空串）是游戏回执；null 仅表示 stdin 投递已确认。 */
 export function apiSendCommand(
   config: ConnectionConfig,
   instanceId: string,
   command: string,
-  source?: 'api' | 'replay',
-) {
-  return apiPost<unknown>(`${base(instanceId)}/command`, config, {
+  source?: InstanceCommandRequestBody['source'],
+  options?: Pick<InstanceCommandRequestBody, 'requireResponse'>,
+): Promise<CommandResponse> {
+  return apiPost<CommandResponse>(`${base(encodeURIComponent(instanceId))}/command`, config, {
     command,
     ...(source ? { source } : {}),
+    ...options,
   })
 }

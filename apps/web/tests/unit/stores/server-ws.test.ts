@@ -24,6 +24,7 @@ const makeStatus = (overrides: Partial<InstanceStatus> = {}): InstanceStatus => 
 const makeSnapshot = (overrides: Partial<WsStatusSnapshot> = {}): WsStatusSnapshot => ({
   status: 'running',
   isRunning: true,
+  startupState: 'ready',
   players: [],
   tps: 20,
   ...overrides,
@@ -113,25 +114,28 @@ describe('applyWsSnapshot（status 快照合并）', () => {
     const { setInstanceId, setStatus, applyWsSnapshot } = useServerStore.getState()
     setInstanceId('demo')
     setStatus(makeStatus({ isRunning: false, tps: 20 }))
-    applyWsSnapshot('demo', makeSnapshot({ isRunning: true, tps: 19.5 }))
+    applyWsSnapshot(
+      'demo',
+      makeSnapshot({ isRunning: true, tps: 19.5, players: [{ name: 'Steve' }] }),
+    )
 
     const s = useServerStore.getState().status
     expect(s?.isRunning).toBe(true)
     expect(s?.tps).toBe(19.5)
     expect(s?.name).toBe(mockInstanceStatus.name)
     expect(s?.mcVersion).toBe(mockInstanceStatus.mcVersion)
-    expect(s?.playerCount).toBe(mockInstanceStatus.playerCount)
+    expect(s?.playerCount).toBe(1)
+    expect(s?.players).toEqual([{ name: 'Steve' }])
   })
 
-  it('tps 缺省回落：快照 tps 为 null 时保留原 tps', () => {
+  it('启动快照覆盖旧的就绪状态和 TPS', () => {
     const { setInstanceId, setStatus, applyWsSnapshot } = useServerStore.getState()
     setInstanceId('demo')
     setStatus(makeStatus({ tps: 20 }))
-    applyWsSnapshot('demo', makeSnapshot({ isRunning: true, tps: null }))
+    applyWsSnapshot('demo', makeSnapshot({ isRunning: true, startupState: 'starting', tps: null }))
 
     const s = useServerStore.getState().status
-    expect(s?.tps).toBe(20)
-    expect(s?.isRunning).toBe(true)
+    expect(s).toMatchObject({ startupState: 'starting', tps: null, isRunning: true })
   })
 
   it('instanceId 不匹配：早退不合并（状态引用不变）', () => {

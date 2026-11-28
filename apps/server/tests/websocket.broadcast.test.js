@@ -320,7 +320,22 @@ describe('WebSocket 系统广播域（broadcastAll / 全局通知 / 系统统计
       expect(sentMessage(ws).eventId).toBe(1);
     });
 
-    it('常规跃迁（stopped）仍按订阅过滤并保留实例归属', () => {
+    it('其他实例的自动恢复实时投递并可断线补齐', () => {
+      const ws = connect(wss);
+      ws.subscribedInstances.add('s2');
+      serverManager.emit('instance:status', { instanceId: 's1', event: 'auto_start_resumed' });
+
+      expect(ws.send).toHaveBeenCalledTimes(1);
+      expect(sentMessage(ws)).toMatchObject({
+        type: WSEvents.STATUS_EVENT,
+        instanceId: 's1',
+        data: { event: 'auto_start_resumed' },
+      });
+      flushNotificationEvents();
+      expect(fakeDb.inserted[0][1]).toBeNull();
+    });
+
+    it('常规启停跃迁让未订阅客户端刷新状态，但不推进通知游标', () => {
       const wsOther = connect(wss);
       wsOther.subscribedInstances.add('s2');
       const wsSub = connect(wss);
@@ -329,7 +344,12 @@ describe('WebSocket 系统广播域（broadcastAll / 全局通知 / 系统统计
       serverManager.emit('instance:status', { instanceId: 's1', event: 'stopped', code: 0 });
 
       expect(wsSub.send).toHaveBeenCalledTimes(1);
-      expect(wsOther.send).not.toHaveBeenCalled();
+      expect(sentMessage(wsSub)).toMatchObject({ eventId: 1, instanceId: 's1' });
+      expect(sentMessage(wsOther)).toMatchObject({
+        instanceId: 's1',
+        data: { event: 'stopped', refreshOnly: true },
+      });
+      expect(sentMessage(wsOther)).not.toHaveProperty('eventId');
       flushNotificationEvents();
       expect(fakeDb.inserted[0][0]).toBe(1);
       expect(fakeDb.inserted[0][1]).toBe('s1');

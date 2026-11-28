@@ -3,15 +3,15 @@
  * - 实例卡片网格（30s 轮询；逐卡详情 useQueries 批量拉取版本等字段，与 dashboard 共享 query 缓存）
  * - 部署向导 Dialog（三步 Stepper + WS 进度，deploy-dialog 组件）
  * - 切换实例/实例设置（instance-settings-dialog 组件）/卸载（危险确认）
- * - 深链接：?tab=deploy 自动打开部署向导；?focus=<id> 从通知中心跳转（切换到关联实例）
+ * - 深链接：?tab=deploy 打开部署向导；?focus=<id> 切换到指定实例
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router'
 import { useMutation, useQueries, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, Loader2, Rocket } from 'lucide-react'
 import { toast } from 'sonner'
-import { apiGet, apiPost, ApiError } from '@/api/client'
-import { apiCheckReachability } from '@/api/instances'
+import { apiGet, ApiError } from '@/api/client'
+import { apiCheckReachability, apiRestartInstance, INSTANCE_RESTART_SPAWNED } from '@/api/instances'
 import { FALLBACK_POLL_INTERVAL_MS, queryKeys, useInstances, useOverview } from '@/api/queries'
 import { ErrorCode, getFriendlyErrorText } from '@/api/errors'
 import { queryFailed, queryPhase } from '@/lib/query-phase'
@@ -38,7 +38,7 @@ import { DeployDialog } from './components/deploy-dialog'
 import { InstanceSettingsDialog } from './components/instance-settings-dialog'
 import { UpgradeDialog } from './components/upgrade-dialog'
 import { clearUpgradeProgress } from '@/stores/upgrade'
-import { useUninstallInstance, useUpdateInstance } from './queries'
+import { useUninstallInstance } from './queries'
 import { useDeployStatusFallback } from './hooks/use-deploy-status-fallback'
 import { useStartInstanceWithEula } from '@/hooks/use-start-instance-with-eula'
 import { useStopInstance } from '@/hooks/use-instance-stop'
@@ -63,7 +63,7 @@ function DeployingBanner() {
       ? `（${Math.round(progress.percent * 100)}%）`
       : ''
   return (
-    <NoticeBanner variant="info" icon={Loader2} className="animate-pulse">
+    <NoticeBanner variant="neutral" icon={Loader2} iconClassName="animate-spin">
       {`有实例正在部署：${nameSuffix}${stageLabel}${pctSuffix}`}
     </NoticeBanner>
   )
@@ -102,15 +102,13 @@ export function InstancesPage() {
   const instancesPhase = queryPhase(instancesQuery)
   const uninstallMutation = useUninstallInstance()
   const stopMutation = useStopInstance()
-  /* 重启：与命令面板、世界页同一端点。不复用命令面板的 mutation——那处是它的私有实现，
-     共享要走 hook；此处只有一处调用，直接用 useMutation 保持端点字符串唯一（见 apiPost 调用） */
   const restartMutation = useMutation({
     mutationFn: async (id: string) => {
-      await apiPost(`/api/v1/instances/${id}/restart`, config)
+      await apiRestartInstance(config, id)
       return id
     },
     onSuccess: (_data, id) => {
-      toast.success('重启指令已发送')
+      toast.success(INSTANCE_RESTART_SPAWNED)
       void queryClient.invalidateQueries({ queryKey: queryKeys.instance(id) })
       void queryClient.invalidateQueries({ queryKey: queryKeys.instances() })
     },
@@ -145,10 +143,15 @@ export function InstancesPage() {
   // 启动：共享 mutation（EULA 首启特例：命中 → 弹同意 → 续启；与仪表盘同源）
   const { startInstance, startPending, pendingStartId, eulaDialog } = useStartInstanceWithEula()
 
-  // ── 深链接：?focus=<id> 从通知中心跳转→ 切换到关联实例并清参数 ──
+  const cardsRef = useRef<HTMLDivElement>(null)
+  const listedInstances = instancesQuery.data
+  // 等列表渲染后再消费深链接，焦点应落在目标卡片上。
   useEffect(() => {
     const focus = searchParams.get('focus')
-    if (!focus) return
+    if (!focus || !listedInstances) return
+    const card = Array.from(
+      cardsRef.current?.querySelectorAll<HTMLElement>('[data-instance-id]') ?? [],
+    ).find((element) => element.dataset.instanceId === focus)
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev)
@@ -157,11 +160,14 @@ export function InstancesPage() {
       },
       { replace: true },
     )
+    if (!card) return
+    card.focus({ preventScroll: true })
+    card.scrollIntoView({ block: 'nearest' })
     if (focus !== instanceId) {
       setInstanceId(focus)
-      toast.success('已切换到通知关联的实例', { duration: 1500 })
+      toast.success('已切换到指定实例', { duration: 1500 })
     }
-  }, [searchParams, setSearchParams, setInstanceId, instanceId])
+  }, [searchParams, setSearchParams, setInstanceId, instanceId, listedInstances])
 
   // ── 停止：共享 mutation（收敛：与仪表盘同源，phase 中间态防连点） ──
   // 卡片停止按钮仍经 ConfirmDialog 确认后调用 stopMutation.mutate(id)
@@ -177,7 +183,7 @@ export function InstancesPage() {
       onStarted: () => {
         toast.success('启动指令已发送')
         void queryClient.invalidateQueries({ queryKey: queryKeys.instance(inst.id) })
-        void instancesQuery.refetch()
+        return instancesQuery.refetch().then(() => undefined)
       },
       // 非 EULA 错误由 hook 内 toast 兜底
     })
@@ -240,20 +246,6 @@ export function InstancesPage() {
   })
   const handleCheckReachability = (instanceId: string) => {
     reachabilityMutation.mutate(instanceId)
-  }
-
-  /* 熔断复位：PUT autoRestart=true 由服务端一并清崩溃计数、解除熔断；读侧不自行推断，
-     详情刷新后熔断态自然消失。复用 useUpdateInstance 的失效口径（详情 + 列表），
-     局部只加回执文案 */
-  const reenableMutation = useUpdateInstance()
-  const handleReenableAutoRestart = (instanceId: string) => {
-    reenableMutation.mutate(
-      { instanceId, payload: { autoRestart: true } },
-      {
-        onSuccess: () => toast.success('自动重启已重新启用，崩溃计数已清零'),
-        onError: (e) => toast.error(`重新启用自动重启失败：${getFriendlyErrorText(e)}`),
-      },
-    )
   }
 
   const handleRetryDetail = (instanceId: string) => {
@@ -386,7 +378,7 @@ export function InstancesPage() {
       <RestartPendingBanner instances={instances} />
 
       {/* ── 实例卡片网格 ── */}
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div ref={cardsRef} className="min-h-0 flex-1 overflow-y-auto">
         {instancesPhase === 'stale' && (
           <StaleQueryNotice
             className="mb-2"
@@ -445,14 +437,8 @@ export function InstancesPage() {
             checkingReachabilityId={
               reachabilityMutation.isPending ? (reachabilityMutation.variables ?? null) : null
             }
-            onReenableAutoRestart={handleReenableAutoRestart}
-            reenablingId={
-              reenableMutation.isPending ? (reenableMutation.variables?.instanceId ?? null) : null
-            }
-            busyId={
-              (startPending ? pendingStartId : null) ??
-              (stopMutation.isPending ? (stopMutation.variables ?? null) : null)
-            }
+            startingId={startPending ? pendingStartId : null}
+            stoppingId={stopMutation.isPending ? (stopMutation.variables ?? null) : null}
             phaseById={phase}
             remainingMemoryText={remainingMemoryText}
             onDeploy={() => setDeployOpenDeep(true)}
@@ -500,8 +486,8 @@ export function InstancesPage() {
         open={stopTarget !== null}
         onOpenChange={(open) => !open && setStopTarget(null)}
         title="停止服务器"
-        description={`确定要停止实例 "${stopTarget ? instanceLabel(stopTarget) : ''}" 吗？停止前将自动执行存档，在线玩家会断开连接。`}
-        confirmText="存档并停止"
+        description={`确定要停止实例 "${stopTarget ? instanceLabel(stopTarget) : ''}" 吗？${stopTarget?.startupState === 'ready' ? '停止前将自动执行存档，在线玩家会断开连接。' : stopTarget?.startupState === 'starting' ? '如果服务器没有响应，面板将强制结束进程。' : '这将停止当前服务器进程。'}`}
+        confirmText={stopTarget?.startupState === 'ready' ? '存档并停止' : '停止'}
         danger
         onConfirm={() => {
           const target = stopTarget
@@ -515,8 +501,8 @@ export function InstancesPage() {
         open={restartTarget !== null}
         onOpenChange={(open) => !open && setRestartTarget(null)}
         title="重启服务器"
-        description={`确定要重启实例 "${restartTarget ? instanceLabel(restartTarget) : ''}" 吗？重启前将自动执行存档，在线玩家会短暂断开并自动重连。`}
-        confirmText="存档并重启"
+        description={`确定要重启实例 "${restartTarget ? instanceLabel(restartTarget) : ''}" 吗？${restartTarget?.startupState === 'ready' ? '在线玩家会暂时断开连接。' : '这将停止当前进程并重新启动。'}`}
+        confirmText="重启"
         danger
         onConfirm={() => {
           const target = restartTarget
@@ -553,7 +539,7 @@ export function InstancesPage() {
         onConfirm={() => void handleUninstallConfirm()}
       >
         {uninstallAckReason !== null ? (
-          <NoticeBanner variant="error" icon={AlertTriangle} role="alert">
+          <NoticeBanner variant="error" role="alert">
             {uninstallAckReason === 'no-backup'
               ? '该实例没有任何备份：删除后世界数据与配置不可恢复，也没有任何快照可供还原'
               : '该实例没有名称，实例名确认不构成有效确认：删除后世界数据与配置不可恢复'}

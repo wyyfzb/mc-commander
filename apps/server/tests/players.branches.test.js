@@ -288,7 +288,9 @@ describe('Player Routes 分支补测', () => {
       const res = await request(app).post('/api/instances/s1/players/Steve/kick');
 
       expect(res.status).toBe(200);
-      expect(instance.sendCommand).toHaveBeenCalledWith('kick Steve Kicked by operator');
+      expect(instance.sendCommand).toHaveBeenCalledWith('kick Steve Kicked by operator', {
+        requireResponse: true,
+      });
       expect(recordAudit).toHaveBeenCalledWith(
         expect.objectContaining({
           instanceId: 's1',
@@ -308,7 +310,9 @@ describe('Player Routes 分支补测', () => {
         .send({ reason: '' });
 
       expect(res.status).toBe(200);
-      expect(instance.sendCommand).toHaveBeenCalledWith('kick Steve Kicked by operator');
+      expect(instance.sendCommand).toHaveBeenCalledWith('kick Steve Kicked by operator', {
+        requireResponse: true,
+      });
     });
 
     it('reason 注入字符（换行/分号/管道/与号）被清洗为空格', async () => {
@@ -320,7 +324,9 @@ describe('Player Routes 分支补测', () => {
         .send({ reason: 'a\nb\rc;d|e&f' });
 
       // 命令注入载体 \r\n;|& 全部替换为空格，防止 RCON 命令拼接逃逸
-      expect(instance.sendCommand).toHaveBeenCalledWith('kick Steve a b c d e f');
+      expect(instance.sendCommand).toHaveBeenCalledWith('kick Steve a b c d e f', {
+        requireResponse: true,
+      });
     });
 
     it('超长 reason 截断至 200 字符', async () => {
@@ -347,7 +353,9 @@ describe('Player Routes 分支补测', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.data.expiresAt).toBeNull();
-      expect(instance.sendCommand).toHaveBeenCalledWith('ban Steve Cheating');
+      expect(instance.sendCommand).toHaveBeenCalledWith('ban Steve Cheating', {
+        requireResponse: true,
+      });
       expect(BanModel.create).not.toHaveBeenCalled();
     });
 

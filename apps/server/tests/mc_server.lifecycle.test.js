@@ -64,6 +64,7 @@ import { Rcon } from 'rcon-client';
 import { InstanceModel } from '../src/db/index.js';
 import { shadowProfilePath } from '../src/utils/player-utils.js';
 import { MCServerInstance, MCServerManager } from '../src/services/mc_server.js';
+import * as backupService from '../src/services/backup.service.js';
 
 // 构造一个模拟的 java 子进程（stdout/stderr/stdin/exit 均可控）
 function makeFakeProcess() {
@@ -138,6 +139,7 @@ describe('MCServerInstance lifecycle / RCON / stats timers', () => {
 
   beforeEach(() => {
     vi.useFakeTimers();
+    vi.spyOn(process, 'kill').mockImplementation(() => true);
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-lifecycle-'));
     fs.writeFileSync(path.join(tmpDir, 'eula.txt'), 'eula=true\n');
     fs.writeFileSync(path.join(tmpDir, 'server.jar'), '');
@@ -188,6 +190,52 @@ describe('MCServerInstance lifecycle / RCON / stats timers', () => {
       expect(statusEvents).toContainEqual({ event: 'started' });
     });
 
+    it('进程存活与 Minecraft 就绪独立：等待当次 stdout 的 Done，退出后清除就绪', async () => {
+      const instance = createInstance();
+      const events = [];
+      instance.on('status', ({ event }) => events.push(event));
+      expect(instance.toStatus().startupState).toBe('stopped');
+
+      instance.start();
+      const child = instance.process;
+      const done = '[12:00:00] [Server thread/INFO]: Done (2.345s)! For help, type "help"\n';
+      child.stdout.emit('data', Buffer.from(`[12:00:00] [Server thread/INFO]: <Steve> ${done}`));
+      child.stderr.emit('data', Buffer.from(done));
+      expect(instance.toStatus()).toMatchObject({ isRunning: true, startupState: 'starting' });
+      expect(events).not.toContain('ready');
+      await expect(instance.sendCommand('say hello')).rejects.toMatchObject({ code: 40922 });
+      expect(child.stdin.write).not.toHaveBeenCalled();
+
+      child.stdout.emit('data', Buffer.from(done.slice(0, 40)));
+      expect(instance.toStatus().startupState).toBe('starting');
+      child.stdout.emit('data', Buffer.from(done.slice(40)));
+      expect(instance.toStatus().startupState).toBe('ready');
+      child.stdout.emit('data', Buffer.from(done));
+      expect(events.filter((event) => event === 'ready')).toHaveLength(1);
+
+      child.emit('exit', 0);
+      expect(instance.toStatus().startupState).toBe('stopped');
+      instance.start();
+      child.stdout.emit('data', Buffer.from(done));
+      expect(instance.toStatus().startupState).toBe('starting');
+    });
+
+    it('当前实例的 MSMP 启动通知确认就绪，与随后到达的 Done 去重', () => {
+      const instance = createInstance();
+      const events = [];
+      instance.on('status', ({ event }) => events.push(event));
+      instance.start();
+      instance._msmpNotifHandleMessage(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'minecraft:notification/server/started',
+        }),
+      );
+      expect(instance.startupState).toBe('ready');
+      instance.process.stdout.emit('data', Buffer.from('Done (2.3s)! For help, type "help"\n'));
+      expect(events).toEqual(['started', 'ready']);
+    });
+
     it('启动前自动补齐实时推送配置：本次启动即生效，用户零交互', () => {
       // 端到端走编排（不是直接调服务层）：证明这个阶段真的挂在 start() 上——
       // 漏挂时单测全绿而功能不存在，这条断言就是为那一刻准备的
@@ -234,33 +282,6 @@ describe('MCServerInstance lifecycle / RCON / stats timers', () => {
         'custom.jar',
         'nogui',
       ]);
-    });
-
-    it('restart 后 stop：延迟启动被取消，不再拉起服务器', () => {
-      const instance = createInstance();
-      instance.start(); // spawn 1 次，isRunning=true
-
-      instance.restart(); // 发送 stop 命令 + 调度 3 秒后 start
-      expect(instance._restartTimer).toBeTruthy();
-
-      // 用户明确停止：取消待执行的延迟启动
-      instance.stop();
-      vi.advanceTimersByTime(3000);
-
-      expect(spawn).toHaveBeenCalledTimes(1); // 修复前：2（3 秒后又 start）
-    });
-
-    it('restart 后 kill：延迟启动被取消，不再拉起服务器', () => {
-      const instance = createInstance();
-      instance.start();
-      lastProc.emit('exit', 0); // 正常退出，isRunning=false
-
-      instance.restart(); // 调度 3 秒后 start
-      // 用户明确强杀
-      instance.kill();
-      vi.advanceTimersByTime(3000);
-
-      expect(spawn).toHaveBeenCalledTimes(1); // 修复前：2
     });
 
     /* 实例存的是绝对路径 Java 时会随 JDK 一起消失（面板自供运行时换档、系统包升级删旧目录）。
@@ -418,18 +439,83 @@ describe('MCServerInstance lifecycle / RCON / stats timers', () => {
   // ══════════════════════════════════════════
   // 进程生命周期：stop / kill / exit
   // ══════════════════════════════════════════
+  describe('备份与生命周期互斥', () => {
+    it('同一实例的备份租约阻止启动、停止、重启和强杀', () => {
+      const instance = createInstance();
+      const active = vi.spyOn(backupService, 'isBackupInProgress').mockReturnValue(true);
+      expect(() => instance.start()).toThrow(expect.objectContaining({ code: 40901 }));
+      expect(spawn).not.toHaveBeenCalled();
+
+      active.mockReturnValue(false);
+      instance.start();
+      active.mockReturnValue(true);
+      expect(() => instance.stop()).toThrow(expect.objectContaining({ code: 40901 }));
+      expect(() => instance.restart()).toThrow(expect.objectContaining({ code: 40901 }));
+      expect(() => instance.kill()).toThrow(expect.objectContaining({ code: 40901 }));
+      expect(lastProc.stdin.write).not.toHaveBeenCalled();
+      expect(lastProc.kill).not.toHaveBeenCalled();
+    });
+  });
+
   describe('stop', () => {
     it('sends stop command to process stdin', async () => {
       const instance = createInstance();
       instance.start();
-      instance.stop();
-      // 停机先试结构化通道，MSMP 不可用才回退命令 ⇒ 命令下发晚一个微任务
-      await vi.waitFor(() => expect(lastProc.stdin.write).toHaveBeenCalledWith('stop\n'));
+      const stopping = instance.stop();
+      expect(lastProc.stdin.write).toHaveBeenCalledWith('stop\n');
+      lastProc.emit('exit', 0);
+      await stopping;
     });
 
-    it('throws when server is not running', () => {
+    it('启动卡住时停止命令失败，终止当次进程后才确认退出', async () => {
       const instance = createInstance();
-      expect(() => instance.stop()).toThrow('Server is not running');
+      instance.start();
+      const child = lastProc;
+      child.stdin.write.mockImplementation(() => {
+        throw new Error('控制台未就绪');
+      });
+      const kill = child.kill;
+      const stopped = vi.fn();
+      const result = instance.stop().then(stopped);
+      await vi.advanceTimersByTimeAsync(8000);
+      expect(kill).toHaveBeenCalledOnce();
+      expect(stopped).not.toHaveBeenCalled();
+      child.emit('exit', null);
+      await result;
+      expect(instance.startupState).toBe('stopped');
+      expect(stopped).toHaveBeenCalledOnce();
+    });
+
+    it('启动中的进程在终止后仍存活，停止请求返回未确认', async () => {
+      const instance = createInstance();
+      instance.start();
+      const result = instance.stop().catch((err) => err);
+      await vi.advanceTimersByTimeAsync(10000);
+      expect(await result).toMatchObject({ code: 40923 });
+      expect(instance.startupState).toBe('starting');
+    });
+
+    it('未确认退出后补发停机期间收到的就绪事件', async () => {
+      const instance = createInstance();
+      const events = [];
+      instance.on('status', ({ event }) => events.push(event));
+      instance.start();
+      const child = lastProc;
+      const result = expect(instance.stop()).rejects.toMatchObject({ code: 40923 });
+      child.stdout.emit('data', Buffer.from('Done (2.3s)! For help, type "help"\n'));
+      expect(events).toEqual(['started']);
+
+      await vi.advanceTimersByTimeAsync(10000);
+      await result;
+      expect(instance.startupState).toBe('ready');
+      expect(events).toEqual(['started', 'ready']);
+      child.emit('exit', 1);
+      expect(events.at(-1)).toBe('crash');
+    });
+
+    it('停止没有进程且没有待启动请求的实例时返回实例未运行', () => {
+      const instance = createInstance();
+      expect(() => instance.stop()).toThrow(expect.objectContaining({ code: 40002 }));
     });
 
     it('cleans up state on process exit', () => {
@@ -475,42 +561,154 @@ describe('MCServerInstance lifecycle / RCON / stats timers', () => {
   });
 
   describe('restart', () => {
-    it('stops running server then starts again after 3s delay', async () => {
+    it('普通进程超过三秒才退出，退出后仍启动且等待新进程 spawn', async () => {
       const instance = createInstance();
       instance.start();
-      const firstProc = lastProc;
-
-      instance.restart();
-      await vi.waitFor(() => expect(firstProc.stdin.write).toHaveBeenCalledWith('stop\n'));
-
-      // 模拟服务器在 3 秒内退出
-      firstProc.emit('exit', 0);
-      expect(instance.isRunning).toBe(false);
-
-      vi.advanceTimersByTime(3000);
+      const child = lastProc;
+      child.stdout.emit('data', Buffer.from('Done (2.3s)! For help, type "help"\n'));
+      const complete = vi.fn();
+      const result = Promise.resolve(instance.restart()).then(complete);
+      await vi.advanceTimersByTimeAsync(4000);
+      expect(spawn).toHaveBeenCalledTimes(1);
+      expect(complete).not.toHaveBeenCalled();
+      child.emit('exit', 0);
+      await vi.advanceTimersByTimeAsync(0);
       expect(spawn).toHaveBeenCalledTimes(2);
-      expect(instance.isRunning).toBe(true);
+      expect(complete).not.toHaveBeenCalled();
+      lastProc.emit('spawn');
+      await result;
+      expect(instance.startupState).toBe('starting');
     });
 
-    it('starts directly when server is not running', () => {
-      const instance = createInstance();
-      instance.restart();
-      expect(spawn).not.toHaveBeenCalled();
-
-      vi.advanceTimersByTime(3000);
-      expect(spawn).toHaveBeenCalledTimes(1);
-      expect(instance.isRunning).toBe(true);
-    });
-
-    it('swallows start failure when server did not exit within 3s', () => {
+    it('旧进程退出未确认，重启失败且不启动新进程', async () => {
       const instance = createInstance();
       instance.start();
-      instance.restart();
-
-      // 服务器未退出，3 秒后 start() 抛出 already running，被内部捕获
-      expect(() => vi.advanceTimersByTime(3000)).not.toThrow();
+      const result = Promise.resolve(instance.restart()).catch((err) => err);
+      await vi.advanceTimersByTimeAsync(10000);
+      expect(await result).toMatchObject({ code: 40923 });
       expect(spawn).toHaveBeenCalledTimes(1);
-      expect(instance.isRunning).toBe(true);
+    });
+
+    it('新进程无法 spawn 时拒绝重启请求', async () => {
+      const instance = createInstance();
+      const result = Promise.resolve(instance.restart()).catch((err) => err);
+      await vi.advanceTimersByTimeAsync(0);
+      lastProc.emit('error', new Error('spawn java ENOENT'));
+      expect(await result).toMatchObject({ message: 'spawn java ENOENT' });
+      expect(instance.isRunning).toBe(false);
+    });
+
+    it('并发重启复用同一次停机；后到的停止取消重启', async () => {
+      const instance = createInstance();
+      instance.start();
+      const child = lastProc;
+      const first = instance.restart();
+      const second = instance.restart();
+      const results = Promise.allSettled([first, second]);
+      expect(second).toBe(first);
+      const stopping = instance.stop();
+      expect(child.stdin.write).toHaveBeenCalledExactlyOnceWith('stop\n');
+      child.emit('exit', 0);
+      await stopping;
+      expect(await results).toEqual(
+        Array(2).fill({
+          status: 'rejected',
+          reason: expect.objectContaining({ code: 40915 }),
+        }),
+      );
+      expect(spawn).toHaveBeenCalledTimes(1);
+    });
+
+    it('停服后的待启动重启可被强杀取消', async () => {
+      const instance = createInstance();
+      const result = instance.restart().catch((err) => err);
+      instance.kill();
+      expect(await result).toMatchObject({ code: 40915 });
+      expect(spawn).not.toHaveBeenCalled();
+    });
+
+    it('启动卡住时重启强杀旧进程，等待退出后才拉起新进程', async () => {
+      const instance = createInstance();
+      instance.start();
+      const child = lastProc;
+      const result = instance.restart();
+      expect(child.stdin.write).toHaveBeenCalledExactlyOnceWith('stop\n');
+      await vi.advanceTimersByTimeAsync(8000);
+      expect(child.kill).toHaveBeenCalledExactlyOnceWith('SIGKILL');
+      expect(spawn).toHaveBeenCalledTimes(1);
+      child.emit('exit', null, 'SIGKILL');
+      await vi.advanceTimersByTimeAsync(0);
+      lastProc.emit('spawn');
+      await result;
+      expect(lastProc).not.toBe(child);
+    });
+
+    it('已就绪的实例在管理通道挂起时有界返回，不强杀可能正在存档的进程', async () => {
+      const instance = createInstance();
+      instance.start();
+      const child = lastProc;
+      child.stdout.emit('data', Buffer.from('Done (2.3s)! For help, type "help"\n'));
+      vi.spyOn(instance, 'stopServer').mockImplementation(() => new Promise(() => {}));
+      const complete = vi.fn();
+      const result = instance
+        .restart()
+        .catch((err) => err)
+        .then(complete);
+      await vi.advanceTimersByTimeAsync(8000);
+      expect(complete).toHaveBeenCalledWith(expect.objectContaining({ code: 40923 }));
+      expect(child.kill).not.toHaveBeenCalled();
+      await result;
+      expect(instance.startupState).toBe('ready');
+      expect(spawn).toHaveBeenCalledTimes(1);
+    });
+
+    it('接管进程由看门狗确认退出后才重启', async () => {
+      const instance = createInstance();
+      instance.adopted = true;
+      instance.adoptedPid = 12345;
+      instance.isRunning = true;
+      const isAlive = vi.spyOn(instance, '_isPidAlive').mockReturnValue(true);
+      vi.spyOn(instance, 'stopServer').mockResolvedValue('msmp');
+      instance._startAdoptWatchdog();
+      const result = instance.restart();
+      await vi.advanceTimersByTimeAsync(4000);
+      isAlive.mockReturnValue(false);
+      expect(spawn).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(instance.adopted).toBe(false);
+      expect(spawn).toHaveBeenCalledTimes(1);
+      lastProc.emit('spawn');
+      await result;
+    });
+
+    it('旧代管理通道迟迟未返回，退出后不得向新代下发停止', async () => {
+      const instance = createInstance();
+      instance.start();
+      lastProc.stdout.emit('data', Buffer.from('Done (2.3s)! For help, type "help"\n'));
+      const request = Promise.withResolvers();
+      const msmp = vi
+        .spyOn(instance, '_msmpRequest')
+        .mockImplementation((method) =>
+          method === 'minecraft:server/stop' ? request.promise : Promise.resolve(null),
+        );
+      const child = lastProc;
+      const result = instance.restart();
+      await vi.advanceTimersByTimeAsync(4000);
+      expect(msmp).toHaveBeenCalledWith('minecraft:server/stop', [], expect.any(Number), {
+        canSend: expect.any(Function),
+      });
+      const { canSend } = msmp.mock.calls.find(([method]) => method === 'minecraft:server/stop')[3];
+      expect(canSend()).toBe(true);
+      child.emit('exit', 0);
+      await vi.advanceTimersByTimeAsync(0);
+      lastProc.emit('spawn');
+      await result;
+      const send = vi.spyOn(instance, 'sendCommand');
+      expect(canSend()).toBe(false);
+      request.resolve(null);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(send).not.toHaveBeenCalledWith('stop', expect.anything());
+      expect(lastProc.stdin.write).not.toHaveBeenCalledWith('stop\n', expect.any(Function));
     });
   });
 
@@ -522,6 +720,7 @@ describe('MCServerInstance lifecycle / RCON / stats timers', () => {
       const instance = createInstance();
       instance.isRunning = true;
       instance.process = makeFakeProcess();
+      instance._startupReady = true;
       instance.properties = {
         'enable-rcon': 'true',
         'rcon.password': 'secret',
@@ -529,6 +728,57 @@ describe('MCServerInstance lifecycle / RCON / stats timers', () => {
       };
       return instance;
     }
+
+    it('控制台背压不等于写入失败，只有写回调能确认投递', async () => {
+      const instance = createRconInstance();
+      instance.properties = {};
+      const write = instance.process.stdin.write.mockReturnValue(false);
+      const result = instance.sendCommand('say hello');
+      expect(write).toHaveBeenCalledWith('say hello\n', expect.any(Function));
+      write.mock.calls[0][1]();
+      await expect(result).resolves.toBeNull();
+    });
+
+    it('写管道失败不能返回已投递，需要游戏回执时不能走管道', async () => {
+      const instance = createRconInstance();
+      instance.properties = {};
+      const write = instance.process.stdin.write.mockImplementation((_, done) =>
+        done(new Error('EPIPE')),
+      );
+      await expect(instance.sendCommand('weather rain')).rejects.toMatchObject({ code: 50304 });
+      expect(instance._weather).toBe('clear');
+      await expect(instance.sendCommand('list', { requireResponse: true })).rejects.toMatchObject({
+        code: 50302,
+      });
+      expect(write).toHaveBeenCalledTimes(1);
+    });
+
+    it('RCON 已写入但没有收到回执时不改用 stdin 重发', async () => {
+      const instance = createRconInstance();
+      mockRconReturns(
+        makeFakeRconClient({
+          send: vi.fn().mockRejectedValue(new Error('Timeout for packet id 5')),
+        }),
+      );
+      await expect(instance.sendCommand('say hello')).rejects.toMatchObject({ code: 50305 });
+      expect(instance.process.stdin.write).not.toHaveBeenCalled();
+    });
+
+    it('RCON 排队超时后不会再写入旧命令', async () => {
+      const instance = createRconInstance();
+      const waiting = Promise.withResolvers();
+      const queue = { add: (generate) => waiting.promise.then(generate) };
+      const sendPacket = vi.fn().mockResolvedValue('Saved the game');
+      mockRconReturns(makeFakeRconClient({ sendQueue: queue, send: () => queue.add(sendPacket) }));
+      const failure = expect(
+        instance.sendCommandWithResponse('save-off', { timeout: 50 }),
+      ).rejects.toThrow('Command timeout');
+      await vi.advanceTimersByTimeAsync(50);
+      await failure;
+      waiting.resolve();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(sendPacket).not.toHaveBeenCalled();
+    });
 
     it('sends command via rcon-client when connected', async () => {
       const instance = createRconInstance();
@@ -1185,17 +1435,15 @@ describe('MCServerInstance lifecycle / RCON / stats timers', () => {
       expect(instance.isRunning).toBe(false);
     });
 
-    it('stopGracefully 超时后强杀进程（MC 未退出不残留孤儿）', async () => {
+    it('stopGracefully 超时强杀后仍须确认退出', async () => {
       const instance = createInstance();
       instance.start();
-      const killSpy = vi.spyOn(instance, 'kill').mockImplementation(() => {});
-
-      const stopPromise = instance.stopGracefully({ timeout: 100 });
-      // 推进超过超时时间：MC 未退出 → 强杀兜底
-      await vi.advanceTimersByTimeAsync(200);
-      await stopPromise;
-
-      expect(killSpy).toHaveBeenCalled();
+      const child = lastProc;
+      const stopPromise = instance.stopGracefully({ timeout: 100 }).catch((err) => err);
+      await vi.advanceTimersByTimeAsync(100);
+      expect(child.kill).toHaveBeenCalledExactlyOnceWith('SIGKILL');
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(await stopPromise).toMatchObject({ code: 40923 });
     });
 
     it('stopAll 等待所有运行中实例优雅停止（停机不丢玩家数据）', async () => {

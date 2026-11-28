@@ -76,6 +76,35 @@ test.describe('登录页', () => {
     await expect(page.getByRole('button', { name: '管理员菜单' })).toBeVisible()
   })
 
+  for (const [endpoint, label] of [
+    ['login', '登录'],
+    ['setup', '设密'],
+  ] as const) {
+    test(`${label}接口：非法请求体返回 40000`, async ({ request }) => {
+      const invalidBodies: [string, unknown][] = [
+        ['空请求体', undefined],
+        ['无效 JSON', Buffer.from('{')],
+        ['JSON null', Buffer.from('null')],
+        ['缺少 password', {}],
+        ['password 非字符串', { password: 123 }],
+      ]
+      if (endpoint === 'login') {
+        invalidBodies.push(['totpCode 非字符串', { password: 'e2e-correct-pass', totpCode: 123 }])
+      }
+
+      for (const [name, data] of invalidBodies) {
+        await test.step(name, async () => {
+          const res = await request.post(`/api/v1/auth/${endpoint}`, {
+            headers: { 'Content-Type': 'application/json' },
+            data,
+          })
+          expect.soft(res.status()).toBe(400)
+          expect.soft(await res.json()).toMatchObject({ status: 'error', code: 40000 })
+        })
+      }
+    })
+  }
+
   test('首访设密向导：输入两次密码 → 登录成功', async ({ page }) => {
     await clearCredentials(page)
     await mockFreshBackend(page)
@@ -131,7 +160,7 @@ test.describe('登录页', () => {
     )
   })
 
-  test('账号与安全面板：会话列表 + 本机徽章 + 改密表单', async ({ page }) => {
+  test('账号与安全面板：会话列表 + 本机徽章 + 提交改密', async ({ page }) => {
     await clearCredentials(page)
     await page.goto('/login')
     await page.getByLabel('管理员密码').fill('e2e-correct-pass')
@@ -146,8 +175,38 @@ test.describe('登录页', () => {
     // exact 是必要的：同页「传输加密」区块还有一句「本机未启用加密访问」，
     // 模糊匹配会同时命中它（strict mode violation）
     await expect(page.getByText('本机', { exact: true })).toBeVisible()
-    // 改密表单存在
     await expect(page.getByLabel('当前密码')).toBeVisible()
     await maybeShot(page, 'account-panel.png')
+
+    const newPassword = 'new-pass-5678'
+    await page.getByLabel('当前密码').fill('e2e-correct-pass')
+    await page.getByLabel('新密码（8–128 位）', { exact: true }).fill(newPassword)
+    await page.getByLabel('确认新密码').fill(newPassword)
+    await page.getByRole('button', { name: '更新密码' }).click()
+    await expect(page.getByText('密码已更新，已下线其他 1 个会话')).toBeVisible()
+  })
+
+  test('改密接口：非法请求体返回 40000', async ({ request }) => {
+    const oldPassword = 'e2e-correct-pass'
+    const newPassword = 'new-pass-5678'
+    const invalidBodies = [
+      ['空请求体', undefined],
+      ['无效 JSON', Buffer.from('{')],
+      ['缺少 oldPassword', { newPassword }],
+      ['缺少 newPassword', { oldPassword }],
+      ['oldPassword 非字符串', { oldPassword: 123, newPassword }],
+      ['newPassword 非字符串', { oldPassword, newPassword: 123 }],
+    ] as const
+
+    for (const [label, data] of invalidBodies) {
+      await test.step(label, async () => {
+        const res = await request.put('/api/v1/auth/password', {
+          headers: { 'Content-Type': 'application/json', 'X-API-Key': 'e2e-mock-key' },
+          data,
+        })
+        expect.soft(res.status()).toBe(400)
+        expect.soft(await res.json()).toMatchObject({ status: 'error', code: 40000 })
+      })
+    }
   })
 })

@@ -633,6 +633,7 @@ describe('_collectLinuxStats：/proc fixture 驱动差分 CPU 计算', () => {
 describe('_collectMspt：tick query 主路径与 TPS 回退（真实 isRconConnected 链路）', () => {
   function rconEnabledInstance() {
     const inst = makeBareInstance();
+    inst._startupReady = true;
     writeServerProperties(inst, { 'enable-rcon': 'true', 'rcon.password': 'fixture-pass' });
     return inst;
   }

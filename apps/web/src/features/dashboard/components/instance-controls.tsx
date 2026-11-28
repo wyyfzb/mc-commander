@@ -6,218 +6,142 @@ import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
 import { SEMANTIC_TONE_CLASSES } from '@/components/mcs/tone'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { apiGet, apiPost, ApiError } from '@/api/client'
-import { getFriendlyErrorText } from '@/api/errors'
+import { ApiError } from '@/api/client'
+import { apiRestartInstance, apiSaveInstance, INSTANCE_RESTART_SPAWNED } from '@/api/instances'
+import { ErrorCode, getFriendlyErrorText } from '@/api/errors'
 import { queryKeys } from '@/api/queries'
 import { useConnectionStore } from '@/stores/connection'
 import { useServerStore } from '@/stores/server'
 import { useTerminalStore } from '@/stores/terminal'
-import { useUiStore } from '@/stores/ui'
 import { useStartInstanceWithEula } from '@/hooks/use-start-instance-with-eula'
 import { useStopInstance } from '@/hooks/use-instance-stop'
-import type { InstanceStatus } from '@/api/types'
-
-/**
- * 启停管理
- * - 启动/重启/停止：ConfirmDialog 强制显式确认（barrierDismissible:false）
- * - 启动：共享 mutation useStartInstanceWithEula（EULA 首启特例内置，与实例页同源）
- * - 启动等待：每 2s 轮询至 isRunning，60s 超时；崩溃/宽限期判定
- * - 停止：等待 2s 后刷新；重启：等待 3s 后刷新
- * - 保存（save-all）：无确认直接发送
- */
-
-type BusyAction = '启动' | '停止' | '重启' | '保存' | null
-
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 export function InstanceControls() {
   const queryClient = useQueryClient()
   const config = useConnectionStore()
-  const status = useServerStore((s) => s.status)
   const instanceId = useServerStore((s) => s.instanceId)
-  const currentPhase = useServerStore((s) =>
-    s.instanceId ? (s.phase[s.instanceId] ?? null) : null,
-  )
+  const status = useServerStore((s) => (s.status?.id === instanceId ? s.status : null))
+  const currentPhase = useServerStore((s) => (instanceId ? s.phase[instanceId] : undefined))
   const resetTerminal = useTerminalStore((s) => s.resetForRestart)
-  const setLastOutputInstanceId = useUiStore((s) => s.setLastOutputInstanceId)
-  const [busyAction, setBusyAction] = useState<BusyAction>(null)
-  const [confirmAction, setConfirmAction] = useState<'启动' | '停止' | '重启' | null>(null)
+  const [confirmation, setConfirmation] = useState<{
+    instanceId: string
+    action: '停止' | '重启'
+  } | null>(null)
 
-  const isRunning = status?.isRunning ?? false
-
-  // 启动：共享 mutation（EULA 首启特例内置：命中 → 弹同意 → 续启；与实例页同源）
   const { startInstance, startPending, pendingStartId, eulaDialog } = useStartInstanceWithEula()
-
-  // 停止：共享 mutation（收敛：与实例页同源，phase 中间态防连点）
   const stopMutation = useStopInstance()
 
-  // 重启/保存（启动/停止已拆出共享 hook）
+  const refreshLifecycle = (id: string) => {
+    if (useServerStore.getState().instanceId === id) resetTerminal()
+    void queryClient.invalidateQueries({ queryKey: queryKeys.instance(id), exact: true })
+    void queryClient.invalidateQueries({ queryKey: queryKeys.instances(), exact: true })
+  }
+
   const mutation = useMutation({
-    mutationFn: async (action: 'restart' | 'save') => {
-      if (!instanceId) throw new ApiError(40401, 404, 'Instance not found', null)
+    mutationFn: async ({ id, action }: { id: string; action: 'restart' | 'save' }) => {
       if (action === 'save') {
-        await apiPost(`/api/v1/instances/${instanceId}/command`, config, { command: 'save-all' })
+        await apiSaveInstance(config, id)
+      } else {
+        await apiRestartInstance(config, id)
+      }
+    },
+    onSuccess: (_data, { id, action }) => {
+      if (action === 'restart') {
+        toast.success(INSTANCE_RESTART_SPAWNED)
+        refreshLifecycle(id)
+      } else {
+        toast.success('存档已写入磁盘')
+      }
+    },
+    onError: (err, { action }) => {
+      if (
+        action === 'save' &&
+        err instanceof ApiError &&
+        err.code === ErrorCode.BACKUP_IN_PROGRESS
+      ) {
+        toast.error('备份期间无法手动存档，请等备份结束后重试')
         return
       }
-      await apiPost(`/api/v1/instances/${instanceId}/${action}`, config)
-    },
-    onSuccess: async (_data, action) => {
-      if (action === 'restart') {
-        // 终端联动：手动重启清空终端+重拉新进程历史
-        resetTerminal()
-        await sleep(3000)
-        await queryClient.invalidateQueries({ queryKey: queryKeys.instance(instanceId ?? '') })
-        // 口径＝发令回执（与命令面板/实例页同源 apiPost）：这里只等终端重挂，并未断言
-        // 重启结果，说「服务器已重启」是过度承诺——结果由 WS status 事件驱动
-        toast.success('重启指令已发送')
-      } else {
-        toast.success('已发送保存指令')
-      }
-    },
-    onError: (err, action) => {
-      const friendly = getFriendlyErrorText(err)
-      toast.error(`${action === 'save' ? '保存失败' : '重启失败'}：${friendly}`)
+      toast.error(
+        `${action === 'save' ? '未确认存档完成' : '重启失败'}：${getFriendlyErrorText(err)}`,
+      )
     },
   })
 
-  /** 启动轮询：每 2s 查 isRunning，60s 超时 */
-  async function waitForStart(
-    id: string,
-  ): Promise<{ ok: boolean; message: string; instanceId?: string }> {
-    let wasRunning = false
-    for (let i = 0; i < 30; i++) {
-      await sleep(2000)
-      try {
-        const st = await apiGet<InstanceStatus>(`/api/v1/instances/${id}`, config)
-        if (st.isRunning) {
-          // 15s 宽限期：曾运行后停止 → 判定立即崩溃
-          return { ok: true, message: '' }
-        }
-        if (st.totalUptime > 0) wasRunning = true
-      } catch {
-        // 单次探测失败继续
-      }
-    }
-    if (wasRunning) {
-      return {
-        ok: false,
-        message: '服务器启动后立即崩溃，请检查日志',
-        // 深入链接：一键查看进程末尾日志（消费 lastOutput）
-        instanceId: id,
-      }
-    }
-    return { ok: false, message: '服务器启动失败，请检查配置和日志', instanceId: id }
-  }
+  const isRunning = status?.isRunning === true
+  const isStarting = status?.startupState === 'starting'
+  const startBusy = (startPending && pendingStartId === instanceId) || currentPhase === 'starting'
+  const stopBusy =
+    (stopMutation.isPending && stopMutation.variables === instanceId) || currentPhase === 'stopping'
+  const pendingAction =
+    mutation.isPending && mutation.variables.id === instanceId ? mutation.variables.action : null
+  const lifecycleBusy = stopBusy || pendingAction === 'restart'
+  const canRestart = isRunning && !lifecycleBusy && !pendingAction
+  const canSave = canRestart && !isStarting && !startBusy
+  const confirmAction = confirmation?.instanceId === instanceId ? confirmation?.action : undefined
 
-  /** 启动：无二次确认（EULA 前置条件由共享 hook 的对话框承担），直接发令 */
-  const doStart = () => {
-    setBusyAction('启动')
-    startInstance(instanceId ?? '', {
-      onStarted: async () => {
-        // start：终端联动 + 轮询至运行
-        resetTerminal()
-        const result = await waitForStart(instanceId ?? '')
-        if (result.ok) {
-          toast.success('服务器已启动')
-        } else {
-          toast.error(result.message, {
-            // 深入链接：失败时进程可能已留下末尾输出
-            ...(result.instanceId
-              ? {
-                  action: {
-                    label: '查看末尾日志',
-                    onClick: () => setLastOutputInstanceId(result.instanceId!),
-                  },
-                }
-              : {}),
-          })
-        }
-        await queryClient.invalidateQueries({ queryKey: queryKeys.instance(instanceId ?? '') })
-      },
-      onStartError: (err) => {
-        toast.error(`启动失败：${getFriendlyErrorText(err)}`)
-      },
-      onSettled: () => setBusyAction(null),
-    })
-  }
-
-  /** 保存：无确认直接发送 */
-  const doSave = () => {
-    setBusyAction('保存')
-    mutation.mutate('save', { onSettled: () => setBusyAction(null) })
-  }
-
-  /** 确认对话框的落点（只剩需要确认的动作：停止/重启） */
-  const doConfirm = () => {
-    const action = confirmAction
-    setConfirmAction(null)
-    if (!action) return
-    setBusyAction(action)
-    if (action === '停止') {
-      stopMutation.mutate(instanceId ?? '', { onSettled: () => setBusyAction(null) })
-      return
-    }
-    mutation.mutate('restart', {
-      onSettled: () => setBusyAction(null),
-    })
-  }
-
-  // 在线玩家名（停止确认时动态展示）
   const playerNames =
     (status?.players as Array<{ name?: string }> | undefined)?.map((p) => p.name).filter(Boolean) ??
     []
-
-  // 启动按钮 busy：共享 hook 的启动中（含 EULA 同意后续启）或本页确认弹窗链路；
-  // phase 中间态：starting/stopping 期间全部启停按钮禁用（WS 确认后解锁）
-  const startBusy =
-    (startPending && pendingStartId === instanceId) ||
-    busyAction === '启动' ||
-    currentPhase === 'starting'
-  const stopBusy = stopMutation.isPending || currentPhase === 'stopping'
 
   const buttons = [
     {
       action: '启动' as const,
       icon: Play,
-      disabled: isRunning || busyAction !== null || startBusy,
+      disabled: !status || isRunning || isStarting || startBusy || lifecycleBusy,
       color: SEMANTIC_TONE_CLASSES.success.text,
-      // 启动不需要二次确认：它不破坏任何东西，而真正需要用户知情的「EULA 未同意」
-      // 由共享 hook 的 EULA 对话框承担（原因+动作+后果）。以前这里先弹
-      // 「确定要启动服务器吗？」，用户确认后才被告知起不来——白问一次，
-      // 且第一个框隐瞒了唯一要看的信息。
       confirm: null,
     },
     {
       action: '停止' as const,
       icon: Square,
-      disabled:
-        !isRunning || (busyAction !== null && busyAction !== '停止') || currentPhase !== null,
+      disabled: (!isRunning && !isStarting) || lifecycleBusy,
       color: SEMANTIC_TONE_CLASSES.error.text,
       confirm: {
         title: '关闭服务器',
         description:
           playerNames.length > 0
             ? `${playerNames.length} 名玩家当前在线（${playerNames.slice(0, 3).join('、')}${playerNames.length > 3 ? '…' : ''}），停止后他们将断开连接。`
-            : '确定要关闭服务器吗？',
-        danger: true,
+            : isStarting
+              ? '如果服务器没有响应，面板将强制结束进程。'
+              : '确定要关闭服务器吗？',
       },
     },
     {
       action: '重启' as const,
       icon: RefreshCw,
-      disabled:
-        !isRunning || (busyAction !== null && busyAction !== '重启') || currentPhase !== null,
+      disabled: !canRestart,
       color: SEMANTIC_TONE_CLASSES.info.text,
       confirm: { title: '重启服务器', description: '确定要重启服务器吗？重启期间玩家将断开连接。' },
     },
     {
       action: '保存' as const,
       icon: Save,
-      disabled: !isRunning || busyAction !== null || currentPhase !== null,
+      disabled: !canSave,
       color: SEMANTIC_TONE_CLASSES.accent.text,
-      confirm: null, // 保存无确认直接发送
+      confirm: null,
     },
   ]
+  const confirmButton = buttons.find((b) => b.action === confirmAction)
+
+  const doStart = (id: string) => {
+    startInstance(id, {
+      onStarted: () => {
+        toast.success('启动指令已发送')
+        refreshLifecycle(id)
+      },
+    })
+  }
+
+  const doConfirm = () => {
+    setConfirmation(null)
+    if (!instanceId || !confirmButton || confirmButton.disabled) return
+    if (confirmAction === '停止') {
+      stopMutation.mutate(instanceId)
+    } else if (confirmAction === '重启') {
+      mutation.mutate({ id: instanceId, action: 'restart' })
+    }
+  }
 
   return (
     <>
@@ -231,22 +155,20 @@ export function InstanceControls() {
                 disabled={b.disabled}
                 aria-label={b.action}
                 onClick={() => {
-                  // 按动作分派，不用「非确认即保存」的兜底——那会让任何新增的
-                  // 免确认动作（如启动）静默执行成保存
+                  if (!instanceId) return
                   if (b.action === '启动') {
-                    doStart()
-                    return
+                    doStart(instanceId)
+                  } else if (b.action === '保存') {
+                    mutation.mutate({ id: instanceId, action: 'save' })
+                  } else {
+                    setConfirmation({ instanceId, action: b.action })
                   }
-                  if (b.action === '保存') {
-                    doSave()
-                    return
-                  }
-                  setConfirmAction(b.action)
                 }}
               >
-                {busyAction === b.action ||
-                (b.action === '启动' && startBusy) ||
-                (b.action === '停止' && stopBusy) ? (
+                {(b.action === '启动' && (startBusy || isStarting)) ||
+                (b.action === '停止' && stopBusy) ||
+                (b.action === '重启' && pendingAction === 'restart') ||
+                (b.action === '保存' && pendingAction === 'save') ? (
                   <Loader2 className="size-4 animate-spin" aria-hidden />
                 ) : (
                   <b.icon className={`size-4 ${b.color}`} aria-hidden />
@@ -262,21 +184,13 @@ export function InstanceControls() {
       </div>
 
       <ConfirmDialog
-        open={confirmAction !== null}
-        onOpenChange={(open) => !open && setConfirmAction(null)}
-        title={
-          confirmAction
-            ? (buttons.find((b) => b.action === confirmAction)?.confirm?.title ?? '')
-            : ''
-        }
-        description={
-          confirmAction
-            ? (buttons.find((b) => b.action === confirmAction)?.confirm?.description ?? '')
-            : ''
-        }
+        open={!!confirmButton}
+        onOpenChange={(open) => !open && setConfirmation(null)}
+        title={confirmButton?.confirm?.title ?? ''}
+        description={confirmButton?.confirm?.description ?? ''}
         confirmText={confirmAction ?? '确定'}
         danger={confirmAction === '停止'}
-        loading={busyAction !== null}
+        confirmDisabled={confirmButton?.disabled}
         onConfirm={doConfirm}
       />
 

@@ -194,14 +194,15 @@ describe('BackupService.executeBackup - 定时任务结果回写', () => {
     const manager = new EventEmitter();
     manager.getInstance = vi.fn(() => null);
     const service = new BackupService(manager);
-    vi.spyOn(service, '_restoreSaveOn').mockResolvedValue();
     vi.spyOn(service, 'cleanupOldBackups').mockResolvedValue(0);
     return service;
   }
 
   it('成功：快照完成 + 校验通过 → updateLastRunStatus(taskId, success)', async () => {
     const service = makeService();
-    const snapshotDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-bu-exec-'));
+    const snapshotRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-bu-exec-'));
+    const snapshotDir = path.join(snapshotRoot, 'snap');
+    service.backupsDir = snapshotRoot;
     try {
       vi.spyOn(service, '_createSnapshot').mockImplementation(async (_id, _instanceDir, dir) => {
         fs.mkdirSync(dir, { recursive: true });
@@ -218,7 +219,7 @@ describe('BackupService.executeBackup - 定时任务结果回写', () => {
         expect.any(Number),
       );
     } finally {
-      fs.rmSync(snapshotDir, { recursive: true, force: true });
+      fs.rmSync(snapshotRoot, { recursive: true, force: true });
     }
   });
 

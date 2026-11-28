@@ -6,10 +6,11 @@
  */
 import { describe, it, expect, beforeEach, afterAll, beforeAll } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { http } from 'msw'
 import { setupServer } from 'msw/node'
-import { createMemoryRouter, RouterProvider } from 'react-router'
+import { createMemoryRouter, RouterProvider, useLocation } from 'react-router'
 import { Toaster } from 'sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { handlers, mockInstanceStatus, mockOverview } from '@tests/support/handlers'
@@ -21,6 +22,11 @@ import type { InstanceStatus } from '@/api/types'
 const server = setupServer(...handlers)
 beforeAll(() => server.listen({ onUnhandledFrame: 'error' }))
 afterAll(() => server.close())
+
+function InstancePageStub() {
+  const { search } = useLocation()
+  return <div>实例页 {search}</div>
+}
 
 function renderPage() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -38,7 +44,7 @@ function renderPage() {
         ),
       },
       { path: '/dashboard', element: <div>仪表盘</div> },
-      { path: '/instances', element: <div>实例页</div> },
+      { path: '/instances', element: <InstancePageStub /> },
     ],
     { initialEntries: ['/fleet'] },
   )
@@ -62,7 +68,9 @@ function okJson(data: unknown) {
 }
 
 function status(overrides: Partial<InstanceStatus>): InstanceStatus {
-  return { ...mockInstanceStatus, ...overrides }
+  const startupState =
+    overrides.startupState ?? (overrides.isRunning === false ? 'stopped' : 'ready')
+  return { ...mockInstanceStatus, startupState, ...overrides }
 }
 
 beforeEach(() => {
@@ -90,17 +98,36 @@ describe('FleetPage · 清单', () => {
   it('需关注实例排在前面，并在「需关注」列给结论', async () => {
     useInstances([
       status({ id: 'ok', name: '甲 健康' }),
-      status({ id: 'bad', name: '乙 熔断', circuitBreakerTripped: true, consecutiveCrashes: 5 }),
+      status({
+        id: 'bad',
+        name: '虚构乙服',
+        isRunning: false,
+        circuitBreakerTripped: true,
+        consecutiveCrashes: 5,
+      }),
     ])
     renderPage()
 
-    await screen.findByRole('button', { name: '打开 乙 熔断' })
+    await screen.findByRole('button', { name: '打开 虚构乙服' })
     const rows = screen.getAllByRole('row')
     // 第二行（首行是表头）必须是故障那台
-    expect(within(rows[1]!).getByText('乙 熔断')).toBeInTheDocument()
-    expect(within(rows[1]!).getByText('崩溃熔断')).toBeInTheDocument()
+    expect(within(rows[1]!).getByText('虚构乙服')).toBeInTheDocument()
+    expect(within(rows[1]!).getByText('反复退出')).toBeInTheDocument()
     // 健康那台给「无」而不是留空——空白格读起来像「还没算出来」
     expect(within(rows[2]!).getByText('无')).toBeInTheDocument()
+  })
+
+  it('可用键盘从反复退出标记进入对应实例卡', async () => {
+    const user = userEvent.setup()
+    useInstances([status({ id: 'beta:test', name: '虚构乙服', circuitBreakerTripped: true })])
+    renderPage()
+
+    const action = await screen.findByRole('button', { name: '查看 虚构乙服 反复退出的实例卡' })
+    screen.getByRole('button', { name: '打开 虚构乙服' }).focus()
+    await user.tab()
+    expect(action).toHaveFocus()
+    await user.keyboard('{Enter}')
+    expect(await screen.findByText('实例页 ?focus=beta%3Atest')).toBeInTheDocument()
   })
 
   it('启停中间态照实说「启动中/停止中」，不沿用旧的运行状态', async () => {
@@ -123,10 +150,10 @@ describe('FleetPage · 清单', () => {
 })
 
 describe('FleetPage · 页头与汇总', () => {
-  it('页头描述按需关注条数分档，健康时不报数', async () => {
+  it('无故障告警时不报数', async () => {
     useInstances([status({ id: 'ok', name: '健康服' })])
     renderPage()
-    expect(await screen.findByText('全部实例健康')).toBeInTheDocument()
+    expect(await screen.findByText('暂无故障或告警')).toBeInTheDocument()
   })
 
   it('有故障实例时页头同时给出故障台数与需关注台数', async () => {
@@ -140,36 +167,95 @@ describe('FleetPage · 页头与汇总', () => {
     expect(screen.getByText('2 台需关注')).toBeInTheDocument()
   })
 
-  it('汇总卡给运行台数与在线玩家，并按整机可分配量算余量', async () => {
+  it('表格和汇总区分四态，只统计已就绪实例的在线玩家', async () => {
     useInstances([
-      status({ id: 'r1', name: '运行服', isRunning: true, playerCount: 3, maxMemory: '2G' }),
-      // 停服后 playerCount 可能残留上一次的人数：把它算进「在线玩家」就是虚报
-      status({ id: 's1', name: '停着的服', isRunning: false, playerCount: 7, maxMemory: '4G' }),
+      status({ id: 'r1', name: '已就绪服', playerCount: 3, maxMemory: '2G' }),
+      status({ id: 's1', name: '已停止服', isRunning: false, playerCount: 7, maxMemory: '2G' }),
+      status({
+        id: 's2',
+        name: '启动中服',
+        startupState: 'starting',
+        playerCount: 9,
+        maxMemory: '1G',
+        tps: 5,
+      }),
+      status({
+        id: 'u1',
+        name: '未知服',
+        startupState: 'unknown',
+        playerCount: 11,
+        maxMemory: '1G',
+        tps: 4,
+      }),
     ])
     renderPage()
 
-    // 运行中 1 台，另有 1 台已停止
-    expect(await screen.findByText('另有 1 台已停止')).toBeInTheDocument()
-    // 在线玩家只累加运行中的实例：停服残留的 playerCount 不该计入
-    expect(screen.getByText('分布在 1 台运行中的实例')).toBeInTheDocument()
-    // 数值本身也要断言：停着那台残留 7 人，累加进来会显示 10
-    const playersCard = screen.getByText('在线玩家').closest('section')!
-    expect(within(playersCard).getByText('3')).toBeInTheDocument()
-    expect(within(playersCard).queryByText('10')).toBeNull()
-    // mockOverview 整机 16 GB → 可分配 14 GB（扣 15% 系统保留后向下取半档），已分配 2+4=6 GB
+    const readyCard = within(screen.getByText('已就绪实例').closest('section')!)
+    expect(await readyCard.findByText('1 台启动中 · 1 台就绪未知 · 1 台已停止')).toBeInTheDocument()
+    expect(readyCard.getByText('1')).toBeInTheDocument()
+    const playersCard = within(screen.getByText('在线玩家').closest('section')!)
+    expect(playersCard.getByText('仅统计 1 台已就绪实例')).toBeInTheDocument()
+    expect(playersCard.getByText('3')).toBeInTheDocument()
+    expect(screen.getByText('暂无故障或告警')).toBeInTheDocument()
+    expect(screen.queryByText('全部实例健康')).not.toBeInTheDocument()
+
+    for (const [name, label, players, tps] of [
+      ['已就绪服', '已就绪', '3/20', '20.0'],
+      ['已停止服', '已停止', '—', '—'],
+      ['启动中服', '启动中', '—', '—'],
+      ['未知服', '就绪未知', '—', '—'],
+    ]) {
+      const row = within(screen.getByRole('button', { name: `打开 ${name}` }).closest('tr')!)
+      const cells = row.getAllByRole('cell')
+      expect(cells[1]).toHaveTextContent(label!)
+      expect(cells[3]).toHaveTextContent(players!)
+      expect(cells[4]).toHaveTextContent(tps!)
+      if (label !== '已就绪') expect(cells[0]).not.toHaveTextContent(/人在线|TPS/)
+    }
     expect(screen.getByText('已分配 6 GB，可分配 14 GB')).toBeInTheDocument()
     expect(screen.getByText('8.0 GB')).toBeInTheDocument()
+  })
+
+  it('只有未知就绪实例时不把在线人数显示成零', async () => {
+    useInstances([status({ id: 'u1', name: '未知服', startupState: 'unknown', playerCount: 9 })])
+    renderPage()
+
+    const playersCard = within(screen.getByText('在线玩家').closest('section')!)
+    expect(await playersCard.findByText('暂无已就绪实例')).toBeInTheDocument()
+    expect(playersCard.getByText('—')).toBeInTheDocument()
+  })
+
+  it('已就绪但 TPS 无样本时保留在线数，不显示默认 TPS 或健康结论', async () => {
+    useInstances([status({ id: 'demo', name: '演示实例', tps: null })])
+    renderPage()
+
+    const row = within(
+      (await screen.findByRole('button', { name: '打开 演示实例' })).closest('tr')!,
+    )
+    const cells = row.getAllByRole('cell')
+    expect(cells[0]).not.toHaveTextContent('TPS')
+    expect(cells[2]).toHaveTextContent('—')
+    expect(cells[3]).toHaveTextContent('3/20')
+    expect(cells[4]).toHaveTextContent('—')
   })
 
   it('整机读数缺失时不给余量数字（算不出来还报数会被当成结论）', async () => {
     useInstances([status({ id: 'a', name: '甲' })])
     server.use(
       http.get('*/api/v1/overview', () =>
-        okJson({ ...mockOverview, systemMemoryTotal: 0, totalMemory: 0 }),
+        okJson({ ...mockOverview, systemMemoryTotal: 0, systemMemoryPercent: 0, totalMemory: 0 }),
       ),
     )
     renderPage()
-    expect(await screen.findByText('整机内存读数未取到')).toBeInTheDocument()
+    const memory = within(
+      screen.getByRole('heading', { name: '可分配内存余量' }).closest('section')!,
+    )
+    expect(await memory.findByText('整机内存读数未取到')).toBeInTheDocument()
+    expect(memory.getByText('—')).toBeInTheDocument()
+    expect(memory.queryByText(/超出可分配量/)).not.toBeInTheDocument()
+    const load = within(screen.getByRole('heading', { name: '整机负载' }).closest('section')!)
+    expect(load.getByText('内存暂无数据')).toBeInTheDocument()
+    expect(load.queryByText('内存 0.0%')).not.toBeInTheDocument()
   })
 })
 
@@ -202,7 +288,7 @@ describe('FleetPage · 容器档位（类名契约）', () => {
   it('汇总卡最窄档就两列（单列四张会把清单挤出首屏）', async () => {
     useInstances([status({ id: 'demo', name: '演示实例' })])
     const { container } = renderPage()
-    await screen.findByText('运行中')
+    await screen.findByText('已就绪实例')
 
     const grid = container.querySelector('.grid.shrink-0')
     expect(grid).not.toBeNull()

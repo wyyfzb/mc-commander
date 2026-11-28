@@ -485,7 +485,9 @@ describe('Status Routes', () => {
         'white-list': 'true',
       });
       // white-list 支持运行中修改 → 下发 /whitelist on，无需重启
-      expect(mockInstance.sendCommand).toHaveBeenCalledWith('whitelist on');
+      expect(mockInstance.sendCommand).toHaveBeenCalledWith('whitelist on', {
+        requireResponse: true,
+      });
       expect(res.body.data.restartRequired).toEqual([]);
     });
 

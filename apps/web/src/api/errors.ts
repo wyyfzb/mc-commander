@@ -43,6 +43,8 @@ export const ErrorCode = {
 
   INSTANCE_NOT_FOUND: 40401,
   INSTANCE_NOT_RUNNING: 40002,
+  INSTANCE_STARTING: 40922,
+  INSTANCE_STOP_UNCONFIRMED: 40923,
   INSTANCE_RUNNING: 40003,
   /** 卸载实例缺少/不匹配实例名确认（服务端强制，见 DELETE /instances/:id） */
   INSTANCE_DELETE_CONFIRM_REQUIRED: 40016,
@@ -87,6 +89,7 @@ export const ErrorCode = {
 
   TASK_NOT_FOUND: 40405,
   INVALID_CRON_EXPRESSION: 40004,
+  TASK_BLOCKED_BY_CIRCUIT_BREAKER: 40921,
 
   FILE_NOT_FOUND: 40406,
   PATH_TRAVERSAL_DETECTED: 40302,
@@ -124,6 +127,9 @@ export const ErrorCode = {
 
   // RCON 不可用（命令路由需要 RCON 响应但连接未启用或已断开）
   RCON_UNAVAILABLE: 50302,
+  COMMAND_NOT_SENT: 50304,
+  COMMAND_UNCONFIRMED: 50305,
+  COMMAND_REJECTED: 40019,
 
   // 备份索引不可读（归档快照挂载需要备份表判断哪些快照已登记）
   BACKUP_INDEX_UNAVAILABLE: 50303,
@@ -152,6 +158,8 @@ const LOCALIZED_MESSAGES: Partial<Record<ErrorCodeValue, string>> = {
   [ErrorCode.API_KEY_DISABLED]: 'API Key 通道已关闭，请改用管理员会话登录',
   [ErrorCode.INSTANCE_NOT_FOUND]: '服务器实例不存在',
   [ErrorCode.INSTANCE_NOT_RUNNING]: '实例未在运行',
+  [ErrorCode.INSTANCE_STARTING]: '服务器正在启动，请等待就绪',
+  [ErrorCode.INSTANCE_STOP_UNCONFIRMED]: '未确认进程已退出，请检查实例日志',
   [ErrorCode.INSTANCE_RUNNING]: '实例正在运行',
   [ErrorCode.DEPLOY_IN_PROGRESS]: '服务端已有部署在进行中，请等待其完成后再发起新部署',
   [ErrorCode.DEPLOY_NOT_IN_FLIGHT]: '该部署已结束或不在进行中，无需取消',
@@ -188,6 +196,8 @@ const LOCALIZED_MESSAGES: Partial<Record<ErrorCodeValue, string>> = {
   [ErrorCode.MARKET_CHECKSUM_MISMATCH]:
     '插件市场：文件完整性校验失败，安装已拒绝（下载可能损坏，请重试）',
   [ErrorCode.RCON_UNAVAILABLE]: 'RCON 未启用或连接已断开，请在 server.properties 启用 RCON',
+  [ErrorCode.COMMAND_NOT_SENT]: '命令未送达：没有可写的命令连接',
+  [ErrorCode.COMMAND_UNCONFIRMED]: '未收到游戏回执，请检查实际结果后再重试',
   [ErrorCode.UPGRADE_IN_PROGRESS]: '已有升级任务进行中',
   [ErrorCode.UPGRADE_NOT_IN_PROGRESS]: '该升级已结束或不在进行中，无需取消',
   [ErrorCode.UPGRADE_VERSION_SAME]: '目标版本与当前版本相同',

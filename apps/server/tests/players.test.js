@@ -725,7 +725,7 @@ describe('Player Routes', () => {
       const res = await request(app).post('/api/instances/s1/players/Steve/op');
 
       expect(res.status).toBe(200);
-      expect(mockInstance.sendCommand).toHaveBeenCalledWith('op Steve');
+      expect(mockInstance.sendCommand).toHaveBeenCalledWith('op Steve', { requireResponse: true });
     });
 
     it('MSMP 可用时走结构化方法：不再发命令', async () => {
@@ -778,7 +778,9 @@ describe('Player Routes', () => {
       const res = await request(app).delete('/api/instances/s1/players/Steve/op');
 
       expect(res.status).toBe(200);
-      expect(mockInstance.sendCommand).toHaveBeenCalledWith('deop Steve');
+      expect(mockInstance.sendCommand).toHaveBeenCalledWith('deop Steve', {
+        requireResponse: true,
+      });
     });
   });
 
@@ -796,7 +798,9 @@ describe('Player Routes', () => {
         .send({ reason: 'Bye' });
 
       expect(res.status).toBe(200);
-      expect(mockInstance.sendCommand).toHaveBeenCalledWith('kick Steve Bye');
+      expect(mockInstance.sendCommand).toHaveBeenCalledWith('kick Steve Bye', {
+        requireResponse: true,
+      });
     });
 
     it('should use default kick reason', async () => {
@@ -809,7 +813,9 @@ describe('Player Routes', () => {
       const res = await request(app).post('/api/instances/s1/players/Steve/kick');
 
       expect(res.status).toBe(200);
-      expect(mockInstance.sendCommand).toHaveBeenCalledWith('kick Steve Kicked by operator');
+      expect(mockInstance.sendCommand).toHaveBeenCalledWith('kick Steve Kicked by operator', {
+        requireResponse: true,
+      });
     });
   });
 
@@ -828,7 +834,9 @@ describe('Player Routes', () => {
         .send({ reason: 'Cheating' });
 
       expect(res.status).toBe(200);
-      expect(mockInstance.sendCommand).toHaveBeenCalledWith('ban Steve Cheating');
+      expect(mockInstance.sendCommand).toHaveBeenCalledWith('ban Steve Cheating', {
+        requireResponse: true,
+      });
       // 永久封禁不写临时记录
       expect(BanModel.create).not.toHaveBeenCalled();
     });
@@ -848,7 +856,9 @@ describe('Player Routes', () => {
         .send({ reason: 'Cheating', duration: '1h' });
 
       expect(res.status).toBe(200);
-      expect(mockInstance.sendCommand).toHaveBeenCalledWith('ban Steve Cheating');
+      expect(mockInstance.sendCommand).toHaveBeenCalledWith('ban Steve Cheating', {
+        requireResponse: true,
+      });
       expect(BanModel.create).toHaveBeenCalledTimes(1);
       const record = BanModel.create.mock.calls[0][0];
       expect(record.instanceId).toBe('s1');
@@ -914,7 +924,9 @@ describe('Player Routes', () => {
         .send({ reason: 'Cheating', duration: '7d', ip: '1.2.3.4' });
 
       expect(res.status).toBe(200);
-      expect(mockInstance.sendCommand).toHaveBeenCalledWith('ban-ip 1.2.3.4 Cheating');
+      expect(mockInstance.sendCommand).toHaveBeenCalledWith('ban-ip 1.2.3.4 Cheating', {
+        requireResponse: true,
+      });
       const record = BanModel.create.mock.calls[0][0];
       expect(record.targetType).toBe('ip');
       expect(record.target).toBe('1.2.3.4');
@@ -951,7 +963,9 @@ describe('Player Routes', () => {
         .send({ reason: 'Cheating', duration: '中文' });
 
       expect(res.status).toBe(200);
-      expect(mockInstance.sendCommand).toHaveBeenCalledWith('ban Steve Cheating');
+      expect(mockInstance.sendCommand).toHaveBeenCalledWith('ban Steve Cheating', {
+        requireResponse: true,
+      });
       expect(BanModel.create).not.toHaveBeenCalled();
     });
   });
@@ -968,7 +982,9 @@ describe('Player Routes', () => {
       const res = await request(app).post('/api/instances/s1/players/Steve/pardon');
 
       expect(res.status).toBe(200);
-      expect(mockInstance.sendCommand).toHaveBeenCalledWith('pardon Steve');
+      expect(mockInstance.sendCommand).toHaveBeenCalledWith('pardon Steve', {
+        requireResponse: true,
+      });
       // 手动解封同步清理临时封禁记录
       expect(BanModel.deactivateByPlayer).toHaveBeenCalledWith('s1', 'Steve');
     });
@@ -988,7 +1004,9 @@ describe('Player Routes', () => {
         .send({ targetType: 'ip' });
 
       expect(res.status).toBe(200);
-      expect(mockInstance.sendCommand).toHaveBeenCalledWith('pardon-ip 1.2.3.4');
+      expect(mockInstance.sendCommand).toHaveBeenCalledWith('pardon-ip 1.2.3.4', {
+        requireResponse: true,
+      });
       // 手动解封 IP 同步清理 IP 型临时封禁记录
       expect(BanModel.deactivateByIp).toHaveBeenCalledWith('s1', '1.2.3.4');
     });
@@ -1006,7 +1024,9 @@ describe('Player Routes', () => {
         .send({ targetType: 'player' });
 
       expect(res.status).toBe(200);
-      expect(mockInstance.sendCommand).toHaveBeenCalledWith('pardon Steve');
+      expect(mockInstance.sendCommand).toHaveBeenCalledWith('pardon Steve', {
+        requireResponse: true,
+      });
       expect(BanModel.deactivateByPlayer).toHaveBeenCalledWith('s1', 'Steve');
     });
 
@@ -1122,7 +1142,9 @@ describe('Player Routes', () => {
       const res = await request(app).post('/api/instances/s1/players/Steve/whitelist/add');
 
       expect(res.status).toBe(200);
-      expect(mockInstance.sendCommand).toHaveBeenCalledWith('whitelist add Steve');
+      expect(mockInstance.sendCommand).toHaveBeenCalledWith('whitelist add Steve', {
+        requireResponse: true,
+      });
       expect(recordAudit).toHaveBeenCalledWith(
         expect.objectContaining({
           instanceId: 's1',
@@ -1147,7 +1169,9 @@ describe('Player Routes', () => {
       const res = await request(app).delete('/api/instances/s1/players/Steve/whitelist');
 
       expect(res.status).toBe(200);
-      expect(mockInstance.sendCommand).toHaveBeenCalledWith('whitelist remove Steve');
+      expect(mockInstance.sendCommand).toHaveBeenCalledWith('whitelist remove Steve', {
+        requireResponse: true,
+      });
       // 白名单移除接入审计（与 add 同枚举，detail.op 区分方向）
       expect(recordAudit).toHaveBeenCalledTimes(1);
       expect(recordAudit).toHaveBeenCalledWith(

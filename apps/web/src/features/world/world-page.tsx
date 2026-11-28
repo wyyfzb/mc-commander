@@ -9,12 +9,12 @@
  * - 实例切换：query key 含 instanceId，自动切换；无实例显示空态
  */
 import { useState } from 'react'
-import { AlertTriangle, Archive, RefreshCw } from 'lucide-react'
+import { Archive, RefreshCw } from 'lucide-react'
 import { useSearchParams } from 'react-router'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/mcs/confirm-dialog'
-import { apiPost } from '@/api/client'
+import { apiRestartInstance } from '@/api/instances'
 import { apiSendCommand } from '@/api/players'
 import { useInstanceStatus, queryKeys } from '@/api/queries'
 import { useUnsavedGuard } from '@/hooks/use-unsaved-guard'
@@ -68,11 +68,8 @@ export function WorldPage() {
     setSearchParams(next, { replace: true })
   }
 
-  /** 发送命令（POST /command；响应为服务端 sendCommand 文本，可能为 null） */
-  const handleSendCommand = async (command: string): Promise<string | null> => {
-    const resp = await apiSendCommand(config, instanceId, command)
-    return resp == null ? null : String(resp)
-  }
+  const handleSendCommand = (command: string) =>
+    apiSendCommand(config, instanceId, command, undefined, { requireResponse: true })
 
   /** 保存属性（PUT /properties）；返回 restartRequired 键数组 */
   const handleSaveProperties = async (payload: Record<string, string>): Promise<string[]> => {
@@ -80,10 +77,8 @@ export function WorldPage() {
     return res.restartRequired ?? []
   }
 
-  /** 重启服务器（属性保存后 Dialog 内「立即重启」触发；复用 instance-controls 同款 API） */
   const handleRestart = async () => {
-    if (!instanceId) throw new Error('未选择实例')
-    await apiPost(`/api/v1/instances/${instanceId}/restart`, config)
+    await apiRestartInstance(config, instanceId)
     void queryClient.invalidateQueries({ queryKey: queryKeys.instance(instanceId) })
   }
 
@@ -107,7 +102,7 @@ export function WorldPage() {
 
       {/* ── 数据错误横幅（查询失败明确报错，避免左栏/属性面板把错误呈现为空态） ── */}
       {(worldQuery.isError || propertiesQuery.isError) && (
-        <NoticeBanner variant="error" icon={AlertTriangle}>
+        <NoticeBanner variant="error">
           <span className="flex items-center gap-2">
             <b>世界数据获取失败</b> ·{/* 双查询同错时两部分都列出（审查观察①） */}
             {[

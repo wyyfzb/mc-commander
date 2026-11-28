@@ -11,6 +11,7 @@
  *
  * 自检的每一条都必须给得出**依据**，且判不出来就说「未知」——一条没有依据的「正常」比没有这一项更糟。
  */
+import { AUTO_START_PAUSED_TEXT } from '@/lib/notifications'
 import { useState, type ReactNode } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import {
@@ -37,7 +38,8 @@ import type { ChipTone } from '@/components/mcs/chip'
 import { cn } from '@/lib/utils'
 import { copyText } from '@/lib/clipboard'
 import { formatRelativeTime, formatUptime } from '@/lib/format'
-import { isVersionAtLeast } from '@/lib/mc-version'
+import { compareVersions } from '@/lib/mc-version'
+import { readHostMemory } from '@/lib/instance-memory'
 import { MSMP_MIN_MC_VERSION } from '@mc-commander/schemas'
 import { useNow } from '@/hooks/use-now'
 import {
@@ -49,6 +51,8 @@ import {
 } from '@/api/queries'
 import type { CrashArtifactHistory, InstanceStatus, PanelErrors, SystemStats } from '@/api/types'
 import { useServerStore } from '@/stores/server'
+import { useUiStore } from '@/stores/ui'
+import { instanceLabel } from '@/lib/instance-label'
 import { CrashReportView, RECENT_CRASH_MS } from '@/features/dashboard/components/crash-report-card'
 
 // ── 自检 ────────────────────────────────────────────────────────────────────
@@ -90,6 +94,81 @@ function statusMissing(instanceId: string | null): Pick<Check, 'tone' | 'verdict
     : NO_INSTANCE
 }
 
+type CheckResult = Pick<Check, 'tone' | 'verdict' | 'basis' | 'action'>
+
+const CHANNEL_STOPPED: CheckResult = {
+  tone: 'unknown',
+  verdict: '实例未运行，无需连通',
+  basis: '实时通道只在实例运行时使用。',
+}
+
+const CHANNEL_STARTING: CheckResult = {
+  tone: 'unknown',
+  verdict: '等待服务器就绪',
+  basis: '服务器仍在启动，暂不判断通道是否可用。',
+}
+
+function checkRcon(instanceId: string | null, status?: InstanceStatus): CheckResult {
+  if (!status) return statusMissing(instanceId)
+  if (status.startupState === 'stopped') return CHANNEL_STOPPED
+  if (status.startupState === 'starting') return CHANNEL_STARTING
+  // capabilities.rcon 只检查启用开关和密码，不验证端口或握手。
+  if (status.capabilities.rcon) {
+    return {
+      tone: 'unknown',
+      verdict: '已配置，连通性未验证',
+      basis: '面板读到了 RCON 配置；这不代表端口可达或认证成功。',
+    }
+  }
+  const ready = status.startupState === 'ready'
+  return {
+    tone: ready ? 'warn' : 'unknown',
+    verdict: ready ? 'RCON 配置不可用' : '未确认 RCON 可用',
+    basis: ready
+      ? '切到此实例后，在服务器属性中检查 RCON 开关、端口与密码。'
+      : '面板尚未确认服务器就绪，也未读到可用的 RCON 配置。',
+    action: ready
+      ? { label: '去实例页', to: `/instances?focus=${encodeURIComponent(status.id)}` }
+      : undefined,
+  }
+}
+
+function checkMsmp(instanceId: string | null, status?: InstanceStatus): CheckResult {
+  if (!status) return statusMissing(instanceId)
+  if (status.startupState === 'stopped') return CHANNEL_STOPPED
+  if (status.startupState === 'starting') return CHANNEL_STARTING
+  if (status.capabilities.msmpPush) {
+    return { tone: 'ok', verdict: '已连通', basis: '面板已建立 MSMP 实时推送连接。' }
+  }
+  if (status.capabilities.msmp) {
+    return {
+      tone: 'warn',
+      verdict: '查询面可用，推送面未连通',
+      basis: '面板可以查询服务器，名单与统计会使用轮询更新。',
+    }
+  }
+  const version = compareVersions(status.mcVersion, MSMP_MIN_MC_VERSION)
+  if (version === null) {
+    return {
+      tone: 'unknown',
+      verdict: '未确认此版本支持推送',
+      basis: `面板无法从版本号 ${status.mcVersion} 判断 MSMP 支持情况。`,
+    }
+  }
+  if (version < 0) {
+    return {
+      tone: 'ok',
+      verdict: `不适用（${status.mcVersion} 无此通道）`,
+      basis: `MSMP 需要 MC ${MSMP_MIN_MC_VERSION} 及以上。`,
+    }
+  }
+  return {
+    tone: 'unknown',
+    verdict: '未确认推送可用',
+    basis: '此版本支持 MSMP，但面板未确认查询或推送通道可用。',
+  }
+}
+
 function percent(n: number): string {
   return `${n.toFixed(1)}%`
 }
@@ -110,103 +189,70 @@ export function buildChecks(input: {
 }): Check[] {
   const { instanceId, status, stats, history, errors, nowMs = Date.now() } = input
   const checks: Check[] = []
+  const instanceAction = status
+    ? { label: '去实例页', to: `/instances?focus=${encodeURIComponent(status.id)}` }
+    : undefined
 
-  // ① 实例运行：熔断（连续崩溃保护）是最高优先的信号——它意味着「启动也会立刻再崩」
   if (!status) {
     checks.push({ key: 'instance', name: '实例运行', ...statusMissing(instanceId) })
   } else if (status.circuitBreakerTripped) {
+    const stopped = status.startupState === 'stopped'
+    const starting = status.startupState === 'starting'
+    const next = stopped
+      ? '先到下方崩溃历史查看末尾日志，再去实例页手动启动。'
+      : starting
+        ? '若迟迟未就绪，可到下方崩溃历史查看末尾日志。'
+        : status.checkingStartupStability
+          ? '请等待稳定性检查完成。'
+          : '可到下方查看末尾日志。'
     checks.push({
       key: 'instance',
       name: '实例运行',
-      tone: 'bad',
-      verdict: `已熔断（连续崩溃 ${status.consecutiveCrashes} 次）`,
-      basis: '熔断是面板对连续崩溃的保护：先查明崩溃原因再启动，否则大概率会再崩一次',
-      action: { label: '去实例页', to: `/instances/${instanceId}` },
+      tone: stopped ? 'bad' : 'warn',
+      verdict: stopped
+        ? AUTO_START_PAUSED_TEXT
+        : starting
+          ? '试启动中，尚未确认就绪'
+          : status.startupState === 'unknown'
+            ? '服务器就绪状态未知'
+            : status.checkingStartupStability
+              ? '正在确认服务器能否稳定运行'
+              : '服务器已就绪，自动启动仍暂停',
+      basis: `连续意外退出 ${status.consecutiveCrashes} 次。${next}确认稳定后，面板会解除对自动启动的暂时限制，不会更改启动设置。`,
+      action: instanceAction,
     })
-  } else if (!status.isRunning) {
+  } else if (status.startupState === 'stopped') {
     checks.push({
       key: 'instance',
       name: '实例运行',
       tone: 'warn',
       verdict: '未运行',
       basis: status.autoRestart
-        ? '已开启自动重启：面板会尝试拉起（连续失败会熔断）'
-        : '未开启自动重启：需要手动启动',
-      action: { label: '去实例页', to: `/instances/${instanceId}` },
+        ? '已开启崩溃后自动重启，手动停止不会触发。'
+        : '崩溃后自动重启已关闭，可手动启动实例。',
+      action: instanceAction,
     })
   } else {
+    const ready = status.startupState === 'ready'
     checks.push({
       key: 'instance',
       name: '实例运行',
-      tone: 'ok',
-      verdict: '运行中',
-      basis: `已运行 ${formatUptime(status.uptime)}`,
+      tone: ready ? 'ok' : 'unknown',
+      verdict: ready
+        ? '已就绪'
+        : status.startupState === 'starting'
+          ? '服务器启动中'
+          : '服务器就绪状态未知',
+      basis: ready
+        ? `已运行 ${formatUptime(status.uptime)}`
+        : `进程已运行 ${formatUptime(status.uptime)}，面板尚未观察到本次启动完成。`,
     })
   }
 
-  // ② 命令通道：实例没运行时「未连通」是正常状态，不能报成问题（否则每台停着的实例都挂一条警告）
-  if (!status) {
-    checks.push({ key: 'rcon', name: '命令通道（RCON）', ...statusMissing(instanceId) })
-  } else if (!status.isRunning) {
-    checks.push({
-      key: 'rcon',
-      name: '命令通道（RCON）',
-      tone: 'unknown',
-      verdict: '实例未运行，无需连通',
-      basis: 'RCON 只在实例运行时才有意义',
-    })
-  } else if (status.capabilities.rcon) {
-    checks.push({
-      key: 'rcon',
-      name: '命令通道（RCON）',
-      tone: 'ok',
-      verdict: '已连通',
-      basis: '命令下发、玩家管理可用',
-    })
-  } else {
-    checks.push({
-      key: 'rcon',
-      name: '命令通道（RCON）',
-      tone: 'warn',
-      verdict: '未连通',
-      basis: '实例在运行但 RCON 连不上：命令与玩家管理会失败，检查端口与密码配置',
-      action: { label: '去实例页', to: `/instances/${instanceId}` },
-    })
-  }
-
-  // ③ 推送面：查询面与推送面分开判（查询成功不代表推送连着，端口随机、密钥由服务端写回）
-  if (!status) {
-    checks.push({ key: 'msmp', name: '实时推送（MSMP）', ...statusMissing(instanceId) })
-  } else if (status.capabilities.msmpPush) {
-    checks.push({
-      key: 'msmp',
-      name: '实时推送（MSMP）',
-      tone: 'ok',
-      verdict: '已连通',
-      basis: '玩家名单与统计走实时推送',
-    })
-  } else if (!isVersionAtLeast(status.mcVersion, MSMP_MIN_MC_VERSION, false)) {
-    // 老版本没有这个面：报「不适用」并给出结论，不报「未开启」——对 MC 1.21.4 的用户，
-    // 一条他无法处理的警告等于噪音，而自检里每多一条噪音，其余条目就更不被当回事
-    checks.push({
-      key: 'msmp',
-      name: '实时推送（MSMP）',
-      // 这是**确定结论**（这个版本没有这个面）而不是「判不出来」：标成 unknown 会占住
-      // 「需要看」的位置，把用户引向一件他无事可做的事
-      tone: 'ok',
-      verdict: `不适用（${status.mcVersion} 无此通道）`,
-      basis: `MSMP 需要 MC ${MSMP_MIN_MC_VERSION} 及以上；名单与统计按 30 秒轮询更新，不影响使用`,
-    })
-  } else {
-    checks.push({
-      key: 'msmp',
-      name: '实时推送（MSMP）',
-      tone: 'warn',
-      verdict: status.capabilities.msmp ? '查询面可用，推送面未连通' : '未开启',
-      basis: `名单与统计会退化为 30 秒轮询；${status.mcVersion} 支持推送通道，开启后为实时数据`,
-      action: { label: '去世界页', to: '/world' },
-    })
-  }
+  checks.push(
+    { key: 'rcon', name: '命令通道（RCON）', ...checkRcon(instanceId, status) },
+    { key: 'msmp', name: '实时推送（MSMP）', ...checkMsmp(instanceId, status) },
+  )
 
   // ④ 磁盘余量：阈值来自服务端，前端只做比较
   const disk = stats?.diskUsage?.primary
@@ -237,7 +283,8 @@ export function buildChecks(input: {
 
   // ⑤ 内存：整机口径（与 memoryPercent 同源），不是 JVM 堆——判「机器吃紧」只能用这个口径
   const memoryAlert = stats?.memoryAlert
-  if (!stats || !memoryAlert) {
+  const memory = readHostMemory(stats)
+  if (!memory || !memoryAlert) {
     checks.push({
       key: 'memory',
       name: '整机内存',
@@ -246,18 +293,17 @@ export function buildChecks(input: {
       basis: '资源统计还没取到',
     })
   } else {
-    const over = stats.memoryPercent >= memoryAlert.warningPercent
+    const over = memory.percent >= memoryAlert.warningPercent
     checks.push({
       key: 'memory',
       name: '整机内存',
       tone: over ? 'warn' : 'ok',
-      verdict: `已用 ${percent(stats.memoryPercent)}`,
-      // 单位已是 GB（服务端 systemStats 的 memoryUsage/totalMemory 即 GB），不要再除 1024
-      basis: `阈值 ${memoryAlert.warningPercent}% · ${stats.memoryUsage.toFixed(1)} / ${stats.totalMemory.toFixed(0)} GB（整机口径，非 JVM 堆）`,
+      verdict: `已用 ${percent(memory.percent)}`,
+      basis: `阈值 ${memoryAlert.warningPercent}% · ${memory.used.toFixed(1)} / ${memory.total} GB（整机口径，非 JVM 堆）`,
     })
   }
 
-  // ⑥ 崩溃记录：产物文件本身即持久面，所以「几次」是能数出来的事实
+  // ⑥ 崩溃记录：历史按产物文件计数；恢复保护计数不含时间，不能用于判断报告是否近期。
   if (!instanceId) {
     checks.push({ key: 'crash', name: '崩溃记录', ...NO_INSTANCE })
   } else if (!history) {
@@ -279,24 +325,20 @@ export function buildChecks(input: {
     })
   } else {
     const newest = history.items[0]
-    const newestAgo = newest ? nowMs - newest.mtimeMs : Number.POSITIVE_INFINITY
-    const recent = newestAgo < RECENT_CRASH_MS || (status?.consecutiveCrashes ?? 0) > 0
+    const recent = newest != null && nowMs - newest.mtimeMs < RECENT_CRASH_MS
     const when = formatRelativeTime(
       newest ? new Date(newest.mtimeMs).toISOString() : null,
       nowMs,
       '时间未知',
     )
-    // 崩溃是事实但不是持续故障：只有「刚崩过」才值得提醒，否则一条几周前的崩溃会长期挂在
-    // 自检里，把真正要看的那条淹掉。历史本身仍在下面完整列出
     checks.push({
       key: 'crash',
       name: '崩溃记录',
       tone: recent ? 'warn' : 'ok',
       verdict: recent
-        ? `最近 24 小时内崩过（共 ${history.total} 次）`
-        : `当前稳定（共 ${history.total} 次）`,
-      // 只给时间：原因紧接着就在崩溃历史里逐条列出，同一句话写两遍没有收益
-      basis: `最近一次 ${when}`,
+        ? `最近 24 小时内有崩溃报告（共 ${history.total} 份）`
+        : `有历史崩溃报告（共 ${history.total} 份）`,
+      basis: `最新一份：${when}`,
       action: { label: '看崩溃历史', to: '#crash-history' },
     })
   }
@@ -458,7 +500,7 @@ function SelfCheckCard({
       <CardHeader className="flex-row items-center justify-between gap-2">
         <CardTitle className="flex items-center gap-2">
           <Stethoscope className="size-4 text-mcs-text-muted" aria-hidden="true" />
-          自检
+          {instanceName ? `自检 · ${instanceName}` : '自检'}
         </CardTitle>
         <StatusPill tone={summary.tone} title={summary.title}>
           {summary.text}
@@ -543,12 +585,18 @@ function CrashArtifactDetail({ instanceId, fileName }: { instanceId: string; fil
  * 崩溃历史一节 = 可选列表 + 选中那份的完整诊断。
  * 诊断呈现复用仪表盘的 `CrashReportView`：同一套解析只有一份渲染实现，两处同源。
  */
-function CrashHistorySection() {
-  const instanceId = useServerStore((s) => s.instanceId)
-  const statusQuery = useInstanceStatus(instanceId)
-  const historyQuery = useCrashHistory(instanceId)
-  const nowMs = useNow()
-  const history = historyQuery.data
+function CrashHistorySection({
+  instanceId,
+  status,
+  history,
+  nowMs,
+}: {
+  instanceId: string | null
+  status?: InstanceStatus
+  history?: CrashArtifactHistory
+  nowMs: number
+}) {
+  const setLastOutputInstanceId = useUiStore((s) => s.setLastOutputInstanceId)
   const [selected, setSelected] = useState<string | null>(null)
 
   const items = history?.items ?? []
@@ -566,9 +614,20 @@ function CrashHistorySection() {
             <History className="size-4 text-mcs-text-muted" aria-hidden="true" />
             崩溃历史
           </CardTitle>
-          {history && history.total > 0 && (
-            <CountBadge title={`${history.total} 次`}>{history.total}</CountBadge>
-          )}
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {history && history.total > 0 && (
+              <CountBadge title={`${history.total} 份`}>{history.total}</CountBadge>
+            )}
+            {instanceId && status?.circuitBreakerTripped && (
+              <Button
+                size="xs"
+                variant="outline"
+                onClick={() => setLastOutputInstanceId(instanceId)}
+              >
+                查看末尾日志
+              </Button>
+            )}
+          </div>
         </CardHeader>
         <CardBody className="flex flex-col gap-3">
           {!instanceId ? (
@@ -589,8 +648,13 @@ function CrashHistorySection() {
           ) : (
             <>
               <p className="text-mcs-xs text-mcs-text-muted">
-                {statusQuery.data?.name ?? '当前实例'} · 崩溃产物跨面板重启留存
+                {status ? instanceLabel(status) : instanceId} · 崩溃产物跨面板重启留存
               </p>
+              {status?.circuitBreakerTripped && (
+                <p className="text-mcs-xs text-mcs-text-muted">
+                  历史报告不一定对应触发保护的退出。
+                </p>
+              )}
               <ul className="flex flex-col gap-1">
                 {items.map((item) => (
                   <li key={item.fileName}>
@@ -633,7 +697,7 @@ function CrashHistorySection() {
               </ul>
               {history.hasMore && (
                 <p className="text-mcs-xs text-mcs-text-muted">
-                  只显示最近 {history.items.length} 次（共 {history.total} 次）
+                  只显示最近 {history.items.length} 份（共 {history.total} 份）
                 </p>
               )}
             </>
@@ -795,9 +859,11 @@ function PanelErrorsCard() {
   )
 }
 
-export function DiagnosticsPanel(): ReactNode {
-  const instanceId = useServerStore((s) => s.instanceId)
+export function DiagnosticsPanel({ targetInstanceId }: { targetInstanceId?: string }): ReactNode {
+  const currentInstanceId = useServerStore((s) => s.instanceId)
+  const instanceId = targetInstanceId ?? currentInstanceId
   const statusQuery = useInstanceStatus(instanceId)
+  const instanceName = statusQuery.data ? instanceLabel(statusQuery.data) : targetInstanceId
   const statsQuery = useSystemStats()
   const historyQuery = useCrashHistory(instanceId)
   const errorsQuery = useSystemErrors()
@@ -816,12 +882,18 @@ export function DiagnosticsPanel(): ReactNode {
     <div className="flex flex-col gap-4">
       <SelfCheckCard
         checks={checks}
-        instanceName={statusQuery.data?.name}
+        instanceName={instanceName}
         mcVersion={statusQuery.data?.mcVersion}
         panelVersion={__APP_VERSION__}
         nowMs={nowMs}
       />
-      <CrashHistorySection />
+      <CrashHistorySection
+        key={instanceId}
+        instanceId={instanceId}
+        status={statusQuery.data}
+        history={historyQuery.data}
+        nowMs={nowMs}
+      />
       <PanelErrorsCard />
     </div>
   )

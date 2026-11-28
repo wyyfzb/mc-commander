@@ -1,4 +1,4 @@
-import { EventEmitter } from 'events';
+import { EventEmitter, once } from 'events';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
@@ -6,7 +6,7 @@ import zlib from 'zlib';
 import { Rcon } from 'rcon-client';
 import { parseUncompressed as parseNbtSync } from 'prismarine-nbt';
 import config from '../config.js';
-import { InstanceModel, CommandHistoryModel } from '../db/index.js';
+import { InstanceModel, CommandHistoryModel, getDb } from '../db/index.js';
 import { atomicWriteFile, ensureDir } from '../utils/fs-utils.js';
 import { killProcessTree } from '../utils/process-tree.js';
 import { maskSensitiveCommand } from '../utils/command-mask.js';
@@ -31,6 +31,7 @@ import {
 } from '../utils/java-detector.js';
 import { AppError, ErrorCodes } from '../utils/response.js';
 import { checkInstanceReachability } from './port-reachability.js';
+import { isBackupInProgress } from './backup.service.js';
 import * as levelDat from './mc-server/level-dat.js';
 import * as outputParser from './mc-server/output-parser.js';
 import * as statsCollector from './mc-server/stats-collector.js';
@@ -86,11 +87,19 @@ export { isEulaAccepted } from './mc-server/start-lifecycle.js';
  * 必须在列：升级会换掉这两者，而它们决定「这个目录该按哪种服务端启动」。
  * 原子写（tmp + rename）避免半写 JSON 让兜底自己失效。
  */
-export function syncInstanceJson(instance) {
+export function syncInstanceJson(instance, { strict = false } = {}) {
   try {
     const configPath = path.join(instance.serverPath, 'instance.json');
-    if (!fs.existsSync(configPath)) return;
-    const existing = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    let existing;
+    try {
+      existing = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    } catch (e) {
+      if (e.code === 'ENOENT') return;
+      throw e;
+    }
+    if (existing?.id !== instance.id) {
+      throw new Error('恢复快照的实例 ID 不匹配');
+    }
     const updated = {
       ...existing,
       name: instance.name ?? existing.name,
@@ -105,10 +114,13 @@ export function syncInstanceJson(instance) {
       jvmArgs: instance.jvmArgs ?? null,
       autoStart: instance.autoStart ?? existing.autoStart,
       autoRestart: instance.autoRestart ?? existing.autoRestart,
+      circuitBreakerCrashCount:
+        instance.circuitBreakerCrashCount ?? existing.circuitBreakerCrashCount,
     };
     atomicWriteFile(configPath, JSON.stringify(updated, null, 2));
   } catch (e) {
     logger.warn('Failed to sync instance.json:', e.message);
+    if (strict) throw e;
   }
 }
 
@@ -128,8 +140,6 @@ export class MCServerManager extends EventEmitter {
   #loadInstances() {
     ensureDir(config.serversDir);
 
-    // 先读磁盘上的 instance.json：目录名决定实例的真实 serverPath，DB 记录提供其余
-    // 配置。DB 的 server_path 可能是旧路径，不能让它把实例指到另一个目录。
     const jsonInstances = new Map();
     let dirs;
     try {
@@ -150,12 +160,12 @@ export class MCServerManager extends EventEmitter {
         if (!instanceConfig || typeof instanceConfig.id !== 'string' || instanceConfig.id === '') {
           throw new Error('instance.json 缺少有效 id');
         }
-        // 同 id 多目录时取第一个：后续目录没有可认领的实例，不能覆盖已认领的路径。
-        if (!jsonInstances.has(instanceConfig.id)) {
-          jsonInstances.set(instanceConfig.id, {
-            config: instanceConfig,
-            serverPath: path.dirname(configPath),
-          });
+        const id = instanceConfig.id;
+        if (jsonInstances.has(id)) {
+          jsonInstances.set(id, null);
+          logger.warn(`Multiple instance directories declare ID ${id}`);
+        } else {
+          jsonInstances.set(id, { config: instanceConfig, serverPath: path.dirname(configPath) });
         }
       } catch (e) {
         logger.error(`Failed to read instance.json in ${dir.name}:`, e);
@@ -171,24 +181,23 @@ export class MCServerManager extends EventEmitter {
       logger.warn('Failed to load instances from DB, will try file system:', e.message);
     }
 
-    // 2. 从 DB 加载到内存；磁盘有同名 instance.json 时，以目录为真实 serverPath
+    const storedIds = new Set();
     for (const inst of dbInstances) {
+      storedIds.add(inst.id);
       try {
-        this.#loadStoredInstance(inst, jsonInstances.get(inst.id)?.serverPath);
-        logger.info(`Loaded instance from DB: ${inst.id}`);
+        this.#loadStoredInstance(inst, jsonInstances.get(inst.id));
       } catch (e) {
         logger.error(`Failed to load DB instance ${inst.id}:`, e);
       }
     }
 
-    // 3. instance.json 只补回 DB 缺失的记录；DB 已有的配置始终优先
     for (const [id, local] of jsonInstances) {
-      if (this.instances.has(id)) continue;
+      if (!local || storedIds.has(id)) continue;
 
       try {
         const stored = InstanceModel.getById(id);
         if (stored) {
-          this.#loadStoredInstance(stored, local.serverPath);
+          this.#loadStoredInstance(stored, local);
           continue;
         }
         if (InstanceModel.migrateFromJson(local.config, local.serverPath)) {
@@ -201,10 +210,43 @@ export class MCServerManager extends EventEmitter {
     }
   }
 
-  #loadStoredInstance(instance, serverPath) {
+  #loadStoredInstance(instance, local) {
+    const storedPath = instance.serverPath || path.join(config.serversDir, instance.id);
+    // 已登记的有效目录优先；目录明确声明其他 ID 时不能在其中启动、备份或卸载。
+    let serverPath = local?.serverPath;
+    let recoveryConfig = local?.config;
+    if (fs.statSync(storedPath, { throwIfNoEntry: false })?.isDirectory()) {
+      try {
+        const storedConfig = JSON.parse(
+          fs.readFileSync(path.join(storedPath, 'instance.json'), 'utf8'),
+        );
+        if (storedConfig?.id === instance.id) {
+          serverPath = storedPath;
+          recoveryConfig = storedConfig;
+        } else logger.warn(`Instance directory ${storedPath} does not match ID ${instance.id}`);
+      } catch (err) {
+        if (err.code === 'ENOENT') {
+          serverPath = storedPath;
+          recoveryConfig = undefined;
+        } else logger.warn(`Cannot verify instance directory ${storedPath}:`, err.message);
+      }
+    }
+    if (!serverPath) {
+      logger.warn(`No unambiguous server directory for instance ${instance.id}`);
+      return;
+    }
+    const snapshotCrashCount = recoveryConfig?.circuitBreakerCrashCount;
+    // 崩溃时两份记录独立写入，任一有效记录仍处于熔断就必须保留保护。
+    const circuitBreakerCrashCount = Math.max(
+      Number.isSafeInteger(instance.circuitBreakerCrashCount)
+        ? instance.circuitBreakerCrashCount
+        : 0,
+      Number.isSafeInteger(snapshotCrashCount) ? snapshotCrashCount : 0,
+    );
     return this.createInstance({
       ...instance,
-      ...(serverPath ? { serverPath } : {}),
+      serverPath,
+      circuitBreakerCrashCount,
       javaPath: instance.javaPath || 'java',
       maxMemory: instance.maxMemory || '2G',
       minMemory: instance.minMemory || '1G',
@@ -244,7 +286,12 @@ export class MCServerManager extends EventEmitter {
     this.instances.set(id, instance);
 
     instance.on('log', (data) => this.emit('instance:log', { instanceId: id, ...data }));
-    instance.on('status', (data) => this.emit('instance:status', { instanceId: id, ...data }));
+    instance.on('status', (data) => {
+      this.emit('instance:status', { instanceId: id, ...data });
+      if (['started', 'ready', 'stopped', 'crash'].includes(data.event)) {
+        instance._emitPushChannelState();
+      }
+    });
     instance.on('playerJoin', (data) =>
       this.emit('instance:playerJoin', { instanceId: id, ...data }),
     );
@@ -325,6 +372,7 @@ export class MCServerInstance extends EventEmitter {
     jvmArgs,
     autoRestart,
     autoStart,
+    circuitBreakerCrashCount,
     mcVersion,
     modLoader,
   }) {
@@ -350,6 +398,7 @@ export class MCServerInstance extends EventEmitter {
     this._manualStop = false;
     this.process = null;
     this.isRunning = false;
+    this._startupReady = false;
     // 孤儿接管态：adopted=本实例进程非本面板 spawn、由 pid 文件接管而来。
     // 接管实例无 stdout/stdin 管道（this.process 保持 null），命令仅 RCON 通道，
     // 退出感知走看门狗轮询（adopt.js），this.process 众多守卫据此放行。
@@ -366,7 +415,7 @@ export class MCServerInstance extends EventEmitter {
     this._pendingIps = new Map();
     // 今日新增玩家计数缓存（{date: 'YYYY-MM-DD', count}）；跨天/服务重启后惰性全量重算
     this._todayNewCache = null;
-    this.tps = 20;
+    this.tps = null;
     this._mspt = 0;
     this._cpuUsage = 0;
     this._memoryUsage = 0;
@@ -409,11 +458,17 @@ export class MCServerInstance extends EventEmitter {
     // 死亡事件聚合窗口：团灭等批量场景 5s 内合并为单条事件（防通知风暴）
     this._deathAggBuffer = [];
     this._deathAggTimer = null;
-    this._restartTimer = null; // 重启延迟启动定时器（stop/kill 时取消）
+    this._restartTimer = null; // 崩溃自动重启定时器
+    this._stopOperation = null;
+    this._restartOperation = null;
+    this._readyWhileStopping = false;
     // 崩溃循环熔断（运维韧性）
     this._consecutiveCrashes = 0;
     this._crashWindowStart = null;
-    this._circuitBreakerTripped = false;
+    this.circuitBreakerCrashCount = Number.isSafeInteger(circuitBreakerCrashCount)
+      ? Math.max(0, circuitBreakerCrashCount)
+      : 0;
+    this._crashRecoveryTimer = null;
     this.autoStart = autoStart === true; // 面板重启后自动恢复（DB 持久化，默认关）
     this._lastSaveTime = null; // 真实存档时刻（来自 "Saved the game" 日志）
     // 仪表盘扩展状态
@@ -885,13 +940,111 @@ export class MCServerInstance extends EventEmitter {
     return { command, args };
   }
 
+  _syncRecoveryConfig() {
+    syncInstanceJson(this);
+  }
+
+  get circuitBreakerTripped() {
+    return this.circuitBreakerCrashCount > 0;
+  }
+
+  _cancelCrashRecovery() {
+    if (this._crashRecoveryTimer) clearTimeout(this._crashRecoveryTimer);
+    this._crashRecoveryTimer = null;
+  }
+
+  get startupState() {
+    if (!this.isRunning) return 'stopped';
+    if (this._startupReady) return 'ready';
+    return this.process ? 'starting' : 'unknown';
+  }
+
+  _markStartupReady() {
+    if (!this.isRunning || this._startupReady) return;
+    if (this._manualStop) {
+      if (this._stopOperation) this._readyWhileStopping = true;
+      return;
+    }
+    this._startupReady = true;
+    this._worldSizeDirty = true;
+    this.refreshReachability().catch(() => {});
+    this._observeCrashRecovery();
+    this.emit('status', { event: 'ready' });
+  }
+
+  _observeCrashRecovery() {
+    // 只认当次子进程的实时就绪日志；接管时旧日志和 PID 不能证明本次就绪。
+    const child = this.process;
+    if (
+      !child ||
+      !this.circuitBreakerTripped ||
+      !this.isRunning ||
+      this._manualStop ||
+      this._crashRecoveryTimer
+    )
+      return;
+
+    this._crashRecoveryTimer = setTimeout(() => {
+      this._crashRecoveryTimer = null;
+      if (
+        child !== this.process ||
+        child.exitCode != null ||
+        child.signalCode != null ||
+        !this.isRunning ||
+        this._manualStop
+      )
+        return;
+      this._resumeAutomaticStart();
+    }, config.crashLoop.windowMs);
+    this._crashRecoveryTimer.unref?.();
+  }
+
+  _resumeAutomaticStart() {
+    try {
+      const stored = InstanceModel.getById(this.id);
+      if (!stored) throw new Error('找不到实例记录');
+      // 快照单独承载保护时先补写 SQLite，快照清零后事务中断仍有保护。
+      if (!(stored.circuitBreakerCrashCount > 0)) {
+        InstanceModel.update(this.id, { circuitBreakerCrashCount: this.circuitBreakerCrashCount });
+      }
+      getDb().transaction(() => {
+        if (!InstanceModel.update(this.id, { circuitBreakerCrashCount: 0 })) {
+          throw new Error('找不到实例记录');
+        }
+        syncInstanceJson({ ...this, circuitBreakerCrashCount: 0 }, { strict: true });
+      })();
+    } catch (err) {
+      logger.warn(`[${this.id}] Failed to resume automatic startup:`, err.message);
+      this._observeCrashRecovery();
+      return;
+    }
+    this.circuitBreakerCrashCount = 0;
+    this._consecutiveCrashes = 0;
+    this._crashWindowStart = null;
+    this.emit('status', { event: 'auto_start_resumed' });
+  }
+
+  get lifecycleInProgress() {
+    return Boolean(
+      this._stopOperation?.sameRun() ||
+        this._restartOperation ||
+        (this.isRunning && this._manualStop),
+    );
+  }
+
+  _assertNoBackupOperation() {
+    if (isBackupInProgress(this.id)) throw new AppError(ErrorCodes.BACKUP_IN_PROGRESS);
+  }
+
   start(startCommand) {
+    this._assertNoBackupOperation();
     if (this.isRunning) {
       throw new Error('Server is already running');
     }
 
-    // 启动视为非主动停止（自动重启/崩溃恢复均会走这里）
+    if (!this._restartOperation?.launching) this.cancelRestart();
     this._manualStop = false;
+    this._readyWhileStopping = false;
     // 新 spawn 覆盖一切接管残留态（接管实例 restart 必经看门狗确认退出后才到这）
     this.adopted = false;
     this.adoptedPid = null;
@@ -945,7 +1098,7 @@ export class MCServerInstance extends EventEmitter {
     const pwd = this.properties['rcon.password'] || '';
     const port = parseInt(this.properties['rcon.port'] || '25575', 10);
 
-    this._rconConnecting = (async () => {
+    const connecting = (async () => {
       // 手动 new Rcon 并先注册 error 监听再 connect：
       // rcon-client 的 Rcon.connect 在连接完成前没有对外暴露 error 监听，
       // MC 崩溃导致连接建立/认证期间 socket ECONNRESET 会触发
@@ -969,6 +1122,10 @@ export class MCServerInstance extends EventEmitter {
         // （部署后 MC 未启动时 _collectWorldState 触发 RCON 连接失败即因此崩溃）。
         client.end().catch(() => {});
         throw e;
+      }
+      if (this._rconConnecting !== connecting) {
+        client.end().catch(() => {});
+        throw new Error('RCON connection cancelled');
       }
       this._rconClient = client;
       // 连接意外断开时清理引用，下次调用会自动重连
@@ -999,10 +1156,11 @@ export class MCServerInstance extends EventEmitter {
       });
     })();
 
+    this._rconConnecting = connecting;
     try {
-      await this._rconConnecting;
+      await connecting;
     } finally {
-      this._rconConnecting = null;
+      if (this._rconConnecting === connecting) this._rconConnecting = null;
     }
   }
 
@@ -1015,7 +1173,7 @@ export class MCServerInstance extends EventEmitter {
     this._rconConnecting = null;
   }
 
-  async _rconSend(command) {
+  async _rconSend(command, assertCanSend) {
     try {
       await this._rconEnsureConnected();
     } catch (err) {
@@ -1024,9 +1182,25 @@ export class MCServerInstance extends EventEmitter {
       if (err && typeof err === 'object') err.rconConfirmedNotSent = true;
       throw err;
     }
-    // rcon-client 内置 packet queue，send 返回响应字符串
-    // timeout 在 Rcon.connect 时全局配置
-    return this._rconClient.send(command);
+    assertCanSend?.();
+    const client = this._rconClient;
+    const queue = client?.sendQueue;
+    if (!client?.socket) {
+      throw Object.assign(new Error('RCON connection closed'), { rconConfirmedNotSent: true });
+    }
+    if (!assertCanSend || !queue?.add) return client.send(command);
+    // rcon-client 4.x 同步入队；等待前一请求完成后才调用生成器写包。
+    const add = queue.add;
+    queue.add = (generate) =>
+      add.call(queue, () => {
+        assertCanSend();
+        return generate();
+      });
+    try {
+      return client.send(command);
+    } finally {
+      queue.add = add;
+    }
   }
 
   /// 按属性名查询实体属性值，兼容 1.21.2+（26.x）属性ID前缀移除变更
@@ -1056,139 +1230,149 @@ export class MCServerInstance extends EventEmitter {
   }
 
   stop() {
-    if (!this.isRunning || (!this.process && !this.adopted)) {
-      throw new Error('Server is not running');
+    this._assertNoBackupOperation();
+    const cancelled = this.cancelRestart();
+    if (!this.isRunning && !cancelled) {
+      throw new AppError(ErrorCodes.INSTANCE_NOT_RUNNING);
     }
-    // 用户主动停止：标记为手动，避免被误判为意外停止而触发自动重启，
-    // 并取消重启的延迟启动（用户明确停止后不得 3 秒后被自动拉起）
-    this._manualStop = true;
-    this.cancelRestart();
-    // 接管实例无控制台管道：统一走优雅停流程（RCON stop / 失败则按平台
-    // 信号或 taskkill 兜底），fire-and-forget 语义与常规 stop 一致
-    if (this.adopted) {
-      this.stopGracefully().catch(() => {});
-      return;
-    }
-    this.stopServer().catch(() => {});
+    return this._stopCurrentRun();
   }
 
-  // 优雅停止：await 发送 stop 命令并等待 MC 正常退出（exit 事件），
-  // 超时后强杀兜底。供服务端停机流程（stopAll）使用——原 stop() 为
-  // fire-and-forget，停机时 MC 可能收不到命令就随父进程退出成为孤儿，
-  // 在线玩家数据（离开事件/60s 保存）随之丢失。
-  async stopGracefully({ timeout = 8000 } = {}) {
-    if (!this.isRunning || (!this.process && !this.adopted)) return;
-    this._manualStop = true;
+  stopGracefully(options) {
+    this._assertNoBackupOperation();
     this.cancelRestart();
+    return this._stopCurrentRun({ ...options, forceOnTimeout: true });
+  }
+
+  _stopCurrentRun({ timeout = 8000, forceOnTimeout = false } = {}) {
+    const { process: child, adoptedPid } = this;
+    if (!this.isRunning || (!child && !adoptedPid)) return Promise.resolve();
+    const sameRun = this._currentRunGuard();
+    if (this._stopOperation?.sameRun()) {
+      this._stopOperation.forceOnTimeout ||= forceOnTimeout;
+      return this._stopOperation.promise;
+    }
+
+    this._manualStop = true;
+    this._cancelCrashRecovery();
+    const { promise, resolve, reject } = Promise.withResolvers();
+    const starting = this.startupState === 'starting';
+    const operation = {
+      sameRun,
+      promise,
+      starting,
+      forceOnTimeout: forceOnTimeout || starting || Boolean(adoptedPid),
+      terminating: false,
+    };
+    this._stopOperation = operation;
+    this._confirmStop(operation, timeout).then(resolve, reject);
+    return promise;
+  }
+
+  async _confirmStop(operation, timeout) {
+    const { sameRun } = operation;
     try {
-      await this.stopServer();
-    } catch {
-      // 发送失败（RCON 断开等）：直接进入等待/强杀流程
+      const exited = this._waitForRunExit(sameRun, timeout);
+      if (operation.starting) {
+        // 启动期的控制台管道不依赖管理端口就绪。
+        this._writeToStdin('stop\n');
+      } else {
+        const isCurrentRun = () => this._stopOperation === operation && sameRun();
+        // 通道回执可能卡在请求队列，不能延长退出等待的上限。
+        void Promise.resolve()
+          .then(() => {
+            if (isCurrentRun()) return this.stopServer({ isCurrentRun });
+          })
+          .catch(() => {});
+      }
+      await exited;
+      if (!sameRun()) return;
+      if (!operation.forceOnTimeout && !operation.terminating) {
+        throw new AppError(ErrorCodes.INSTANCE_STOP_UNCONFIRMED);
+      }
+      if (!operation.terminating) this._terminateCurrentRun();
+      // 接管看门狗负责收敛运行态，确认窗口须覆盖其一次完整轮询。
+      await this._waitForRunExit(
+        sameRun,
+        this.adopted ? adopt.ADOPT_WATCHDOG_INTERVAL_MS + 250 : 2000,
+      );
+      if (sameRun()) throw new AppError(ErrorCodes.INSTANCE_STOP_UNCONFIRMED);
+    } finally {
+      if (this._stopOperation === operation) {
+        this._stopOperation = null;
+        if (sameRun()) {
+          this._manualStop = false;
+          if (this._readyWhileStopping) this._markStartupReady();
+          else if (this._startupReady) this._observeCrashRecovery();
+          this._readyWhileStopping = false;
+        }
+      }
     }
-    if (!this.isRunning) return; // 发送阶段就已退出
-    if (this.adopted) {
-      // 接管实例无 exit 事件：轮询 pid 验活等待，语义与下方 exit 等待一致
-      await this._waitForAdoptedExit(timeout);
-    } else {
-      if (!this.process) return;
-      await new Promise((resolve) => {
-        const timer = setTimeout(() => {
-          this.process?.removeListener('exit', onExit);
-          resolve();
-        }, timeout);
-        const onExit = () => {
-          clearTimeout(timer);
-          resolve();
-        };
-        this.process.once('exit', onExit);
-      });
-    }
-    // 超时仍未退出 → 强杀，不留孤儿进程
-    if (this.isRunning) {
-      try {
-        this.kill();
-      } catch {}
-    }
+  }
+
+  _waitForRunExit(sameRun, timeout) {
+    if (!sameRun()) return Promise.resolve();
+    return new Promise((resolve) => {
+      const finish = () => {
+        clearTimeout(timer);
+        this.off('status', onStatus);
+        resolve();
+      };
+      const onStatus = () => {
+        if (!sameRun()) finish();
+      };
+      const timer = setTimeout(finish, timeout);
+      this.on('status', onStatus);
+    });
   }
 
   restart() {
-    if (this.isRunning) {
-      // 主动重启：标记为手动停止，避免 stop 阶段触发自动重启
-      this._manualStop = true;
-      this.stopServer().catch(() => {});
-    }
-    this._scheduleRestartStart();
+    this._assertNoBackupOperation();
+    if (this._restartOperation) return this._restartOperation.promise;
+    this.cancelRestart();
+    const { promise, resolve, reject } = Promise.withResolvers();
+    const operation = { promise, reject, launching: false };
+    this._restartOperation = operation;
+    this._restartCurrentRun(operation).then(resolve, reject);
+    return promise;
   }
 
-  // 调度延迟启动（restart 与 status.js restart 端点共用，
-  // 替代原裸 setTimeout——无法取消、重复重启叠加）
-  _scheduleRestartStart() {
-    // 先前待执行的延迟启动作废（重复重启/重启后立即再重启）
-    if (this._restartTimer) clearTimeout(this._restartTimer);
-    this._restartTimer = setTimeout(() => {
-      this._restartTimer = null;
-      // 接管实例：stop 到进程退出经看门狗轮询感知（最长 ADOPT_WATCHDOG_INTERVAL_MS），
-      // 固定 3s 窗口可能早于死亡——轮询等待退出（上限 10s）后再启动。
-      // 轮询句柄复用 _restartTimer：stop/kill 的 cancelRestart() 可中断等待
-      if (this.adopted && this.isRunning) {
-        const begin = Date.now();
-        const waitAdoptedExit = () => {
-          if (!this.isRunning) {
-            this._restartTimer = null;
-            return this._startAfterRestartWindow();
-          }
-          if (Date.now() - begin >= 10000) {
-            this._restartTimer = null;
-            logger.warn(`[${this.id}] Restart cancelled: adopted process did not exit in time`);
-            return;
-          }
-          this._restartTimer = setTimeout(waitAdoptedExit, 250);
-        };
-        return waitAdoptedExit();
-      }
-      this._startAfterRestartWindow();
-    }, 3000);
-  }
-
-  // 延迟窗口届满后的实际启动（窗口内已退出/已取消的守卫在此收敛）
-  _startAfterRestartWindow() {
-    // 延迟窗口内服务器已被其他路径启动 → 放弃
-    if (this.isRunning) return;
-    // 实例目录已被删除（用户卸载）→ 放弃延迟启动
-    if (!fs.existsSync(path.join(this.serverPath, this.jarFile))) {
-      logger.info(`[${this.id}] Restart cancelled: server jar no longer exists`);
-      return;
-    }
+  async _restartCurrentRun(operation) {
     try {
+      await this._stopCurrentRun();
+      if (this._restartOperation !== operation) return;
+      operation.launching = true;
       this.start();
-    } catch (e) {
-      logger.error('Restart failed:', e);
+      if (this._restartOperation !== operation) return;
+      await once(this.process, 'spawn');
+    } finally {
+      if (this._restartOperation === operation) this._restartOperation = null;
     }
   }
 
-  // 取消待执行的延迟启动（用户 stop/kill 实例时调用）
   cancelRestart() {
-    if (this._restartTimer) {
-      clearTimeout(this._restartTimer);
-      this._restartTimer = null;
+    const cancelled = Boolean(this._restartTimer || this._restartOperation);
+    clearTimeout(this._restartTimer);
+    this._restartTimer = null;
+    if (this._restartOperation) {
+      this._restartOperation.reject(new AppError(ErrorCodes.TASK_CANCELLED, '重启已取消'));
+      this._restartOperation = null;
     }
+    return cancelled;
   }
 
   kill() {
-    // 主动强杀：标记为手动，避免被误判为崩溃触发自动重启，
-    // 并取消重启的延迟启动
+    this._assertNoBackupOperation();
     this._manualStop = true;
+    this._cancelCrashRecovery();
     this.cancelRestart();
-    // pid 来源：常规实例取子进程句柄；接管实例（管道不可恢复）取 pid 文件记录。
-    // 接管实例杀后的运行态收尾由看门狗轮询完成（检测死亡 → stopped 事件 →
-    // 清 pid 文件），此处不重复清理。
+    if (this._stopOperation?.sameRun()) this._stopOperation.terminating = true;
+    this._terminateCurrentRun();
+  }
+
+  _terminateCurrentRun() {
     const pid = this.process?.pid ?? (this.adopted ? this.adoptedPid : null);
-    if (pid) {
-      // 终止整棵进程树（Bundler 结构的 server.jar 会派生真正运行的 JVM），
-      // 平台策略见 utils/process-tree.js；start() 在非 win32 上以 detached 启动，
-      // 故按进程组终止有效
-      killProcessTree(this.process, { pid, detached: true });
-    }
+    if (pid) killProcessTree(this.process, { pid, detached: true });
     this._rconCleanup();
   }
 
@@ -1210,121 +1394,121 @@ export class MCServerInstance extends EventEmitter {
     }
   }
 
-  /**
-   * 执行一条命令并落命令史。
-   * @param {string} command
-   * @param {{ source?: string }} [options] 命令史来源标记（默认 `api`）。
-   *   仅供调用方区分「同一端点的不同语义」——目前是审计页的行内重发（`replay`），
-   *   使重发在命令史里可辨认，而不是与一次普通下发混同。
-   */
-  async sendCommand(command, { source = 'api' } = {}) {
-    if (!this.isRunning || (!this.process && !this.adopted)) {
-      throw new Error('Server is not running');
+  _currentRunGuard() {
+    const { process, adoptedPid, startTime } = this;
+    return () =>
+      this.isRunning &&
+      this.process === process &&
+      this.adoptedPid === adoptedPid &&
+      this.startTime === startTime;
+  }
+
+  _deliverConsoleCommand(command) {
+    const stdin = this.process?.stdin;
+    if (!stdin || stdin.destroyed || stdin.writable === false || stdin.writableEnded) {
+      throw new AppError(ErrorCodes.COMMAND_NOT_SENT);
     }
-    // 兜底：剥离前导 `/` —— MC 服务器控制台/RCON 不接受 `/` 前缀
-    // （仅玩家聊天框需要 `/`，客户端某些入口可能误带）
-    if (typeof command === 'string' && command.startsWith('/')) {
-      command = command.replace(/^\/+/, '');
-    }
-    // 防御：非 tellraw 命令中的真实换行符会被 stdin 当作命令分隔符，
-    // 导致多行内容被截断。tellraw 使用 JSON 转义 \n（两字符），不受影响。
-    if (typeof command === 'string' && command.includes('\n') && !command.startsWith('tellraw')) {
-      command = command.replace(/\n/g, ' ');
-    }
-    // 拦截 weather 命令，同步更新天气缓存
-    const weatherMatch = command.match(/^weather\s+(clear|rain|thunder)/i);
-    if (weatherMatch) {
-      this._weather = weatherMatch[1].toLowerCase();
-      this.emit('weatherUpdate', { weather: this._weather });
-    }
-    // 拦截 time 命令，同步更新时间缓存并立即推送
-    const timePresetMatch = command.match(/^time\s+set\s+(day|night|noon|midnight)/i);
-    if (timePresetMatch) {
-      const presetMap = { day: 1000, night: 13000, noon: 6000, midnight: 18000 };
-      const tick = presetMap[timePresetMatch[1].toLowerCase()];
-      if (tick != null) {
-        this._worldTime = tick;
-        this._emitPerformance();
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new AppError(ErrorCodes.COMMAND_UNCONFIRMED)), 5000);
+      const finish = (err) => {
+        clearTimeout(timer);
+        if (err) reject(new AppError(ErrorCodes.COMMAND_NOT_SENT));
+        else resolve(null);
+      };
+      // write 返回 false 表示背压；只有写回调能确认管道是否接受。
+      try {
+        stdin.write(`${command}\n`, finish);
+      } catch (err) {
+        finish(err);
       }
+    });
+  }
+
+  async sendCommand(
+    command,
+    { source = 'api', stopping = false, requireResponse = false, isCurrentRun } = {},
+  ) {
+    if (!this.isRunning || (!this.process && !this.adopted)) {
+      throw new AppError(ErrorCodes.INSTANCE_NOT_RUNNING);
     }
-    const timeSetMatch = command.match(/^time\s+set\s+(\d+)/i);
-    if (timeSetMatch) {
-      this._worldTime = parseInt(timeSetMatch[1], 10) % 24000;
-      this._emitPerformance();
+    if (!stopping && this.startupState === 'starting') {
+      throw new AppError(ErrorCodes.INSTANCE_STARTING);
     }
-    const timeAddMatch = command.match(/^time\s+add\s+(\d+)/i);
-    if (timeAddMatch) {
-      this._worldTime = (this._worldTime + parseInt(timeAddMatch[1], 10)) % 24000;
-      this._emitPerformance();
-    }
-    // 记录用户发送的命令到日志流（终端显示 "> 命令"，供操作反馈上下文）
-    this.emit('log', { text: `> ${command}`, type: 'command' });
-    // : 命令历史落库（chokepoint finally）
-    const cmdStart = Date.now();
-    let cmdSuccess = true;
+    command = command
+      .trim()
+      .replace(/^\/+/, '')
+      .replace(/[\r\n]+/g, ' ')
+      .trim();
+    if (!command) throw new AppError(ErrorCodes.VALIDATION_ERROR, 'Command is required');
+    const sameRun = this._currentRunGuard();
+    const assertCanSend = () => {
+      if (!sameRun() || (isCurrentRun && !isCurrentRun()))
+        throw new AppError(ErrorCodes.COMMAND_NOT_SENT, '命令未送达：实例运行轮次已变更');
+      if (
+        isBackupInProgress(this.id) &&
+        /^(?:minecraft:)?(?:save-(?:on|off|all)|stop)(?:\s|$)/i.test(command)
+      ) {
+        throw new AppError(
+          ErrorCodes.BACKUP_IN_PROGRESS,
+          '在线备份进行中，请等待备份完成后再执行该命令',
+        );
+      }
+    };
+    const auditCommand = maskSensitiveCommand(command);
+    const startedAt = Date.now();
+    let success = false;
+    let response = null;
     try {
-      // 优先使用 RCON：stdin 管道对含特殊字符（" [ ] { }）的命令处理不可靠，
-      // 特别是 MC 1.20.5+ Data Components 格式（如 give ... [enchantments={...}]）
-      // 中的引号会被 stdin 错误解析，导致附魔装备给予失败。
-      // RCON 协议以二进制包传输，不存在字符转义问题。
+      assertCanSend();
+      this.emit('log', { text: `> ${auditCommand}`, type: 'command' });
       if (this.isRconConnected) {
         try {
-          // await 确保命令真正送达并收到响应后才返回，
-          // 让前端顺序 await 时多条命令串行化，避免并发投递导致丢失
-          const response = await this._rconSend(command);
-          // MC 命令执行失败（离线玩家/未知物品/语法错误）不会抛异常，只返回错误文本；
-          // 解析响应检测失败短语并抛错，避免前端误判为成功
-          if (typeof response === 'string') {
-            const failure = matchCommandFailure(response);
-            if (failure) {
-              const err = new Error(`命令执行失败: ${failure}`);
-              err.isCommandExecutionError = true;
-              throw err;
-            }
+          response = await this._rconSend(command, assertCanSend);
+          if (typeof response !== 'string') throw new AppError(ErrorCodes.COMMAND_UNCONFIRMED);
+          const failure = matchCommandFailure(response);
+          if (failure) {
+            const err = new AppError(ErrorCodes.COMMAND_REJECTED, `命令执行失败: ${failure}`);
+            err.isCommandExecutionError = true;
+            throw err;
           }
+          success = true;
           return response;
         } catch (err) {
-          // 命令执行失败（已解析出失败响应）→ 直接抛错，不回退 stdin（避免重复执行）
-          if (err && err.isCommandExecutionError) throw err;
-          // 仅当确认命令未送达（连接建立失败 / 队列滞留项：命令从未写入 RCON
-          // socket）才回退 stdin 兜底。其余错误（"Timeout for packet id N"、
-          // 在途断连 "Connection closed"）都发生在发包之后——超时仅代表响应未在
-          // 5s 内返回、命令很可能已执行（RCON 协议"响应超时≠命令未执行"），
-          // 回退 stdin 重发会让 give/kick/tp/ban 等非幂等命令重复生效
-          // → 直接向调用方抛错，保持 RCON 队列语义
-          if (!(err && err.rconConfirmedNotSent)) throw err;
-          logger.warn(`[Instance ${this.id}] RCON send failed, fallback to stdin:`, err.message);
-          this._writeToStdin(command + '\n');
-          return null;
+          if (err instanceof AppError) throw err;
+          // 已发包但没收到回执时不能重发给 stdin，命令可能已经生效。
+          if (!err?.rconConfirmedNotSent) throw new AppError(ErrorCodes.COMMAND_UNCONFIRMED);
         }
       }
-      // 接管实例无 stdin 管道（面板重启后接管，stdout/stdin 随旧面板进程消失）：
-      // RCON 不可达时命令没有任何投递通道，如实报错而非静默丢弃
+      assertCanSend();
+      if (requireResponse) throw new AppError(ErrorCodes.RCON_UNAVAILABLE);
       if (!this.process && this.adopted) {
-        throw new Error('接管实例无控制台管道且 RCON 未连接，命令未送达——请在实例设置中启用 RCON');
+        throw new AppError(
+          ErrorCodes.COMMAND_NOT_SENT,
+          '接管实例无控制台管道且 RCON 不可用，命令未送达',
+        );
       }
-      this._writeToStdin(command + '\n');
+      await this._deliverConsoleCommand(command);
+      success = true;
       return null;
-    } catch (err) {
-      cmdSuccess = false;
-      throw err;
     } finally {
       try {
         CommandHistoryModel.create({
           instanceId: this.id,
-          // 落库前遮蔽敏感值（用户自由输入的命令可能含密钥；见 utils/command-mask.js）
-          command: maskSensitiveCommand(command),
+          command: auditCommand,
           source,
-          success: cmdSuccess ? 1 : 0,
-          durationMs: Date.now() - cmdStart,
+          success,
+          // 审计只存回执是否存在；原始回包可能回显命令中的敏感参数。
+          response: typeof response === 'string' ? '' : null,
+          durationMs: Date.now() - startedAt,
         });
       } catch {
-        /* audit write failure never blocks command flow */
+        // 审计写入失败不影响已发出的命令。
       }
     }
   }
 
   sendCommandWithResponse(command, { timeout = 5000 } = {}) {
+    const sameRun = this._currentRunGuard();
     return new Promise((resolve, reject) => {
       if (!this.isRunning || (!this.process && !this.adopted)) {
         return reject(new Error('Server is not running'));
@@ -1340,10 +1524,14 @@ export class MCServerInstance extends EventEmitter {
         // 调用方级超时：rcon-client 仅在请求出队执行时才启动全局 5000ms 超时，
         // 队列滞留期（前序请求在途占满 maxPending=1）无任何超时计时，
         // 出队后的超时也非调用方传入值。这里手动计时强制 timeout 上限。
+        let expired = false;
         const timeoutTimer = setTimeout(() => {
+          expired = true;
           reject(new Error('Command timeout'));
         }, timeout);
-        this._rconSend(command).then(
+        this._rconSend(command, () => {
+          if (expired || !sameRun()) throw new Error('Command no longer applicable');
+        }).then(
           (result) => {
             clearTimeout(timeoutTimer);
             resolve(result);
@@ -1419,12 +1607,11 @@ export class MCServerInstance extends EventEmitter {
    * 探出来的「连不上」是「没启动」而不是「端口没放行」，报给用户只会误导。
    */
   async refreshReachability() {
-    if (!this.isRunning) {
-      this._reachability = null;
-      return null;
-    }
+    if (!this.isRunning || this.startupState === 'starting') return null;
+    const processIdentity = this.process ?? this.adoptedPid;
     const port = parseInt(this.properties['server-port'] || '0', 10);
     const result = await checkInstanceReachability({ port, publicHost: this._publicIp });
+    if (!this.isRunning || processIdentity !== (this.process ?? this.adoptedPid)) return null;
     this._reachability = result.state;
     return this._reachability;
   }
@@ -1439,6 +1626,7 @@ export class MCServerInstance extends EventEmitter {
       id: this.id,
       name: this.name,
       isRunning: this.isRunning,
+      startupState: this.startupState,
       // 可用通道分开报：「能不能执行命令」与「能不能读到结构化事实」是两件事。
       // rcon 判据是配置齐全且在运行（RCON 无握手概念，配置即判据，每次实时读）；
       // msmp 判据是**最近一次查询实测成功**（端口可随机、可被反代，配置推不出可用性）。
@@ -1458,7 +1646,8 @@ export class MCServerInstance extends EventEmitter {
       addressType,
       // 异步探测的结果缓存在实例上：toStatus 是同步方法且会被列表接口逐实例调用，
       // 在里面直接探端口会让一次列表请求退化成 N 次超时等待
-      reachability: this._reachability ?? null,
+      reachability:
+        this.isRunning && this.startupState !== 'starting' ? (this._reachability ?? null) : null,
       players: Array.from(this.players.values()),
       playerCount: this.players.size,
       maxPlayers: parseInt(props['max-players'] || '20'),
@@ -1497,8 +1686,9 @@ export class MCServerInstance extends EventEmitter {
       startTime: this.startTime ? new Date(this.startTime).toISOString() : null,
       // ── 运维韧性字段──
       autoStart: this.autoStart,
-      circuitBreakerTripped: this._circuitBreakerTripped,
-      consecutiveCrashes: this._consecutiveCrashes,
+      circuitBreakerTripped: this.circuitBreakerTripped,
+      checkingStartupStability: this._crashRecoveryTimer !== null,
+      consecutiveCrashes: this.circuitBreakerCrashCount || this._consecutiveCrashes,
       // ── 启动配置（供实例设置弹窗读写）──
       startCommand: this.startCommand,
       jvmArgs: this.jvmArgs,

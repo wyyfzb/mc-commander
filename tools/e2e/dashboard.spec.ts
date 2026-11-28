@@ -28,6 +28,45 @@ async function setupConnection(page: Page) {
 }
 
 test.describe('仪表盘', () => {
+  for (const startupState of ['starting', 'unknown'] as const) {
+    test(`排障自检按 ${startupState} 判定，不把 RCON 配置当成已连通`, async ({ page }) => {
+      await setupConnection(page)
+      await page.setExtraHTTPHeaders({
+        'x-mock-ws-group': 'dashboard',
+        'x-mock-instance-startup-state': startupState,
+      })
+      await page.route('**/api/v1/instances/e2e-demo', async (route) => {
+        const response = await route.fetch()
+        const body = await response.json()
+        await route.fulfill({
+          response,
+          json: {
+            ...body,
+            data: {
+              ...body.data,
+              startupState,
+              isRunning: true,
+              mcVersion: '26.3',
+              capabilities: { rcon: true, msmp: false, msmpPush: false },
+            },
+          },
+        })
+      })
+      await page.goto('/help?instance=e2e-demo')
+      const check = page.getByTestId('self-check')
+      await expect(
+        check.getByText(startupState === 'starting' ? '服务器启动中' : '服务器就绪状态未知'),
+      ).toBeVisible()
+      await expect(check.getByText('全部正常')).toHaveCount(0)
+      if (startupState === 'starting') {
+        await expect(check.getByText('等待服务器就绪')).toHaveCount(2)
+      } else {
+        await expect(check.getByText('已配置，连通性未验证')).toBeVisible()
+        await expect(check.getByText('未确认推送可用')).toBeVisible()
+      }
+    })
+  }
+
   test('统计卡渲染：顶部三卡 + 右栏面板三分区 + 健康标签 + 实时数据', async ({ page }) => {
     await setupConnection(page)
     await page.goto('/dashboard')
@@ -87,8 +126,9 @@ test.describe('仪表盘', () => {
     // 精确匹配（非子串）：夹具名一旦重新内嵌日期，这里必须变红
     await expect(page.getByText('手动备份', { exact: true })).toBeVisible()
     await expect(page.getByText('失败的备份', { exact: true })).toBeVisible()
-    await expect(page.getByText('已就绪', { exact: true })).toBeVisible()
-    await expect(page.getByText('失败', { exact: true })).toBeVisible()
+    const aside = page.getByTestId('dashboard-aside')
+    await expect(aside.getByText('已就绪', { exact: true })).toBeVisible()
+    await expect(aside.getByText('失败', { exact: true })).toBeVisible()
     // 入口落在侧栏一级的备份页（备份不再是设置子路由）
     await page.getByRole('button', { name: '查看全部备份' }).click()
     await expect(page).toHaveURL(/\/backups$/)

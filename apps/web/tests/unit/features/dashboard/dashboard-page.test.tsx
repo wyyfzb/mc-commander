@@ -240,7 +240,8 @@ describe('DashboardPage 超标告警条接线', () => {
       useNotificationStore.setState({ activeAlerts: new Set(['lowTps']) })
     })
     // 失败横幅占槽时告警条让位（PageHeader 的 banner 是单槽），且不得两条同屏
-    expect(screen.getByText('系统资源获取失败')).toBeInTheDocument()
+    const failure = screen.getByText('系统资源获取失败').closest('[role="status"]')
+    expect(failure?.querySelector('svg')).toHaveClass('lucide-circle-alert')
     expect(screen.queryByText(/服务器状态异常/)).not.toBeInTheDocument()
   })
 })

@@ -38,6 +38,7 @@ beforeAll(() => {
       port INTEGER DEFAULT 25565,
       auto_start INTEGER DEFAULT 0,
       auto_restart INTEGER DEFAULT 1,
+      circuit_breaker_crash_count INTEGER NOT NULL DEFAULT 0,
       total_uptime INTEGER DEFAULT 0,
       jvm_args TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
@@ -277,6 +278,17 @@ describe('InstanceModel.migrateFromJson（JSON 配置迁移）', () => {
     const inst = InstanceModel.getById('legacy-1');
     expect(inst.name).toBe('Legacy');
     expect(inst.serverPath).toBe('/data/servers/legacy');
+  });
+
+  it('恢复字段写入失败时不留下基础行，修正配置后可重试', () => {
+    const config = { id: 'restore-retry', name: '待恢复', description: {}, autoRestart: false };
+    const directory = '/data/servers/restore-retry';
+    expect(() => InstanceModel.migrateFromJson(config, directory)).toThrow();
+    expect(InstanceModel.getById(config.id)).toBeNull();
+    expect(InstanceModel.migrateFromJson({ ...config, description: '已修正' }, directory)).toBe(
+      true,
+    );
+    expect(InstanceModel.getById(config.id)).toMatchObject({ autoRestart: false });
   });
 
   it('迁移时恢复 instance.json 里的运行期偏好（startCommand/jvmArgs/auto 开关）', () => {

@@ -43,7 +43,8 @@ vi.mock('@/api/queries', () => ({
   useInstances: () => ({ data: instancesData.list }),
 }))
 
-vi.mock('@/api/players', () => ({
+vi.mock('@/api/players', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/players')>()),
   apiSendCommand: (...args: unknown[]) => sendCommandMock(...args),
 }))
 
@@ -91,7 +92,7 @@ async function replayViaDialog(user: ReturnType<typeof userEvent.setup>) {
 describe('AuditPage 命令重发', () => {
   beforeEach(() => {
     sendCommandMock.mockReset()
-    sendCommandMock.mockResolvedValue({ response: 'ok' })
+    sendCommandMock.mockResolvedValue('')
     cmdRefetch.mockReset()
     historyState.rows = [cmdRow()]
     instancesData.list = [{ id: 'survival', name: '生存服', isRunning: true, playerCount: 0 }]
@@ -133,13 +134,13 @@ describe('AuditPage 命令重发', () => {
     expect(await screen.findByText(/将向实例「生存服」重发/)).toBeInTheDocument()
   })
 
-  it('确认框明示不可逆风险（stop/ban 之类会真实执行）', async () => {
+  it('确认框明示重发包含不可逆命令', async () => {
     const user = userEvent.setup()
     renderPage()
 
     await user.click(await screen.findByRole('button', { name: '重发命令 stop' }))
 
-    expect(await screen.findByText(/不可逆命令，重发会真实执行/)).toBeInTheDocument()
+    expect(await screen.findByText(/不可逆命令，重发会向实例再次发送命令/)).toBeInTheDocument()
   })
 
   it('含被遮蔽敏感值的行改口径提示（重发遮蔽文本多半失败，不假装等价）', async () => {
@@ -173,7 +174,18 @@ describe('AuditPage 命令重发', () => {
 
     await replayViaDialog(user)
 
-    expect(await screen.findByText('命令已重发')).toBeInTheDocument()
+    expect(await screen.findByText('命令已重发，游戏已响应')).toBeInTheDocument()
+  })
+
+  it('仅投递的重发更新历史，不确认执行', async () => {
+    sendCommandMock.mockResolvedValue(null)
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(await screen.findByRole('button', { name: '重发命令 stop' }))
+    await user.click(screen.getByRole('button', { name: '重发' }))
+    expect(await screen.findByText('命令已投递，未确认游戏执行')).toBeInTheDocument()
+    expect(cmdRefetch).toHaveBeenCalledOnce()
+    expect(screen.queryByText('命令已重发，游戏已响应')).not.toBeInTheDocument()
   })
 
   it('下发失败时提示失败原因，且不重取历史（没有新行）', async () => {

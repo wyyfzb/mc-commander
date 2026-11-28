@@ -110,9 +110,6 @@ function makeInstance(overrides = {}) {
     autoRestart: false,
     autoStart: false,
     isRunning: true,
-    _circuitBreakerTripped: false,
-    _consecutiveCrashes: 0,
-    _crashWindowStart: null,
     properties: { difficulty: 'peaceful', 'view-distance': '10' },
     toStatus: vi.fn(() => makeStatusFixture()),
     start: vi.fn(),
@@ -363,7 +360,7 @@ describe('status 输入侧契约 - PUT /instances/:id/properties', () => {
       'view-distance': '12',
     });
     // difficulty 为运行期命令键：运行中下发 difficulty hard（view-distance 需重启）
-    expect(instance.sendCommand).toHaveBeenCalledWith('difficulty hard');
+    expect(instance.sendCommand).toHaveBeenCalledWith('difficulty hard', { requireResponse: true });
     expect(res.body.data.restartRequired).toEqual(['view-distance']);
   });
 

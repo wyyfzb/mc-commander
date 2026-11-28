@@ -14,6 +14,30 @@
    只到 8G 会让 32/64 GB 的机器选不到该给的内存，只能先建 8G 再进设置里拖 */
 export const MEMORY_TIERS_GB = [1, 2, 4, 8, 16, 32, 64] as const
 
+export function hasHostMemoryTotal(total: number | null | undefined): total is number {
+  return total != null && Number.isFinite(total) && total > 0
+}
+
+export function readHostMemoryPercent(
+  total: number | null | undefined,
+  percent: number | null | undefined,
+): number | null {
+  // 总量为 0 时采集端的 0% 只是占位；有效总量下的 0% 才是读数。
+  return hasHostMemoryTotal(total) && percent != null && percent >= 0 && percent <= 100
+    ? percent
+    : null
+}
+
+export function readHostMemory(
+  stats?: { memoryUsage: number; totalMemory: number; memoryPercent: number } | null,
+): { used: number; total: number; percent: number } | null {
+  if (!stats) return null
+  const { memoryUsage: used, totalMemory: total } = stats
+  const percent = readHostMemoryPercent(total, stats.memoryPercent)
+  if (percent == null || !Number.isFinite(used) || used < 0) return null
+  return { used, total, percent }
+}
+
 /** 系统保留比例与下限（低于 1 GB 时面板自身就可能被 OOM 杀掉） */
 export const SYSTEM_RESERVE_RATIO = 0.15
 export const SYSTEM_RESERVE_MIN_GB = 1

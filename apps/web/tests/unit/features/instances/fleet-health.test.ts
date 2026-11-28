@@ -15,15 +15,50 @@ import { mockInstanceStatus } from '@tests/support/handlers'
 import type { InstanceStatus } from '@/api/types'
 
 function status(overrides: Partial<InstanceStatus> = {}): InstanceStatus {
-  return { ...mockInstanceStatus, ...overrides }
+  const startupState =
+    overrides.startupState ?? (overrides.isRunning === false ? 'stopped' : 'ready')
+  return { ...mockInstanceStatus, startupState, ...overrides }
 }
 
 describe('fleetIssue · 单台实例的结论', () => {
-  it('熔断优先于一切：即使 TPS 正常也报故障', () => {
+  it('进程未运行时仍展示反复退出及自动启动暂停', () => {
+    expect(fleetIssue(status({ circuitBreakerTripped: true, isRunning: false }))).toEqual({
+      level: 'error',
+      label: '反复退出',
+      description: '服务器反复退出，已暂停自动启动。',
+    })
+  })
+
+  it('试启进程未进入观察时展示启动中并保留故障档', () => {
     const issue = fleetIssue(
-      status({ circuitBreakerTripped: true, consecutiveCrashes: 5, tps: 20 }),
+      status({
+        circuitBreakerTripped: true,
+        startupState: 'starting',
+        checkingStartupStability: false,
+      }),
     )
-    expect(issue).toMatchObject({ level: 'error', label: '崩溃熔断' })
+    expect(issue).toEqual({
+      level: 'error',
+      label: '试启中',
+      description: '服务器正在启动',
+    })
+  })
+
+  it('收到观察状态才展示确认稳定中并保留故障档', () => {
+    const issue = fleetIssue(
+      status({
+        circuitBreakerTripped: true,
+        isRunning: true,
+        checkingStartupStability: true,
+        consecutiveCrashes: 5,
+        tps: 20,
+      }),
+    )
+    expect(issue).toEqual({
+      level: 'error',
+      label: '确认稳定中',
+      description: '正在确认服务器能否稳定运行',
+    })
   })
 
   it('运行中 TPS 低于健康线报卡顿，严重档升级为 error', () => {
@@ -39,6 +74,13 @@ describe('fleetIssue · 单台实例的结论', () => {
     // 停服后 tps 是上一次运行的残留读数，据此报警会把停着的实例整片标成故障
     expect(fleetIssue(status({ isRunning: false, tps: 4 }))).toBeNull()
   })
+
+  it.each(['starting', 'unknown'] as const)(
+    '%s 不使用残留 TPS 或可达性判定告警',
+    (startupState) => {
+      expect(fleetIssue(status({ startupState, tps: 4, reachability: 'blocked' }))).toBeNull()
+    },
+  )
 
   it('未熔断但有近期崩溃报告警', () => {
     expect(fleetIssue(status({ consecutiveCrashes: 2 }))).toMatchObject({
@@ -67,7 +109,7 @@ describe('buildFleetRows · 排序', () => {
       status({ id: 'stopped', name: '甲 已停止', isRunning: false }),
       status({ id: 'healthy', name: '乙 健康' }),
       status({ id: 'warn', name: '丙 告警', tps: 16 }),
-      status({ id: 'broken', name: '丁 故障', circuitBreakerTripped: true, consecutiveCrashes: 3 }),
+      status({ id: 'broken', name: '丁 故障', circuitBreakerTripped: true, isRunning: false }),
     ])
     expect(rows.map((r) => r.status.id)).toEqual(['broken', 'warn', 'healthy', 'stopped'])
   })
@@ -121,13 +163,17 @@ describe('fleetRowSummary · 窄容器摘要行', () => {
     expect(text).toBe('3 人在线 · TPS 20.0 · 内存 3.2 GB')
   })
 
+  it('已就绪但尚无 TPS 样本时不判断卡顿，摘要不补默认值', () => {
+    const instance = status({ tps: null, playerCount: 2, memoryUsage: 0 })
+    expect(fleetIssue(instance)).toBeNull()
+    expect(fleetRowSummary(instance)).toBe('2 人在线')
+  })
+
   it('内存读数为 0 时不出「内存 0 GB」——那读起来像已经耗光', () => {
     expect(fleetRowSummary(status({ memoryUsage: 0 }))).not.toContain('内存')
   })
 
   it('已停止带版本号，便于确认停的是哪一版', () => {
-    expect(fleetRowSummary(status({ isRunning: false, mcVersion: '1.21.4' }))).toBe(
-      '已停止 · 1.21.4',
-    )
+    expect(fleetRowSummary(status({ isRunning: false, mcVersion: '1.21.4' }))).toBe('1.21.4')
   })
 })

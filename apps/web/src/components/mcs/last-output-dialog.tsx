@@ -1,6 +1,6 @@
 /**
  * LastOutputDialog —— 实例末尾日志弹窗（崩溃排障深入链接）
- * - 入口：崩溃/熔断 toast「查看末尾日志」action / 启动失败 toast（全局单例，ui store 控制）
+ * - 入口：帮助中心排障、崩溃告警与启动失败提示（全局单例，ui store 控制）
  * - 打开时拉取 GET /instances/:id 消费 lastOutput（服务端进程末尾输出，崩溃时最接近现场）
  * - 手动刷新 + 空态诚实提示；等宽滚动区展示，不截断
  */
@@ -36,7 +36,7 @@ export function LastOutputDialog() {
     setError(null)
     try {
       const status = await apiGet<{ lastOutput: string | null }>(
-        `/api/v1/instances/${id}`,
+        `/api/v1/instances/${encodeURIComponent(id)}`,
         useConnectionStore.getState(),
       )
       setOutput(status.lastOutput)

@@ -118,7 +118,7 @@ describe('WebhookService._buildPlatformRequest 各平台格式', () => {
 
     expect(req.body.msg_type).toBeUndefined();
     expect(req.body.msgtype).toBe('text');
-    expect(req.body.text.content).toContain('服务器已启动');
+    expect(req.body.text.content).toContain('服务器正在启动');
 
     const parsed = new URL(req.url);
     const timestamp = parsed.searchParams.get('timestamp');

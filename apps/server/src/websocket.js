@@ -16,6 +16,7 @@ import { parseDbTime } from './utils/db-time.js';
 import { inFlightDeploys } from './utils/deploy-inflight.js';
 import { collectSystemStats } from './utils/system-stats.js';
 import { observeWsPayload } from './utils/ws-contract.js';
+import { buildStatusSnapshot } from './services/mc-server/msmp-notifications.js';
 
 export const WSEvents = {
   LOG: 'log',
@@ -189,7 +190,7 @@ const STATUS_EVENT_TYPES = new Set(WS_STATUS_EVENT_NAMES);
 // 跃迁子事件中属「意外失败」的关键事件：用户不一定正盯着出事的实例，投递面取全局，
 // 否则多实例部署下非当前实例的崩溃只有恰好打开该实例控制台才看得见。
 // 同口径的无订阅全局播报也适用于失败类事件（备份失败/任务失败/Webhook 投递失败，
-// 见 broadcastCriticalInstanceEvent）。started/stopped/ready/save 是常规生命周期
+// 见 broadcastGlobalInstanceEvent）。started/stopped/ready/save 是常规生命周期
 // （多数由用户在面板上发起），保持订阅内投递——跨实例广播只会制造噪音
 
 /// 通知事件落库（广播前）：返回自增 id 供消息携带与断线补齐。
@@ -463,12 +464,7 @@ export function setupWebSocket(wss, serverManager) {
               ? (worldUpgradeInFlight.get(msg.instanceId) ?? null)
               : undefined;
             const snapshotData = {
-              status: instance.isRunning ? 'running' : 'stopped',
-              isRunning: Boolean(instance.isRunning),
-              players: Array.from(instance.players?.values?.() ?? []),
-              tps: typeof instance.tps === 'number' ? instance.tps : null,
-              // 推送面真值随订阅快照一起给（与 REST 的 capabilities.msmpPush 同源同义）
-              msmpPush: Boolean(instance.isRunning && instance._msmpNotifConnected),
+              ...buildStatusSnapshot(instance),
               ...(inFlight === undefined
                 ? {}
                 : { worldUpgrade: inFlight && { progress: inFlight.progress } }),
@@ -670,11 +666,18 @@ export function setupWebSocket(wss, serverManager) {
   /// 唯一实现，四条投递路径（实例广播 / 关键事件 / 全局通知 / broadcastAll）共用，
   /// 避免背压判据分叉。includeUnsubscribed=true 的关键事件与全局事件投递给全部在线
   /// 客户端——**角色过滤必须在这里**：只在 subscribe 处拦会漏掉这四条全局路径
-  function fanOut(message, { type, instanceId = null, includeUnsubscribed = false }) {
+  function fanOut(
+    message,
+    { type, instanceId = null, includeUnsubscribed = false, unsubscribedMessage },
+  ) {
     for (const client of clients) {
       if (client.readyState !== 1) continue;
       if (!mayReceiveEvent(client, type)) continue;
-      if (!includeUnsubscribed && !client.subscribedInstances.has(instanceId)) continue;
+      const payload =
+        includeUnsubscribed || client.subscribedInstances.has(instanceId)
+          ? message
+          : unsubscribedMessage;
+      if (!payload) continue;
       // 背压保护：慢客户端缓冲超阈值时跳过高频 LOG，超上限则断开。
       if (client.bufferedAmount > 1024 * 1024) {
         if (type === WSEvents.LOG) continue;
@@ -684,7 +687,7 @@ export function setupWebSocket(wss, serverManager) {
           continue;
         }
       }
-      client.send(message);
+      client.send(payload);
     }
   }
 
@@ -719,12 +722,9 @@ export function setupWebSocket(wss, serverManager) {
     }
   }
 
-  /// 关键实例事件派发（与 crash / 熔断同款）：落库为全局行（instance_id 置空，
-  /// 断线补齐对任何订阅者可见）+ 无订阅全局播发。适用「用户不一定正盯着出事
-  /// 实例」的意外失败——订阅过滤会把非当前实例的失败吞到只剩恰好打开该实例
-  /// 控制台的人。信封与载荷仍携带实例归属，前端据此跳转；角色过滤不受影响
-  /// （fanOut 内 mayReceiveEvent 照常生效，只读的失败静音是既有取舍）
-  function broadcastCriticalInstanceEvent(type, data) {
+  // 实例异常和自动恢复都影响总览，即使客户端没有订阅该实例也需要收到。
+  // 落库为全局行供断线补齐；信封保留实例归属，角色过滤照常生效。
+  function broadcastGlobalInstanceEvent(type, data) {
     observeWsPayload(type, data);
     const eventId = persistNotificationEvent(null, type, data);
     const message = JSON.stringify({
@@ -757,27 +757,31 @@ export function setupWebSocket(wss, serverManager) {
   });
 
   serverManager.on('instance:status', (data) => {
-    // status 快照高频（每 5s performance 附带）；仅状态跃迁子事件落库
+    // 仅状态跃迁子事件落库；快照只描述发送时的状态。
     if (STATUS_EVENT_TYPES.has(data?.event)) {
-      if (CRITICAL_STATUS_EVENTS.has(data.event)) {
-        broadcastCriticalInstanceEvent(WSEvents.STATUS_EVENT, data);
+      if (CRITICAL_STATUS_EVENTS.has(data.event) || data.event === 'auto_start_resumed') {
+        broadcastGlobalInstanceEvent(WSEvents.STATUS_EVENT, data);
         return;
       }
-      // 常规跃迁也落库（实例行，仅订阅者断线补齐可见），但投递仍按订阅过滤
       const eventId = persistNotificationEvent(data.instanceId, WSEvents.STATUS_EVENT, data);
-      fanOut(
-        JSON.stringify({
-          ...(eventId != null ? { eventId } : {}),
-          type: WSEvents.STATUS_EVENT,
-          instanceId: data.instanceId,
-          data,
-          timestamp: Date.now(),
-        }),
-        { type: WSEvents.STATUS_EVENT, instanceId: data.instanceId },
-      );
+      const envelope = {
+        type: WSEvents.STATUS_EVENT,
+        instanceId: data.instanceId,
+        data,
+        timestamp: Date.now(),
+      };
+      // 未订阅者只刷新实例缓存，不推进通知补齐游标。
+      const refreshFleet = ['started', 'ready', 'stopped'].includes(data.event);
+      fanOut(JSON.stringify({ ...envelope, ...(eventId != null ? { eventId } : {}) }), {
+        type: WSEvents.STATUS_EVENT,
+        instanceId: data.instanceId,
+        unsubscribedMessage: refreshFleet
+          ? JSON.stringify({ ...envelope, data: { event: data.event, refreshOnly: true } })
+          : undefined,
+      });
       return;
     }
-    // 没有 event 字段 ⇒ 这是**快照形状**的周期性广播（每 5s 随性能附带），不是跃迁
+    // 没有 event 字段的是状态快照，不是跃迁。
     broadcast(data.instanceId, WSEvents.STATUS_SNAPSHOT, data);
   });
 
@@ -804,7 +808,7 @@ export function setupWebSocket(wss, serverManager) {
   // 备份失败：关键事件（无订阅全局播报 + 落库全局行）——出事实例未必是
   // 当前视图实例，订阅过滤会让失败只有控制台读者看见
   serverManager.on('instance:backupFailed', (data) => {
-    broadcastCriticalInstanceEvent(WSEvents.BACKUP_FAILED, data);
+    broadcastGlobalInstanceEvent(WSEvents.BACKUP_FAILED, data);
   });
 
   // 定时备份因上一备份仍在进行而被跳过（task_scheduler 发出）
@@ -851,12 +855,12 @@ export function setupWebSocket(wss, serverManager) {
 
   // 定时任务执行失败（task_scheduler 发出）：与 backupFailed 同为关键事件
   serverManager.on('instance:taskFailed', (data) => {
-    broadcastCriticalInstanceEvent(WSEvents.TASK_FAILED, data);
+    broadcastGlobalInstanceEvent(WSEvents.TASK_FAILED, data);
   });
 
   // Webhook 投递失败（webhook.service.js 重试耗尽后发出）：同为关键事件，首次失败通知
   serverManager.on('instance:webhookDeliveryFailed', (data) => {
-    broadcastCriticalInstanceEvent(WSEvents.WEBHOOK_DELIVERY_FAILED, data);
+    broadcastGlobalInstanceEvent(WSEvents.WEBHOOK_DELIVERY_FAILED, data);
   });
 
   // 监听器注册：统一在 try 中注册并记录注册失败

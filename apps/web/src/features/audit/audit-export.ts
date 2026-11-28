@@ -12,6 +12,7 @@ import type { AuditLogItem, CommandHistoryItem } from '@/api/types'
 import { formatDurationMs, formatFullDateTime } from '@/lib/format'
 import { downloadXlsx, type XlsxColumn } from '@/lib/xlsx'
 import { getActionLabel } from './action-labels'
+import { formatCommandResult } from './audit-format'
 
 export const AUDIT_EXPORT_MAX_ROWS = 1000
 
@@ -144,7 +145,7 @@ export async function exportCommandHistoryToExcel(
   const rows = (await fetchCommandExportRows(config, params)).map((item) => [
     formatFullDateTime(item.createdAt),
     item.command,
-    item.success ? '成功' : '失败',
+    formatCommandResult(item.success, item.response),
     item.source,
     formatDurationMs(item.durationMs),
   ])

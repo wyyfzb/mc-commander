@@ -18,6 +18,34 @@ import type {
   VersionsResponse,
 } from './types'
 
+const INSTANCE_LIFECYCLE_TIMEOUT_MS = 20_000
+
+export const INSTANCE_RESTART_SPAWNED = '新进程已启动，游戏就绪状态待确认'
+
+/** 重启回执只确认新进程已启动，游戏就绪由实例状态另行确认。 */
+export function apiRestartInstance(config: ConnectionConfig, instanceId: string) {
+  return apiPost<null>(
+    `/api/v1/instances/${encodeURIComponent(instanceId)}/restart`,
+    config,
+    undefined,
+    { timeoutMs: INSTANCE_LIFECYCLE_TIMEOUT_MS },
+  )
+}
+
+export function apiStopInstance(config: ConnectionConfig, instanceId: string) {
+  return apiPost<null>(
+    `/api/v1/instances/${encodeURIComponent(instanceId)}/stop`,
+    config,
+    undefined,
+    { timeoutMs: INSTANCE_LIFECYCLE_TIMEOUT_MS },
+  )
+}
+
+/** 存档回执确认存档已写入磁盘。 */
+export function apiSaveInstance(config: ConnectionConfig, instanceId: string) {
+  return apiPost<null>(`/api/v1/instances/${encodeURIComponent(instanceId)}/save`, config)
+}
+
 /** 服务端版本列表（GET /versions?type=；fabric 额外返回 loaders） */
 export function apiGetServerVersions(config: ConnectionConfig, type: string) {
   return apiGet<VersionsResponse>(`/api/v1/versions?type=${encodeURIComponent(type)}`, config)
@@ -73,7 +101,7 @@ export function apiUninstallInstance(
   })
 }
 
-/** 更新实例配置（PUT /instances/:id；白名单字段：name/description/javaPath/maxMemory/minMemory/jarFile/autoRestart/jvmArgs/startCommand） */
+/** 更新实例配置（PUT /instances/:id）。 */
 export function apiUpdateInstance(
   config: ConnectionConfig,
   instanceId: string,

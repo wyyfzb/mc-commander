@@ -99,6 +99,7 @@ describe('WebSocket 事件格式契约', () => {
       // 及前端 applyWsSnapshot 的口径不一致
       serverManager.getInstance.mockReturnValue({
         isRunning: true,
+        startupState: 'starting',
         players: new Map([['Alice', { name: 'Alice' }]]),
         tps: 20,
       });
@@ -117,12 +118,14 @@ describe('WebSocket 事件格式契约', () => {
         'isRunning',
         'msmpPush',
         'players',
+        'startupState',
         'status',
         'tps',
         'worldUpgrade',
       ]);
       expect(msg.data.msmpPush).toBe(false); // 订阅时还没建立常驻连接
       expect(msg.data.isRunning).toBe(true);
+      expect(msg.data.startupState).toBe('starting');
       expect(msg.data.status).toBe('running'); // 由 isRunning 派生（与 mock 同款）
       expect(msg.data.players).toEqual([{ name: 'Alice' }]); // Map → 数组
       expect(msg.data.tps).toBe(20);

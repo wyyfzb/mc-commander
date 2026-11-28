@@ -68,6 +68,7 @@ function pickTask(
   tasks: ScheduledTask[],
   pick: (task: ScheduledTask) => string | null,
   mode: 'earliest' | 'latest',
+  after = Number.NEGATIVE_INFINITY,
 ): ScheduledTask | null {
   let best: ScheduledTask | null = null
   let bestAt = mode === 'earliest' ? Number.POSITIVE_INFINITY : Number.NEGATIVE_INFINITY
@@ -75,7 +76,7 @@ function pickTask(
     const iso = pick(task)
     if (iso === null) continue
     const at = Date.parse(iso)
-    if (Number.isNaN(at)) continue
+    if (Number.isNaN(at) || at <= after) continue
     if (mode === 'earliest' ? at >= bestAt : at <= bestAt) continue
     best = task
     bestAt = at
@@ -95,20 +96,20 @@ export function TaskList({
 }: TaskListProps) {
   // 列表级单一倒计时时钟（每行独立 useNow 会每行一个 60s 定时器）
   const now = useNow()
-  const enabledCount = tasks.reduce((n, task) => n + (task.isEnabled ? 1 : 0), 0)
-  const nextTask = pickTask(
-    tasks.filter((task) => task.isEnabled),
-    (task) => task.nextRunAt,
-    'earliest',
-  )
+  const enabledTasks = tasks.filter((task) => task.isEnabled)
+  const enabledCount = enabledTasks.length
+  const nextTask = pickTask(enabledTasks, (task) => task.nextRunAt, 'earliest', now)
   const lastTask = pickTask(tasks, (task) => task.lastRunAt, 'latest')
-  const nextRunCountdown = nextTask ? formatNextRunCountdown(nextTask.nextRunAt, now) : null
-  // 启用任务可能没有可解析的下次执行时间；「无启用任务」只在启用数为 0 时成立
+  const hasExpiredSchedule =
+    !nextTask &&
+    enabledTasks.some((task) => task.nextRunAt !== null && Date.parse(task.nextRunAt) <= now)
   const nextRunLabel = nextTask
-    ? (nextRunCountdown ?? formatTaskDate(nextTask.nextRunAt))
-    : enabledCount > 0
-      ? '未排期'
-      : '无启用任务'
+    ? formatNextRunCountdown(nextTask.nextRunAt, now)
+    : hasExpiredSchedule
+      ? '已过期'
+      : enabledCount > 0
+        ? '未排期'
+        : '无启用任务'
   const lastRunMeta = lastTask ? LAST_RUN_STATUS[lastTask.lastRunStatus] : null
   return (
     <Card as="div" size="flush" className="overflow-hidden">

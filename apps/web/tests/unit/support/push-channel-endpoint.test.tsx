@@ -22,7 +22,13 @@ beforeAll(() => server.listen())
 afterEach(() => server.resetHandlers())
 afterAll(() => server.close())
 
-const instance: InstanceSummary = { id: 'i-1', name: '虚构甲服', isRunning: false, playerCount: 0 }
+const instance: InstanceSummary = {
+  id: 'i-1',
+  name: '虚构甲服',
+  isRunning: false,
+  startupState: 'stopped',
+  playerCount: 0,
+}
 const detail: InstanceStatus = { ...mockInstanceStatus, id: 'i-1', name: '虚构甲服' }
 
 describe('mock 端点覆盖：实时推送状态', () => {

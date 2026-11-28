@@ -11,8 +11,20 @@ import { RestartPendingBanner } from '@/features/instances/components/restart-pe
 import { useRestartPendingStore } from '@/stores/restart-pending'
 import type { InstanceSummary } from '@/api/types'
 
-const alpha: InstanceSummary = { id: 'alpha', name: '虚构甲服', isRunning: true, playerCount: 3 }
-const beta: InstanceSummary = { id: 'beta', name: '虚构乙服', isRunning: false, playerCount: 0 }
+const alpha: InstanceSummary = {
+  id: 'alpha',
+  name: '虚构甲服',
+  isRunning: true,
+  startupState: 'starting',
+  playerCount: 3,
+}
+const beta: InstanceSummary = {
+  id: 'beta',
+  name: '虚构乙服',
+  isRunning: false,
+  startupState: 'stopped',
+  playerCount: 0,
+}
 
 describe('RestartPendingBanner', () => {
   beforeEach(() => {

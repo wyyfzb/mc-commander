@@ -10,13 +10,13 @@ import { resolveTheme, useUiStore, type ThemeMode } from '@/stores/ui'
 const REAL_MATCH_MEDIA = window.matchMedia
 
 /** 把操作系统配色钉成指定值（同时记录监听注册，供「系统切换后重解析」断言） */
-function stubSystemDark(dark: boolean) {
+function stubSystemDark(dark: boolean, allowMotion = false) {
   const listeners = new Set<() => void>()
   Object.defineProperty(window, 'matchMedia', {
     writable: true,
     configurable: true,
     value: (query: string) => ({
-      matches: query === '(prefers-color-scheme: dark)' ? dark : false,
+      matches: query === '(prefers-color-scheme: dark)' ? dark : allowMotion,
       media: query,
       onchange: null,
       addListener: () => {},
@@ -33,7 +33,7 @@ function stubSystemDark(dark: boolean) {
         writable: true,
         configurable: true,
         value: (query: string) => ({
-          matches: query === '(prefers-color-scheme: dark)' ? nextDark : false,
+          matches: query === '(prefers-color-scheme: dark)' ? nextDark : allowMotion,
           media: query,
           onchange: null,
           addListener: () => {},
@@ -160,6 +160,67 @@ describe('useResolvedTheme', () => {
 
     const { result } = renderHook(() => useResolvedTheme())
     expect(result.current).toBe('dark')
+  })
+})
+
+describe('主题切换意图', () => {
+  function stubDeferredReveals() {
+    const reveals: Array<{ update: () => unknown; finish: () => void }> = []
+    const original = Object.getOwnPropertyDescriptor(document, 'startViewTransition')
+    const start: Document['startViewTransition'] = (update) => {
+      if (typeof update !== 'function') throw new Error('缺少主题更新回调')
+      let finish!: () => void
+      const finished = new Promise<void>((resolve) => {
+        finish = resolve
+      })
+      reveals.push({ update, finish })
+      return {
+        finished,
+        ready: finished,
+        updateCallbackDone: finished,
+        skipTransition: () => {},
+      } as ViewTransition
+    }
+    Object.defineProperty(document, 'startViewTransition', { configurable: true, value: start })
+    return {
+      reveals,
+      async restore() {
+        for (const reveal of reveals) reveal.finish()
+        await Promise.resolve()
+        if (original) Object.defineProperty(document, 'startViewTransition', original)
+        else Reflect.deleteProperty(document, 'startViewTransition')
+      },
+    }
+  }
+
+  it('系统在快照回调前变色，仍保存点击时指向的主题', async () => {
+    const { changeThemeFrom } = await import('@/hooks/use-resolved-theme')
+    const system = stubSystemDark(true, true)
+    useUiStore.setState({ theme: 'system' })
+    const { reveals, restore } = stubDeferredReveals()
+    try {
+      changeThemeFrom(document.body)
+      system.flip(false)
+      await reveals[0]!.update()
+      expect(useUiStore.getState().theme).toBe('light')
+    } finally {
+      await restore()
+    }
+  })
+
+  it('快照尚未更新时连续切换两次，晚到的回调不覆盖第二次意图', async () => {
+    const { changeThemeFrom } = await import('@/hooks/use-resolved-theme')
+    stubSystemDark(true, true)
+    const { reveals, restore } = stubDeferredReveals()
+    try {
+      changeThemeFrom(document.body)
+      changeThemeFrom(document.body)
+      await reveals[1]!.update()
+      await reveals[0]!.update()
+      expect(useUiStore.getState().theme).toBe('dark')
+    } finally {
+      await restore()
+    }
   })
 })
 

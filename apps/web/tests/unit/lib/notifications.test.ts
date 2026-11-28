@@ -57,10 +57,13 @@ describe('buildNotifications 文案模板', () => {
     expect(n?.content).toBe('Steve 完成了挑战 [钻石!]')
   })
 
-  it('status 事件映射（started/ready/stopped/crash/save）', () => {
-    expect(
-      buildNotifications({ type: 'statusEvent', data: { event: 'started' } })[0]?.content,
-    ).toBe('服务器已启动')
+  it('进程启动回执不承诺 Minecraft 已就绪', () => {
+    expect(buildNotifications({ type: 'statusEvent', data: { event: 'started' } })).toEqual([
+      { type: 'serverStart', category: 'server', content: '服务器正在启动' },
+    ])
+  })
+
+  it('status 事件映射（ready/stopped/crash）', () => {
     expect(buildNotifications({ type: 'statusEvent', data: { event: 'ready' } })[0]?.content).toBe(
       '服务器已就绪',
     )
@@ -70,7 +73,7 @@ describe('buildNotifications 文案模板', () => {
     expect(
       buildNotifications({ type: 'statusEvent', data: { event: 'crash', autoRestart: true } })[0]
         ?.content,
-    ).toBe('服务器意外退出，正在自动重启')
+    ).toBe('服务器意外退出，即将自动重启')
   })
 
   describe('worldUpgrade（MC 世界格式升级，服务端推送）', () => {
@@ -173,18 +176,28 @@ describe('buildNotifications 文案模板', () => {
     expect(buildNotifications({ type: 'log', data: { text: 'x' } })).toEqual([])
   })
 
-  it('status circuit_breaker → circuitBreaker severe 通知（含连崩次数）', () => {
-    const [n] = buildNotifications({
+  it('反复退出通知简述暂停状态', () => {
+    const [notification] = buildNotifications({
       type: 'statusEvent',
-      data: { event: 'circuit_breaker', consecutiveCrashes: 3, windowMs: 120000 },
+      data: { event: 'circuit_breaker', consecutiveCrashes: 3 },
     })
-    expect(n).toMatchObject({ type: 'circuitBreaker', category: 'server' })
-    expect(n?.content).toBe('连续崩溃 3 次，已触发熔断保护（自动重启暂停，请检查日志）')
+    expect(notification).toMatchObject({
+      type: 'circuitBreaker',
+      category: 'server',
+      content: '服务器反复退出，已暂停自动启动。',
+    })
   })
 
-  it('status circuit_breaker 缺次数字段时显示 0', () => {
-    const [n] = buildNotifications({ type: 'statusEvent', data: { event: 'circuit_breaker' } })
-    expect(n?.content).toBe('连续崩溃 0 次，已触发熔断保护（自动重启暂停，请检查日志）')
+  it('恢复通知只确认服务器稳定，不承诺自动启停偏好', () => {
+    const [notification] = buildNotifications({
+      type: 'statusEvent',
+      data: { event: 'auto_start_resumed' },
+    })
+    expect(notification).toMatchObject({
+      type: 'serverStart',
+      category: 'server',
+      content: '服务器已稳定运行。',
+    })
   })
 
   it('deployComplete 生成 server 类 info 通知（含实例名）', () => {
@@ -350,7 +363,7 @@ describe('aggregateNotifications 聚合规则', () => {
     const existing = [
       base({
         type: 'circuitBreaker',
-        content: '连续崩溃 3 次，已触发熔断保护（自动重启暂停，请检查日志）',
+        content: '服务器反复退出，已暂停自动启动。',
         timestamp: 95_000,
       }),
     ]
@@ -359,7 +372,7 @@ describe('aggregateNotifications 聚合规则', () => {
       {
         type: 'circuitBreaker',
         category: 'server',
-        content: '连续崩溃 3 次，已触发熔断保护（自动重启暂停，请检查日志）',
+        content: '服务器反复退出，已暂停自动启动。',
       },
       100_000,
     )

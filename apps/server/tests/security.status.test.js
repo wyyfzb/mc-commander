@@ -201,7 +201,7 @@ describe('PUT /api/instances/:id/properties 键白名单与值校验', () => {
 
     const ok = await request(app).put('/api/instances/s1/properties').send({ difficulty: 'easy' });
     expect(ok.status).toBe(200);
-    expect(instance.sendCommand).toHaveBeenCalledWith('difficulty easy');
+    expect(instance.sendCommand).toHaveBeenCalledWith('difficulty easy', { requireResponse: true });
   });
 
   it('空对象提交视为无变更，返回 200 且不写盘', async () => {

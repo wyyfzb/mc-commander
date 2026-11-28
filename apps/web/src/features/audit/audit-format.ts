@@ -4,6 +4,11 @@
 import { formatDateTime } from '@/lib/format'
 
 /** 时间列：合法 ISO 走统一收口格式（MM-dd HH:mm:ss）；非法输入原样返回（保留审计原始值兜底） */
+export function formatCommandResult(success: boolean, response: string | null) {
+  if (!success) return '失败'
+  return response === null ? '仅投递（未确认执行）' : '游戏已响应'
+}
+
 export function formatTime(iso: string): string {
   if (Number.isNaN(new Date(iso).getTime())) return iso
   return formatDateTime(iso)

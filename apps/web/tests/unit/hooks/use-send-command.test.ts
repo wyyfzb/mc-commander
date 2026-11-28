@@ -5,11 +5,13 @@ import { createElement, type ReactNode } from 'react'
 import { useSendCommand } from '@/hooks/use-send-command'
 import { useConnectionStore } from '@/stores/connection'
 import { useServerStore } from '@/stores/server'
+import { useTerminalStore } from '@/stores/terminal'
 
 /** apiSendCommand mock：受控延迟（模拟命令飞行中连点第二条） */
 const sendCommandMock = vi.hoisted(() => vi.fn())
 
-vi.mock('@/api/players', () => ({
+vi.mock('@/api/players', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/api/players')>()),
   apiSendCommand: sendCommandMock,
 }))
 
@@ -30,7 +32,7 @@ describe('useSendCommand（连点不丢命令）', () => {
     useConnectionStore.setState({ baseUrl: '', apiKey: ['test', 'key'].join('-') })
     useServerStore.setState({
       instanceId: 'inst-1',
-      status: { isRunning: true } as never,
+      status: { id: 'inst-1', isRunning: true } as never,
     })
   })
 
@@ -42,7 +44,7 @@ describe('useSendCommand（连点不丢命令）', () => {
           resolveFirst = resolve
         }),
     )
-    sendCommandMock.mockResolvedValueOnce({ response: 'ok' })
+    sendCommandMock.mockResolvedValueOnce('ok')
 
     const { result } = renderHook(() => useSendCommand(), { wrapper: setupWrapper() })
 
@@ -52,7 +54,7 @@ describe('useSendCommand（连点不丢命令）', () => {
     expect(result.current.send('time set night')).toBe(true)
 
     await act(async () => {
-      resolveFirst({ response: 'ok' })
+      resolveFirst('ok')
     })
     await waitFor(() => {
       expect(sendCommandMock).toHaveBeenCalledTimes(2)
@@ -64,6 +66,32 @@ describe('useSendCommand（连点不丢命令）', () => {
       'inst-1',
       'time set night',
     )
+  })
+
+  it.each([
+    { response: null, message: '命令已投递，未确认游戏执行', confirmed: false },
+    { response: '', message: '游戏已响应，未返回文字', confirmed: true },
+  ])('响应为 $response 时区分命令反馈与读数更新', async ({ response, message, confirmed }) => {
+    sendCommandMock.mockResolvedValueOnce(response)
+    const onResponse = vi.fn()
+    const pushEntry = vi.spyOn(useTerminalStore.getState(), 'pushEntry')
+    try {
+      const { result } = renderHook(() => useSendCommand(), { wrapper: setupWrapper() })
+      act(() => {
+        result.current.send('time set night', onResponse)
+      })
+      await waitFor(() => expect(pushEntry).toHaveBeenCalledWith('inst-1', message, 'stdout'))
+      expect(sendCommandMock).toHaveBeenCalledWith(
+        expect.anything(),
+        'inst-1',
+        'time set night',
+        undefined,
+        { requireResponse: true },
+      )
+      expect(onResponse).toHaveBeenCalledTimes(confirmed ? 1 : 0)
+    } finally {
+      pushEntry.mockRestore()
+    }
   })
 
   it('未运行时 send 返回 false 且不发起请求', () => {

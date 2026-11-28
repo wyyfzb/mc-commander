@@ -14,6 +14,9 @@ import { logger } from '../../utils/logger.js';
 
 export function _startStatsCollection() {
   this._stopStatsCollection();
+  this._cpuUsage = 0;
+  this._memoryUsage = 0;
+  this._lastCpuTime = undefined;
   this._statsTimer = setInterval(() => this._collectStats(), 5000);
   // 定期通过 RCON 查询 MSPT（每 30 秒一次）。
   // 用递归 setTimeout 串行化：_collectMspt 是 async 且内部串行 await 多条
@@ -138,10 +141,6 @@ export function _stopStatsCollection() {
     clearTimeout(this._worldStateTimer);
     this._worldStateTimer = null;
   }
-  if (this._reachabilityTimer) {
-    clearTimeout(this._reachabilityTimer);
-    this._reachabilityTimer = null;
-  }
   // 停止即作废可达性缓存：那是上一次运行的实测值，留着会让已停的实例仍显示「已可达」
   this._reachability = null;
 }
@@ -152,6 +151,9 @@ export function _collectStats() {
   const pid = this.process?.pid ?? this.adoptedPid;
   if (!pid) return;
 
+  const child = this.process;
+  const sameRun = () =>
+    this.isRunning && child === this.process && pid === (this.process?.pid ?? this.adoptedPid);
   const platform = process.platform;
   if (platform === 'win32') {
     // Windows 走 PowerShell 取进程指标：WMIC 自 Win11 24H2 起不随系统提供，
@@ -162,6 +164,7 @@ export function _collectStats() {
     // windowsHide：面板以 Windows 服务方式运行时，否则每轮采集闪一次控制台窗口
     const cmd = `powershell -NoProfile -NonInteractive -Command "Get-Process -Id ${pid} | Select-Object WorkingSet64,CPU | ConvertTo-Json -Compress"`;
     exec(cmd, { timeout: 8000, windowsHide: true }, (err, stdout) => {
+      if (!sameRun()) return;
       if (err) {
         // 静默失败正是本平台指标长期缺失无人察觉的原因（如权限不足读不到他人进程）：
         // 只在「正常→失败」的转折处告警一次，避免每 5s 刷屏
@@ -229,6 +232,7 @@ export function _applyCpuSecondsSample(cpuSeconds, sysSeconds) {
 }
 
 export function _collectLinuxStats(pid) {
+  const child = this.process;
   try {
     const statContent = fs.readFileSync(`/proc/${pid}/stat`, 'utf-8');
     const parts = statContent.match(/\(.*?\)|\S+/g) || [];
@@ -267,7 +271,13 @@ export function _collectLinuxStats(pid) {
   } catch {
     // 兜底: 使用 ps 命令
     exec(`ps -p ${pid} -o rss=,pcpu= 2>/dev/null || echo "0 0"`, (err, stdout) => {
-      if (err) return;
+      if (
+        err ||
+        !this.isRunning ||
+        child !== this.process ||
+        pid !== (this.process?.pid ?? this.adoptedPid)
+      )
+        return;
       try {
         const parts = stdout.trim().split(/\s+/);
         const rssKb = parseInt(parts[0]) || 0;
@@ -281,12 +291,14 @@ export function _collectLinuxStats(pid) {
 
 // 通过 RCON 查询 MSPT（tick query）
 export async function _collectMspt() {
-  if (!this.isRconConnected) return;
+  if (!this.isRconConnected || this.startupState === 'starting') return;
+  const epoch = this._msptEpoch;
   // 查询 MSPT：RCON 命令输出只回显给 RCON 客户端、不回显到 stdout 日志流，
   // 原实现"发送后丢弃、在日志流中解析"导致 MSPT 采集永久失效（恒为 0）。
   // 改为 await 并直接解析响应。
   try {
     const response = await this._rconSend('tick query');
+    if (epoch !== this._msptEpoch) return;
     // Paper / Vanilla 1.20.3+：'... mean: X.XX ms, median: ...'
     const meanMatch = String(response || '').match(/mean:\s*([\d.]+)\s*ms/i);
     if (meanMatch) {
@@ -296,10 +308,14 @@ export async function _collectMspt() {
     // tick 命令不可用（旧版 vanilla）：回退 tps 命令（Paper 系列），
     // 由 TPS 反推每 tick 毫秒数（20 TPS = 50ms）
     const tpsResponse = await this._rconSend('tps');
+    if (epoch !== this._msptEpoch) return;
     const tpsMatch = String(tpsResponse || '').match(/TPS from last 5s, 1m, 5m:\s*([\d.]+)/i);
     if (tpsMatch) {
       const tps = parseFloat(tpsMatch[1]);
-      if (tps > 0) this._mspt = 1000 / tps;
+      if (tps > 0) {
+        this.tps = tps;
+        this._mspt = 1000 / tps;
+      }
     }
   } catch {
     // 命令不可用/失败：静默跳过，下次定时器会重试

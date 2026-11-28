@@ -491,6 +491,18 @@ function createTables() {
     logger.info('Migration: added panel_preferences table');
   }
 
+  if (userVersion < 17) {
+    db.transaction(() => {
+      const columns = db.pragma('table_info(instances)');
+      if (!columns.some(({ name }) => name === 'circuit_breaker_crash_count')) {
+        db.exec(
+          'ALTER TABLE instances ADD COLUMN circuit_breaker_crash_count INTEGER NOT NULL DEFAULT 0',
+        );
+      }
+      db.pragma('user_version = 17');
+    })();
+  }
+
   // 创建索引
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_admin_sessions_expires ON admin_sessions(expires_at);

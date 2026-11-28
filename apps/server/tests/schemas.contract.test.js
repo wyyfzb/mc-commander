@@ -289,7 +289,9 @@ describe('响应契约：状态路由 × overviewDataSchema（接入）', () => 
   it('GET /overview → 信封与 data 均通过 overviewDataSchema', async () => {
     const fakeManager = {
       instances: new Map(),
-      getAllInstances: () => [{ id: 'demo', name: '契约实例', isRunning: true, playerCount: 2 }],
+      getAllInstances: () => [
+        { id: 'demo', name: '契约实例', isRunning: true, startupState: 'starting', playerCount: 2 },
+      ],
       getInstance: () => null,
     };
     const app = express();

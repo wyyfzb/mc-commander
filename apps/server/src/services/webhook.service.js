@@ -369,7 +369,7 @@ export class WebhookService {
       'player.chat': () => `${d.name ?? '玩家'}: ${d.message ?? ''}`,
       'player.sleep': () => `${d.name ?? '玩家'} ${d.sleeping ? '入睡了' : '醒来了'}`,
       'player.achievement': () => `${d.name ?? '玩家'} 获得成就 [${d.advancement ?? ''}]`,
-      'instance.start': () => '服务器已启动',
+      'instance.start': () => '服务器正在启动',
       'instance.stop': () => '服务器已停止',
       'instance.crash': () => `服务器意外退出${d.autoRestart ? '，正在自动重启' : ''}`,
       'instance.ready': () => '服务器已就绪',
@@ -493,6 +493,7 @@ export function setupWebhookDispatch(serverManager) {
 
   // 状态事件（instance:status 含 event 子字段）
   serverManager.on('instance:status', (data) => {
+    if (data.event === 'started' && data.startupState === 'unknown') return;
     const webhookEvent = STATUS_EVENT_MAP[data.event];
     if (webhookEvent) {
       WebhookService.dispatch(webhookEvent, data);

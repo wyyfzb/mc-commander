@@ -104,7 +104,7 @@ export function _ensureMsmpConfiguredSafe() {
  * 什么前提下危险——**世界正被某个进程写入时不得删**：删文件不会让旧进程松手（真锁绑在它的
  * inode 上），新进程却能在新 inode 上顺利“拿到”锁，于是两个 JVM 同时写同一份存档。调用侧
  * 保证了「旧进程已死」：`start()` 在 `isRunning` 时直接抛错，接管实例的重启也先等看门狗
- * 确认旧进程退出（`_scheduleRestartStart`）。把本函数挪到这两个守卫之外，前提即失效。
+ * 确认旧进程退出。把本函数挪到这两个守卫之外，前提即失效。
  */
 export function _cleanWorldLock() {
   // 注意：不使用 pkill，避免误杀同名进程和命令注入风险
@@ -201,10 +201,13 @@ export function _attachSpawnErrorListener() {
   // unhandled 'error' event 使整个服务端进程崩溃、所有实例托管失效。
   // 注意：'java' 这类 PATH 命令不能靠 existsSync 预校验（始终 false），
   // 只能通过 error 事件捕获，错误信息经日志流呈现给用户。
-  this.process.on('error', (err) => {
+  const child = this.process;
+  child.on('error', (err) => {
+    if (this.process !== child) return;
     logger.error(`[${this.id}] Failed to spawn server process:`, err.message);
     this.isRunning = false;
     this.process = null;
+    this._cancelCrashRecovery();
     this._stopStatsCollection();
     this._rconCleanup();
     this.emit('log', {
@@ -237,15 +240,13 @@ export function _attachStdinErrorListener() {
 }
 
 export function _initializeRuntimeState() {
+  this._startupReady = false;
   this.isRunning = true;
   this.startTime = Date.now();
-  // 端口要等 JVM 绑定完才在听，立即探会得到「未监听」的假结论；延迟一拍再刷，
-  // 结果进缓存供 toStatus 同步读取。句柄要能被进程退出清理，否则实例停了还挂着定时器
-  this._reachabilityTimer = setTimeout(() => {
-    this._reachabilityTimer = null;
-    this.refreshReachability().catch(() => {});
-  }, 15000);
-  this._reachabilityTimer.unref?.();
+  this.tps = null;
+  this._mspt = 0;
+  this._worldTime = null;
+  this._worldDay = null;
   // 清空上一次会话的日志缓冲，避免冷启动时混杂旧日志
   this.logBuffer = [];
   // 流式输出的按行组装残留同样按次清零：上一轮的尾巴不能混进新一轮
@@ -344,18 +345,22 @@ export function _flushStreamRemainders() {
 }
 
 export function _attachOutputStreamListeners() {
-  this.process.stdout.on('data', (data) => {
-    this._ingestStreamChunk(data, 'stdout');
+  const child = this.process;
+  child.stdout.on('data', (data) => {
+    if (this.process === child) this._ingestStreamChunk(data, 'stdout');
   });
 
-  this.process.stderr.on('data', (data) => {
-    this._ingestStreamChunk(data, 'stderr');
+  child.stderr.on('data', (data) => {
+    if (this.process === child) this._ingestStreamChunk(data, 'stderr');
   });
 }
 
 export function _attachExitListener() {
-  this.process.on('exit', (code) => {
+  const child = this.process;
+  child.on('exit', (code) => {
+    if (this.process !== child) return;
     this.isRunning = false;
+    this._cancelCrashRecovery();
     // 末行往往没有换行：退出前补吐组装残留，否则最后一行会凭空消失
     this._flushStreamRemainders();
     this.process = null;
@@ -395,17 +400,19 @@ export function _attachExitListener() {
       }
       this._consecutiveCrashes++;
       if (!this._crashWindowStart) this._crashWindowStart = now;
-      // 达阈值 → 熔断：自动禁用 autoRestart 并持久化
-      if (this._consecutiveCrashes >= maxCrashes && !this._circuitBreakerTripped) {
-        this._circuitBreakerTripped = true;
-        this.autoRestart = false;
+      if (this._consecutiveCrashes >= maxCrashes && !this.circuitBreakerTripped) {
+        this.circuitBreakerCrashCount = this._consecutiveCrashes;
+        this.cancelRestart();
         try {
-          InstanceModel.update(this.id, { autoRestart: false });
-        } catch {
-          /* best-effort */
+          InstanceModel.update(this.id, {
+            circuitBreakerCrashCount: this.circuitBreakerCrashCount,
+          });
+        } catch (err) {
+          logger.warn('Failed to persist crash circuit breaker:', err.message);
         }
+        this._syncRecoveryConfig();
         this.emit('log', {
-          text: `[服务器] 崩溃循环熔断已触发（${windowMs / 1000}s 内崩溃 ${this._consecutiveCrashes} 次），自动重启已禁用。请在实例设置中手动重新启用。`,
+          text: '[服务器] 服务器反复退出，已暂停自动启动。',
           type: 'stdout',
         });
         this.emit('status', {
@@ -416,20 +423,19 @@ export function _attachExitListener() {
       }
 
       // 意外停止：记录到日志流（终端可见），并按开关决定是否自动重启
-      const willRestart = this.autoRestart;
+      const willRestart = this.autoRestart && !this.circuitBreakerTripped;
       this.emit('log', {
         text: `[服务器] 意外退出 (code ${code})${willRestart ? '，5 秒后自动重启' : ''}`,
         type: 'stdout',
       });
       this.emit('status', { event: 'crash', code, autoRestart: willRestart });
       if (willRestart) {
-        // 崩溃自动重启定时器：句柄保存到 _restartTimer（与 _scheduleRestartStart 同字段），
+        // 崩溃自动重启定时器的句柄保存到 _restartTimer，
         // 使 stop/kill/卸载路径的 cancelRestart() 能取消，杜绝违背用户意图的自动拉起。
         if (this._restartTimer) clearTimeout(this._restartTimer);
         this._restartTimer = setTimeout(() => {
           this._restartTimer = null;
-          // 5s 窗口内服务器已被其他路径启动 → 放弃自动重启
-          if (this.isRunning) return;
+          if (this.isRunning || !this.autoRestart || this.circuitBreakerTripped) return;
           // 实例目录已被删除（用户卸载）→ 放弃自动重启
           if (!fs.existsSync(path.join(this.serverPath, this.jarFile))) {
             logger.info(`[${this.id}] Auto-restart cancelled: server jar no longer exists`);

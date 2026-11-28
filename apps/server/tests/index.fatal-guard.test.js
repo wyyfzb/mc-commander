@@ -50,6 +50,7 @@ const h = vi.hoisted(() => {
     tmpDir: null,
     scheduler: null, // TaskScheduler 实例（constructor 捕获）
     manager: null, // MCServerManager 实例
+    instances: new Map(),
     wss: null, // WebSocketServer 实例
     db: { close: vi.fn() }, // getDb() 返回的 db 桩
     stopSystemStatsBroadcast, // startSystemStatsBroadcast 返回的 stop 句柄
@@ -84,6 +85,7 @@ vi.mock('../src/config.js', () => ({
       h.apiKeyHash = value;
     },
     port: 1,
+    autoStartDelayMs: 3000,
     /* 桩进临时目录（绝对路径）：相对伪路径（mock:/data）会被被测代码当成真实目录建出来，
        每跑一次测试就在包内落一个 mock: 目录（日志与备份累计到上百 MB） */
     get serversDir() {
@@ -127,6 +129,10 @@ vi.mock('../src/services/mc_server.js', () => ({
   MCServerManager: class {
     stopAll = vi.fn(async () => {});
     on = vi.fn();
+    instances = h.instances;
+    getInstance(id) {
+      return this.instances.get(id);
+    }
     constructor() {
       h.manager = this;
     }
@@ -155,6 +161,8 @@ vi.mock('../src/db/index.js', () => ({
   getDb: vi.fn(() => h.db),
   InstanceModel: { getAll: vi.fn(() => []) },
 }));
+
+import { InstanceModel } from '../src/db/index.js';
 
 let onSpy; // process.on 拦截（每用例装拆，最小化拦截窗口）
 
@@ -196,12 +204,49 @@ describe('进程级兜底（uncaughtException/unhandledRejection）', () => {
     vi.unstubAllEnvs();
     vi.stubEnv('NODE_ENV', 'development');
     h.db = { close: vi.fn() };
+    h.startSystemStatsBroadcast.mockClear();
     // 拦截 process.on：handler 只记录不真实注册，杜绝污染 vitest worker 进程
     onSpy = vi.spyOn(process, 'on').mockImplementation(() => process);
   });
 
   afterEach(() => {
     onSpy.mockRestore();
+  });
+
+  it('面板启动队列跳过熔断与已接管实例，继续拉起其余自启实例', async () => {
+    vi.useFakeTimers();
+    const serverPath = mockCfgRoot();
+    const jarFile = 'autostart-test.jar';
+    fs.writeFileSync(path.join(serverPath, jarFile), '');
+    const tripped = { circuitBreakerTripped: true, start: vi.fn() };
+    const adopted = {
+      isRunning: false,
+      start: vi.fn(),
+      adoptFromPidFile() {
+        this.isRunning = true;
+        return true;
+      },
+    };
+    const ready = { start: vi.fn() };
+    for (const [id, instance] of Object.entries({ tripped, adopted, ready })) {
+      Object.assign(instance, { id, serverPath, jarFile });
+      instance.adoptFromPidFile ??= () => false;
+      h.instances.set(id, instance);
+    }
+    InstanceModel.getAll.mockReturnValue(
+      [...h.instances.keys()].map((id) => ({ id, autoStart: true })),
+    );
+    try {
+      await resetAndImport();
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(tripped.start).not.toHaveBeenCalled();
+      expect(adopted.start).not.toHaveBeenCalled();
+      expect(ready.start).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+      InstanceModel.getAll.mockReset().mockReturnValue([]);
+      h.instances.clear();
+    }
   });
 
   it('启动时应注册 uncaughtException/unhandledRejection 兜底，且既有信号注册保持', async () => {

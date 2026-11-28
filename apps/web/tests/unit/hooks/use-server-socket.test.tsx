@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook, act, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
+import { toast } from 'sonner'
+import { useServerStore } from '@/stores/server'
 import { useServerSocket, getSocketSingleton } from '@/hooks/use-server-socket'
 import { useConnectionStore } from '@/stores/connection'
 import { useAuthStore, type StoredSession } from '@/stores/auth'
@@ -726,9 +728,9 @@ describe('useServerSocket（状态跃迁通知接线）', () => {
   })
 
   /** 建立已连接的 socket，返回 FakeWebSocket */
-  async function connectReady(instanceId: string) {
+  async function connectReady(instanceId: string, wrapper = createWrapper()) {
     useConnectionStore.setState({ baseUrl: '', apiKey: 'k1', status: 'ready' })
-    renderHook(() => useServerSocket(instanceId), { wrapper: createWrapper() })
+    renderHook(() => useServerSocket(instanceId), { wrapper })
     await waitFor(() => expect(FakeWebSocket.instances.length).toBe(1))
     const ws = FakeWebSocket.instances[0]!
     act(() => {
@@ -746,7 +748,7 @@ describe('useServerSocket（状态跃迁通知接线）', () => {
     })
     const afterStart = useNotificationStore.getState().items
     expect(afterStart[0]?.type).toBe('serverStart')
-    expect(afterStart[0]?.content).toBe('服务器已启动')
+    expect(afterStart[0]?.content).toBe('服务器正在启动')
     expect(afterStart[0]?.instanceId).toBe('i-1')
 
     act(() => {
@@ -787,6 +789,71 @@ describe('useServerSocket（状态跃迁通知接线）', () => {
     expect(useRestartPendingStore.getState().pending['i-other']).toBeUndefined()
     // 通知口径不变：非当前实例的常规跃迁仍不入通知中心（见下一条用例）
     expect(useNotificationStore.getState().items.length).toBe(0)
+  })
+
+  it('自动重启期间只保留事件记录，暂停时以实例为键弹出告警', async () => {
+    const showError = vi.spyOn(toast, 'error')
+    const ws = await connectReady('i-1')
+    const crash = {
+      type: 'statusEvent',
+      instanceId: 'i-1',
+      data: { event: 'crash', autoRestart: true },
+    }
+    act(() => {
+      ws.receive(crash)
+      ws.receive(crash)
+    })
+    expect(showError).not.toHaveBeenCalled()
+    expect(useNotificationStore.getState().items.map((n) => n.type)).toEqual([
+      'serverCrash',
+      'serverCrash',
+    ])
+    act(() => {
+      ws.receive({ type: 'statusEvent', instanceId: 'i-1', data: { event: 'circuit_breaker' } })
+      ws.receive({ type: 'statusEvent', instanceId: 'i-other', data: { event: 'circuit_breaker' } })
+    })
+    expect(showError).toHaveBeenCalledExactlyOnceWith(
+      '实例「i-1」服务器反复退出，已暂停自动启动。',
+      expect.objectContaining({ id: 'auto-start-paused:i-1', duration: Infinity }),
+    )
+    expect(useNotificationStore.getState().items[0]).toMatchObject({
+      type: 'circuitBreaker',
+      instanceId: 'i-other',
+      content: '服务器反复退出，已暂停自动启动。',
+    })
+  })
+
+  it('自动启动恢复事件刷新对应实例和列表，清除暂停提示', async () => {
+    const dismiss = vi.spyOn(toast, 'dismiss')
+    const showSuccess = vi.spyOn(toast, 'success')
+    const wrapper = createWrapper()
+    const { qc } = wrapper
+    useServerStore.setState({ lastStatusEvent: null })
+    qc.setQueryData(queryKeys.instance('i-1'), { circuitBreakerTripped: true })
+    qc.setQueryData(queryKeys.instance('i-other'), { circuitBreakerTripped: true })
+    qc.setQueryData(queryKeys.instances(), [])
+    const ws = await connectReady('i-1', wrapper)
+
+    act(() => {
+      ws.receive({
+        type: 'statusEvent',
+        instanceId: 'i-other',
+        data: { event: 'auto_start_resumed' },
+      })
+    })
+    expect(qc.getQueryState(queryKeys.instance('i-other'))?.isInvalidated).toBe(true)
+    expect(qc.getQueryState(queryKeys.instances())?.isInvalidated).toBe(true)
+    expect(qc.getQueryState(queryKeys.instance('i-1'))?.isInvalidated).toBe(false)
+    expect(useServerStore.getState().lastStatusEvent).toBeNull()
+    expect(showSuccess).not.toHaveBeenCalled()
+
+    act(() => {
+      ws.receive({ type: 'statusEvent', instanceId: 'i-1', data: { event: 'auto_start_resumed' } })
+    })
+    expect(qc.getQueryState(queryKeys.instance('i-1'))?.isInvalidated).toBe(true)
+    expect(useServerStore.getState().lastStatusEvent?.event).toBe('auto_start_resumed')
+    expect(dismiss).toHaveBeenCalledWith('auto-start-paused:i-1')
+    expect(showSuccess).toHaveBeenCalledWith('实例「i-1」服务器已稳定运行。')
   })
 
   it('status 跃迁同步失效当前实例详情 query（isRunning 源头；只刷列表会让停止状态条滞后到 30s 轮询）', async () => {
@@ -892,7 +959,7 @@ describe('useServerSocket（状态跃迁通知接线）', () => {
     act(() => {
       ws.receive({
         type: 'systemStatsUpdate',
-        data: { memoryPercent: 93.4, memoryAlert: { warningPercent: 90 } },
+        data: { totalMemory: 16, memoryPercent: 93.4, memoryAlert: { warningPercent: 90 } },
       })
     })
 
@@ -910,7 +977,7 @@ describe('useServerSocket（状态跃迁通知接线）', () => {
     act(() => {
       ws.receive({
         type: 'systemStatsUpdate',
-        data: { memoryPercent: 85, memoryAlert: { warningPercent: 90 } },
+        data: { totalMemory: 16, memoryPercent: 85, memoryAlert: { warningPercent: 90 } },
       })
     })
 
@@ -923,10 +990,30 @@ describe('useServerSocket（状态跃迁通知接线）', () => {
     const ws = await connectReady('i-1')
 
     act(() => {
-      ws.receive({ type: 'systemStatsUpdate', data: { memoryPercent: 99 } })
+      ws.receive({ type: 'systemStatsUpdate', data: { totalMemory: 16, memoryPercent: 99 } })
     })
 
     expect(useNotificationStore.getState().items).toHaveLength(0)
+  })
+
+  it('整机内存总量缺失不发恢复通知，有效的 0% 读数才解除告警', async () => {
+    const ws = await connectReady('i-1')
+    const receiveMemory = (totalMemory: number, memoryPercent: number) => {
+      act(() => {
+        ws.receive({
+          type: 'systemStatsUpdate',
+          data: { totalMemory, memoryPercent, memoryAlert: { warningPercent: 90 } },
+        })
+      })
+    }
+    receiveMemory(16, 95)
+    receiveMemory(0, 0)
+    expect(useNotificationStore.getState().activeAlerts.has('highMemory')).toBe(true)
+    expect(useNotificationStore.getState().items).toHaveLength(1)
+
+    receiveMemory(16, 0)
+    expect(useNotificationStore.getState().activeAlerts.has('highMemory')).toBe(false)
+    expect(useNotificationStore.getState().items).toHaveLength(2)
   })
 
   it('整机内存与磁盘可同时告警（两条链路同源下发，互不吞并）', async () => {
@@ -936,6 +1023,7 @@ describe('useServerSocket（状态跃迁通知接线）', () => {
       ws.receive({
         type: 'systemStatsUpdate',
         data: {
+          totalMemory: 16,
           memoryPercent: 95,
           memoryAlert: { warningPercent: 90 },
           diskUsage: { primary: { mountpoint: '/', totalGB: 39, usedGB: 37, percent: 96.2 } },

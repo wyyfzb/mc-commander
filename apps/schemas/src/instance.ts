@@ -1,9 +1,13 @@
 import { z } from 'zod'
 
+export const instanceStartupStateSchema = z.enum(['stopped', 'starting', 'ready', 'unknown'])
+export type InstanceStartupState = z.infer<typeof instanceStartupStateSchema>
+
 export const instanceSummarySchema = z.object({
   id: z.string(),
   name: z.string(),
   isRunning: z.boolean(),
+  startupState: instanceStartupStateSchema,
   playerCount: z.number(),
   // 已分配的 -Xmx：面板据此算「这台机器还能给新实例多少内存」。
   // 可选是因为它也会出现在只关心身份的列表载荷里，缺省即「未知，不计入已分配」。
@@ -54,10 +58,12 @@ export const instanceStatusSchema = z.object({
   id: z.string(),
   name: z.string(),
   isRunning: z.boolean(),
+  startupState: instanceStartupStateSchema,
   capabilities: instanceCapabilitiesSchema,
   autoRestart: z.boolean(),
   autoStart: z.boolean(),
   circuitBreakerTripped: z.boolean(),
+  checkingStartupStability: z.boolean().optional(),
   consecutiveCrashes: z.number(),
   uptime: z.number(),
   address: z.string(),
@@ -81,7 +87,7 @@ export const instanceStatusSchema = z.object({
   maxPlayers: z.number(),
   mcVersion: z.string(),
   modLoader: z.string(),
-  tps: z.number(),
+  tps: z.number().nullable(),
   mspt: z.number(),
   cpuUsage: z.number(),
   memoryUsage: z.number(),
@@ -240,6 +246,7 @@ export const instanceCommandRequestBodySchema = z.object({
    * 省略时为 `api`（既有行为不变）。
    */
   source: z.enum(['api', 'replay']).optional(),
+  requireResponse: z.boolean().optional(),
 })
 
 /** PUT /instances/:id/properties 请求体：属性键值对（passthrough 保留全部键；数组/标量/null 拒绝） */

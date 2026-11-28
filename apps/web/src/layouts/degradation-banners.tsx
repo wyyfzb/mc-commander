@@ -35,7 +35,10 @@ export function DegradationBanners() {
   const progress = useDeployStore((s) => s.progress)
 
   const wsDown = connectionReady && !socketConnected && (hasConnectedOnce || connectStalled)
-  const rconDown = status?.isRunning === true && status.capabilities.rcon === false
+  const rconDown =
+    status?.isRunning === true &&
+    status.startupState !== 'starting' &&
+    status.capabilities.rcon === false
 
   if (!deploying && !wsDown && !rconDown) return null
 

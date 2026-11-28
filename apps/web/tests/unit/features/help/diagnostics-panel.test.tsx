@@ -24,6 +24,8 @@ import {
 } from '@tests/support/handlers'
 import { useConnectionStore } from '@/stores/connection'
 import { useServerStore } from '@/stores/server'
+import { HelpPage } from '@/features/help/help-page'
+import { LastOutputDialog } from '@/components/mcs/last-output-dialog'
 import {
   DiagnosticsPanel,
   buildChecks,
@@ -41,8 +43,8 @@ const STATUS: InstanceStatus = mockInstanceStatus
 
 // 崩溃「近期」窗口是时效判据 ⇒ 时点必须显式注入，否则用例随真实时间漂移
 const NOW = Date.parse('2026-10-08T10:00:00Z')
-// 夹具里最近一次崩溃是 2026-10-07T09:14Z ⇒ 距 NOW 约 24.8 小时，刚过窗口
-const NOW_1H_AFTER_CRASH = Date.parse('2026-10-07T10:14:02Z')
+const CRASH_24H_LATER = Date.parse('2026-10-08T09:14:02Z')
+const CRASH_51D_LATER = Date.parse('2026-11-27T09:14:02Z')
 
 const STATS: SystemStats = {
   cpuUsage: 12.5,
@@ -74,14 +76,99 @@ describe('buildChecks：判据', () => {
     }
   })
 
-  it('熔断优先于「未运行」：报出连续崩溃次数', () => {
-    const checks = buildChecks({
-      instanceId: 'inst-1',
-      status: { ...STATUS, isRunning: false, circuitBreakerTripped: true, consecutiveCrashes: 4 },
-    })
-    const instance = checkOf(checks, 'instance')
-    expect(instance.tone).toBe('bad')
-    expect(instance.verdict).toContain('4 次')
+  it.each([
+    {
+      state: '停机',
+      isRunning: false,
+      startupState: 'stopped' as const,
+      checkingStartupStability: false,
+      tone: 'bad',
+      verdict: '服务器反复退出，已暂停自动启动。',
+      next: '先到下方崩溃历史查看末尾日志，再去实例页手动启动。',
+    },
+    {
+      state: '试启未就绪',
+      isRunning: true,
+      startupState: 'starting' as const,
+      checkingStartupStability: false,
+      tone: 'warn',
+      verdict: '试启动中，尚未确认就绪',
+      next: '若迟迟未就绪，可到下方崩溃历史查看末尾日志。',
+    },
+    {
+      state: '接管后就绪未知',
+      isRunning: true,
+      startupState: 'unknown' as const,
+      checkingStartupStability: false,
+      tone: 'warn',
+      verdict: '服务器就绪状态未知',
+      next: '可到下方查看末尾日志。',
+    },
+    {
+      state: '稳定性观察',
+      isRunning: true,
+      startupState: 'ready' as const,
+      checkingStartupStability: true,
+      tone: 'warn',
+      verdict: '正在确认服务器能否稳定运行',
+      next: '请等待稳定性检查完成。',
+    },
+  ])(
+    '保护期间区分$state，只承诺解除暂时限制',
+    ({ state: _state, tone, verdict, next, ...phase }) => {
+      const checks = buildChecks({
+        instanceId: 'inst-1',
+        status: {
+          ...STATUS,
+          ...phase,
+          id: 'inst-1',
+          autoStart: false,
+          autoRestart: false,
+          circuitBreakerTripped: true,
+          consecutiveCrashes: 4,
+        },
+      })
+      expect(checkOf(checks, 'instance')).toMatchObject({
+        tone,
+        verdict,
+        basis: `连续意外退出 4 次。${next}确认稳定后，面板会解除对自动启动的暂时限制，不会更改启动设置。`,
+        action: { label: '去实例页', to: '/instances?focus=inst-1' },
+      })
+    },
+  )
+
+  it.each([
+    ['starting', false, '服务器启动中', '等待服务器就绪'],
+    ['starting', true, '服务器启动中', '等待服务器就绪'],
+    ['unknown', false, '服务器就绪状态未知', '未确认 RCON 可用'],
+    ['unknown', true, '服务器就绪状态未知', '已配置，连通性未验证'],
+  ] as const)(
+    '状态 %s、RCON 配置 %s：不推断运行正常或通道连通',
+    (startupState, rcon, instanceVerdict, rconVerdict) => {
+      const checks = buildChecks({
+        instanceId: 'inst-1',
+        status: {
+          ...STATUS,
+          startupState,
+          mcVersion: '26.3',
+          capabilities: { rcon, msmp: false, msmpPush: false },
+        },
+      })
+      expect(checkOf(checks, 'instance')).toMatchObject({
+        tone: 'unknown',
+        verdict: instanceVerdict,
+      })
+      expect(checkOf(checks, 'rcon')).toMatchObject({ tone: 'unknown', verdict: rconVerdict })
+      expect(checkOf(checks, 'msmp')).toMatchObject({
+        tone: 'unknown',
+        verdict: startupState === 'starting' ? '等待服务器就绪' : '未确认推送可用',
+      })
+    },
+  )
+
+  it('已就绪只证明启动完成，RCON 配置存在不等于连接成功', () => {
+    const rcon = checkOf(buildChecks({ instanceId: 'inst-1', status: STATUS }), 'rcon')
+    expect(rcon).toMatchObject({ tone: 'unknown', verdict: '已配置，连通性未验证' })
   })
 
   it('实例未运行时，RCON 判为「无需连通」而不是问题（否则每台停着的实例都挂一条警告）', () => {
@@ -90,6 +177,7 @@ describe('buildChecks：判据', () => {
       status: {
         ...STATUS,
         isRunning: false,
+        startupState: 'stopped',
         capabilities: { rcon: false, msmp: false, msmpPush: false },
       },
     })
@@ -99,13 +187,13 @@ describe('buildChecks：判据', () => {
     expect(checkOf(checks, 'instance').tone).toBe('warn')
   })
 
-  it('实例在运行但 RCON 没连上：警告 + 给出依据', () => {
+  it('已就绪但 RCON 配置不可用：提醒检查配置，不诊断连接失败', () => {
     const checks = buildChecks({
       instanceId: 'inst-1',
       status: { ...STATUS, capabilities: { rcon: false, msmp: false, msmpPush: false } },
     })
     const rcon = checkOf(checks, 'rcon')
-    expect(rcon.tone).toBe('warn')
+    expect(rcon).toMatchObject({ tone: 'warn', verdict: 'RCON 配置不可用' })
     expect(rcon.basis).toContain('端口与密码')
   })
 
@@ -123,21 +211,43 @@ describe('buildChecks：判据', () => {
     expect(msmp.action).toBeUndefined()
   })
 
-  it('推送面：版本读不懂（周快照形态）与服务端同极性，不报「未开启」', () => {
-    // 服务端 isMsmpSupportedVersion 对未知版本返 false（宁可不写配置），
-    // 帮助页若按「未知当新版」处理就会报「未开启 + 去世界页」，把用户引向一件做不成的事
-    const snapshot = { ...STATUS, mcVersion: '25w35a' }
+  it('推送面：无法判断的版本不等于已知不支持', () => {
     const checks = buildChecks({
       instanceId: 'inst-1',
-      status: { ...snapshot, capabilities: { rcon: true, msmp: false, msmpPush: false } },
+      status: { ...STATUS, mcVersion: '25w35a' },
     })
-    const msmp = checkOf(checks, 'msmp')
-    expect(msmp.tone).toBe('ok')
-    expect(msmp.verdict).toContain('不适用')
-    expect(msmp.action).toBeUndefined()
+    expect(checkOf(checks, 'msmp')).toMatchObject({
+      tone: 'unknown',
+      verdict: '未确认此版本支持推送',
+    })
   })
 
-  it('推送面：版本支持时，查询面可用与全未开启给不同结论（指向不同处置）', () => {
+  it('推送面：实例停止时不判断新版本的推送状态', () => {
+    const checks = buildChecks({
+      instanceId: 'inst-1',
+      status: { ...STATUS, mcVersion: '26.3', startupState: 'stopped', isRunning: false },
+    })
+    expect(checkOf(checks, 'msmp')).toMatchObject({
+      tone: 'unknown',
+      verdict: '实例未运行，无需连通',
+    })
+  })
+
+  it('推送面：就绪未知不抹掉实际连通的推送能力', () => {
+    const checks = buildChecks({
+      instanceId: 'inst-1',
+      status: {
+        ...STATUS,
+        mcVersion: '26.3',
+        startupState: 'unknown',
+        capabilities: { rcon: false, msmp: false, msmpPush: true },
+      },
+    })
+    expect(checkOf(checks, 'instance').tone).toBe('unknown')
+    expect(checkOf(checks, 'msmp')).toMatchObject({ tone: 'ok', verdict: '已连通' })
+  })
+
+  it('推送面：版本支持时，区分查询可用和两个通道均未探明', () => {
     const modern = { ...STATUS, mcVersion: '26.3' }
     const pushdown = buildChecks({
       instanceId: 'inst-1',
@@ -149,7 +259,7 @@ describe('buildChecks：判据', () => {
     })
     expect(checkOf(pushdown, 'msmp').tone).toBe('warn')
     expect(checkOf(pushdown, 'msmp').verdict).toContain('推送面未连通')
-    expect(checkOf(off, 'msmp').verdict).toBe('未开启')
+    expect(checkOf(off, 'msmp').verdict).toBe('未确认推送可用')
   })
 
   it('磁盘：按服务端下发的两档阈值分别判警告与告警', () => {
@@ -172,43 +282,60 @@ describe('buildChecks：判据', () => {
     expect(at(92).basis).toContain('90%')
   })
 
+  it('整机内存未采到时，即使百分比为 0 也不判正常', () => {
+    const checks = buildChecks({
+      instanceId: 'inst-1',
+      stats: { ...STATS, totalMemory: 0, memoryUsage: 0, memoryPercent: 0 },
+    })
+    expect(checkOf(checks, 'memory')).toMatchObject({ tone: 'unknown', verdict: '读不到内存占用' })
+  })
+
   it('读不到资源统计时判为「未知」，不判正常', () => {
     const checks = buildChecks({ instanceId: 'inst-1', status: STATUS })
     expect(checkOf(checks, 'disk').tone).toBe('unknown')
     expect(checkOf(checks, 'memory').tone).toBe('unknown')
   })
 
-  it('崩溃历史为空说「没有读到」，不为空时说清次数与最近一次原因', () => {
-    const empty = checkOf(
-      buildChecks({
-        instanceId: 'inst-1',
-        status: STATUS,
-        history: { items: [], total: 0, hasMore: false },
-      }),
-      'crash',
-    )
-    expect(empty.tone).toBe('ok')
-    expect(empty.verdict).toBe('没有读到崩溃记录')
-
-    const history = { items: mockCrashHistory, total: 2, hasMore: false }
-    const recent = checkOf(
-      buildChecks({ instanceId: 'inst-1', status: STATUS, history, nowMs: NOW_1H_AFTER_CRASH }),
-      'crash',
-    )
-    expect(recent.tone).toBe('warn')
-    expect(recent.verdict).toContain('24 小时')
-    expect(recent.basis).toContain('最近一次')
-    // 原因紧接着就在崩溃历史里逐条列出，自检行不再重复同一句话
-    expect(recent.basis).not.toContain('Ticking entity')
-
-    // 几天前崩过 ≠ 现在有问题：只陈述事实，不长期挂一条警告（挂了就会把真要看的淹掉）
-    const old = checkOf(
-      buildChecks({ instanceId: 'inst-1', status: STATUS, history, nowMs: NOW }),
-      'crash',
-    )
-    expect(old.tone).toBe('ok')
-    expect(old.verdict).toContain('2 次')
-  })
+  it.each([
+    {
+      state: '尚未满 24 小时',
+      nowMs: CRASH_24H_LATER - 1,
+      consecutiveCrashes: 0,
+      tone: 'warn',
+      verdict: '最近 24 小时内有崩溃报告（共 2 份）',
+      basis: '最新一份：23小时前',
+    },
+    {
+      state: '刚好满 24 小时',
+      nowMs: CRASH_24H_LATER,
+      consecutiveCrashes: 0,
+      tone: 'ok',
+      verdict: '有历史崩溃报告（共 2 份）',
+      basis: '最新一份：1天前',
+    },
+    {
+      state: '保护计数非零但报告已过去 51 天',
+      nowMs: CRASH_51D_LATER,
+      consecutiveCrashes: 4,
+      tone: 'ok',
+      verdict: '有历史崩溃报告（共 2 份）',
+      basis: '最新一份：51天前',
+    },
+  ])(
+    '崩溃记录按报告时间和份数判断：$state',
+    ({ nowMs, consecutiveCrashes, tone, verdict, basis }) => {
+      const crash = checkOf(
+        buildChecks({
+          instanceId: 'inst-1',
+          status: { ...STATUS, consecutiveCrashes, circuitBreakerTripped: consecutiveCrashes > 0 },
+          history: { items: mockCrashHistory, total: 2, hasMore: false },
+          nowMs,
+        }),
+        'crash',
+      )
+      expect(crash).toMatchObject({ tone, verdict, basis })
+    },
+  )
 
   it('历史请求还没回来时判为「未知」，不说成「从未崩溃过」', () => {
     const checks = buildChecks({ instanceId: 'inst-1', status: STATUS })
@@ -301,9 +428,9 @@ describe('自检卡：摘要聚合与层级', () => {
     renderPanel()
     // 夹具里崩溃记录 1 天前（正常）、面板错误 2 条（注意）⇒ 折叠后只剩需要看的
     expect(await screen.findByText('记录 2 条')).toBeInTheDocument()
-    expect(screen.queryByText('运行中')).toBeNull()
+    expect(screen.queryByText('已就绪')).toBeNull()
     await userEvent.click(screen.getByRole('button', { name: /其余 \d+ 项正常/ }))
-    expect(screen.getByText('运行中')).toBeInTheDocument()
+    expect(screen.getByText('已就绪')).toBeInTheDocument()
   })
 
   it('自检的「出路」是可用的页内锚点（路由 pushState 不会滚动，只改地址栏 = 点了没反应）', async () => {
@@ -353,7 +480,7 @@ describe('selfCheckCopyText：自检结果复制载荷', () => {
     // 面板版本要带上：接收方据此定位「这行为属于哪一版」
     expect(text).toContain('面板版本：0.9.9')
     expect(text).toContain('2026-10-08T10:00:00.000Z')
-    expect(text).toContain('- 实例运行：运行中｜已运行 2h 0m')
+    expect(text).toContain('- 实例运行：已就绪｜已运行 2h 0m')
     // 依据必须一起带上：只给结论，维护者无从判断
     // 每项一行、结论与依据用「｜」分隔（依据的具体文案由 buildChecks 的用例各自锁）
     expect(text).toMatch(/- 磁盘余量：已用 14\.2%｜.+/)
@@ -402,6 +529,77 @@ describe('DiagnosticsPanel：走真实 mock 端点', () => {
     expect(within(history).getByText(/JVM 崩溃日志/)).toBeInTheDocument()
   })
 
+  it('从非当前实例的链接进入时，自检、历史、报告和末尾日志均读取目标实例', async () => {
+    const user = userEvent.setup()
+    const requests: string[] = []
+    const envelope = (data: unknown) =>
+      HttpResponse.json({
+        status: 'ok',
+        code: 0,
+        message: 'ok',
+        timestamp: new Date().toISOString(),
+        data,
+      })
+    const file = { ...mockCrashHistory[0]!, reason: '乙服历史报告中的错误' }
+    server.use(
+      http.get('*/api/v1/instances/:id', ({ params }) => {
+        requests.push(`状态 ${params.id}`)
+        return envelope(
+          params.id === 'beta'
+            ? {
+                ...STATUS,
+                id: 'beta',
+                name: '虚构乙服',
+                isRunning: false,
+                startupState: 'stopped',
+                circuitBreakerTripped: true,
+                consecutiveCrashes: 7,
+                lastOutput: '乙服的末尾日志',
+              }
+            : STATUS,
+        )
+      }),
+      http.get('*/api/v1/instances/:id/crash-reports', ({ params }) => {
+        requests.push(`历史 ${params.id}`)
+        return envelope(
+          params.id === 'beta'
+            ? { items: [file], total: 3, hasMore: true }
+            : { items: [], total: 0, hasMore: false },
+        )
+      }),
+      http.get('*/api/v1/instances/:id/crash-report', ({ params }) => {
+        requests.push(`报告 ${params.id}`)
+        return envelope(null)
+      }),
+    )
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <MemoryRouter initialEntries={['/help?instance=beta']}>
+        <QueryClientProvider client={qc}>
+          <HelpPage />
+          <LastOutputDialog />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    )
+    expect(await screen.findByRole('heading', { name: '自检 · 虚构乙服' })).toBeVisible()
+    expect(screen.getByText(/连续意外退出 7 次/)).toBeVisible()
+    expect(screen.getByRole('link', { name: '去实例页' })).toHaveAttribute(
+      'href',
+      '/instances?focus=beta',
+    )
+    const history = within(card('crash-history'))
+    expect(await history.findByText('乙服历史报告中的错误')).toBeVisible()
+    expect(history.getByTitle('3 份')).toBeVisible()
+    expect(history.getByText('只显示最近 1 份（共 3 份）')).toBeVisible()
+    expect(history.getByText('历史报告不一定对应触发保护的退出。')).toBeVisible()
+    await user.click(screen.getByRole('button', { name: '查看末尾日志' }))
+    const dialog = await screen.findByRole('dialog', { name: '实例末尾日志' })
+    expect(await within(dialog).findByText('乙服的末尾日志')).toBeVisible()
+    expect(requests.sort()).toEqual(['历史 beta', '报告 beta', '状态 beta', '状态 beta'].sort())
+    expect(useServerStore.getState().instanceId).toBe('inst-1')
+    await user.keyboard('{Escape}')
+  })
+
   it('面板错误列表渲染条目与级别，并给出日志路径', async () => {
     renderPanel()
     const errors = card('panel-errors')
@@ -415,7 +613,7 @@ describe('DiagnosticsPanel：走真实 mock 端点', () => {
     renderPanel()
     // 四条查询都返回后，正常项折在「其余 N 项正常」里——先确认有正常项，再展开看结论
     await userEvent.click(await screen.findByRole('button', { name: /其余 \d+ 项正常/ }))
-    expect(screen.getByText('运行中')).toBeInTheDocument()
+    expect(screen.getByText('已就绪')).toBeInTheDocument()
   })
 
   it('默认展示最新一份的完整诊断（崩溃报告解析），不只给摘要', async () => {

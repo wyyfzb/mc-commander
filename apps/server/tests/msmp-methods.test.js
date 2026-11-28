@@ -20,6 +20,7 @@ import {
   pardonIp,
   applyServerSetting,
   saveWorld,
+  setAutoSave,
   stopServer,
   SERVER_SETTING_KEYS,
   SERVER_SETTING_METHODS,
@@ -53,6 +54,7 @@ function withMethods(msmpResult) {
     pardonIp,
     applyServerSetting,
     saveWorld,
+    setAutoSave,
     stopServer,
   })) {
     inst[name] = fn.bind(inst);
@@ -114,7 +116,7 @@ describe('结构化通道没做成：退回等价命令（逐字一致）', () =
     const inst = withMethods(null);
 
     await expect(inst[method](...args)).resolves.toBe('command');
-    expect(inst.sendCommand).toHaveBeenCalledWith(command);
+    expect(inst.sendCommand).toHaveBeenCalledWith(command, { requireResponse: true });
     // 通道不可用不是「能力位为真」的证据
     expect(inst._msmpAvailable).toBe(false);
   });
@@ -125,8 +127,8 @@ describe('结构化通道没做成：退回等价命令（逐字一致）', () =
     await inst.banPlayer('Steve');
     await inst.kickPlayer('Steve', '');
 
-    expect(inst.sendCommand).toHaveBeenCalledWith('ban Steve');
-    expect(inst.sendCommand).toHaveBeenCalledWith('kick Steve');
+    expect(inst.sendCommand).toHaveBeenCalledWith('ban Steve', { requireResponse: true });
+    expect(inst.sendCommand).toHaveBeenCalledWith('kick Steve', { requireResponse: true });
   });
 });
 
@@ -248,7 +250,7 @@ describe('运行期属性热改：结构化 setter 与生效判据', () => {
     const inst = withMethods(null);
 
     await expect(inst.applyServerSetting('player-idle-timeout', '30')).resolves.toBe('command');
-    expect(inst.sendCommand).toHaveBeenCalledWith('setidletimeout 30');
+    expect(inst.sendCommand).toHaveBeenCalledWith('setidletimeout 30', { requireResponse: true });
   });
 
   it('MSMP 不可用且无等价命令：返回 skipped（调用方据此计入「需重启」）', async () => {
@@ -315,6 +317,51 @@ describe('存档与停机', () => {
     await expect(inst.saveWorld()).rejects.toThrow(/保存世界未成功/);
   });
 
+  it.each(['Saving the game (this may take a moment!)', '', 'Could not save the game'])(
+    '存档回包没有确认完成时拒绝：%s',
+    async (reply) => {
+      const inst = withMethods(null);
+      inst.sendCommandWithResponse = vi.fn(async () => reply);
+      await expect(inst.saveWorld()).rejects.toThrow('服务端未确认落盘');
+    },
+  );
+
+  it.each([true, false])('结构化自动保存确认目标值 %s', async (enabled) => {
+    const inst = withMethods(enabled);
+    await expect(inst.setAutoSave(enabled)).resolves.toBe('msmp');
+    expect(inst._msmpRequest).toHaveBeenCalledWith(
+      'minecraft:serversettings/autosave/set',
+      [enabled],
+      expect.any(Number),
+    );
+  });
+
+  it('结构化自动保存返回相反状态时不回退重发', async () => {
+    const inst = withMethods(true);
+    inst.sendCommandWithResponse = vi.fn();
+    await expect(inst.setAutoSave(false)).rejects.toThrow('未确认自动保存已关闭');
+    expect(inst.sendCommandWithResponse).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [false, 'save-off', 'Automatic saving is now disabled'],
+    [false, 'save-off', 'Saving is already turned off'],
+    [true, 'save-on', 'Automatic saving is now enabled'],
+    [true, 'save-on', 'Saving is already turned on'],
+  ])('RCON 自动保存确认目标值 %s：%s', async (enabled, command, reply) => {
+    const inst = withMethods(null);
+    inst.sendCommandWithResponse = vi.fn(async () => reply);
+    await expect(inst.setAutoSave(enabled)).resolves.toBe('command');
+    expect(inst.sendCommandWithResponse).toHaveBeenCalledWith(command, { timeout: 3000 });
+  });
+
+  it('RCON 自动保存回包无法确认状态时拒绝', async () => {
+    const inst = withMethods(null);
+    inst.sendCommandWithResponse = vi.fn(async () => 'Unknown command');
+    await expect(inst.setAutoSave(true)).rejects.toThrow('未确认自动保存已开启');
+    expect(inst.sendCommand).not.toHaveBeenCalled();
+  });
+
   it('停机：结构化 server/stop，用更短的专用超时（等进程退出的路径不该白等查询超时）', async () => {
     const inst = withMethods(true);
 
@@ -331,7 +378,7 @@ describe('存档与停机', () => {
     const inst = withMethods(null);
 
     await expect(inst.stopServer()).resolves.toBe('command');
-    expect(inst.sendCommand).toHaveBeenCalledWith('stop');
+    expect(inst.sendCommand).toHaveBeenCalledWith('stop', { stopping: true });
   });
 });
 
@@ -382,6 +429,6 @@ describe('封禁时长：官方条目承载 expires', () => {
     await expect(inst.banPlayer('Steve', '刷屏', { expiresAt: Date.now() + 60000 })).resolves.toBe(
       'command',
     );
-    expect(inst.sendCommand).toHaveBeenCalledWith('ban Steve 刷屏');
+    expect(inst.sendCommand).toHaveBeenCalledWith('ban Steve 刷屏', { requireResponse: true });
   });
 });

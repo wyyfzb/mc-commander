@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import {
   BigStatCards,
@@ -117,26 +117,32 @@ describe('BigStatCards 资源卡', () => {
     expect(screen.queryByText('--')).not.toBeInTheDocument()
   })
 
-  it('totalMemory 为 0 时内存进度条兜底为 0', () => {
-    useServerStore.setState({
-      status: mockInstanceStatus,
-      systemStats: {
-        cpuUsage: 10,
-        memoryUsage: 0,
-        totalMemory: 0,
-        memoryPercent: 0,
-        cpuCores: 4,
-        loadAvg: [0.1],
-        uptime: 86400,
-      },
-      instanceId: 'demo',
-      socketConnected: true,
-      lastStatusEvent: null,
-    })
+  it('已就绪但 TPS 未采到时不显示 TPS 或健康结论', () => {
+    setState({ ...mockInstanceStatus, startupState: 'ready', tps: null })
+    render(<BigStatCards />)
+    expect(screen.queryByText(/^(TPS|健康|卡顿)$/)).not.toBeInTheDocument()
+  })
+
+  it.each([
+    { totalMemory: 0, memoryUsage: 0 },
+    { totalMemory: -1, memoryUsage: 0 },
+    { totalMemory: 16, memoryUsage: -1 },
+  ])('缺少有效读数（$memoryUsage / $totalMemory）时不显示内存百分比或进度', (memory) => {
+    const stats = useServerStore.getState().systemStats!
+    useServerStore.setState({ systemStats: { ...stats, ...memory, memoryPercent: 0 } })
+    render(<BigStatCards />)
+    expect(screen.getByText('暂无数据')).toBeInTheDocument()
+    expect(screen.queryByText('0%')).not.toBeInTheDocument()
+    expect(screen.getAllByRole('progressbar')).toHaveLength(1)
+  })
+
+  it('总量有效时保留真实的 0% 用量', () => {
+    const stats = useServerStore.getState().systemStats!
+    useServerStore.setState({ systemStats: { ...stats, memoryUsage: 0, memoryPercent: 0 } })
     render(<BigStatCards />)
     expect(screen.getByText('0%')).toBeInTheDocument()
     expect(screen.getByText('0.0')).toBeInTheDocument()
-    expect(screen.getByText((c) => c.includes('/ 0G'))).toBeInTheDocument()
+    expect(screen.getAllByRole('progressbar')[1]).toHaveAttribute('aria-valuenow', '0')
   })
 })
 
@@ -182,6 +188,7 @@ describe('PlayersCard（右栏可点行）', () => {
     setState({
       ...mockInstanceStatus,
       isRunning: false,
+      startupState: 'stopped',
       playerCount: 0,
       opCount: 0,
       opNames: [],
@@ -193,37 +200,37 @@ describe('PlayersCard（右栏可点行）', () => {
     expect(screen.getByText('实例已停止，暂无玩家数据')).toBeInTheDocument()
   })
 
-  it('RCON 未连接 → 提示启用 RCON', () => {
+  it('已有在线人数但明细缺失时，不从 RCON 配置推断无人在线或强制用户启用 RCON', () => {
     setState({
       ...mockInstanceStatus,
-      capabilities: { rcon: false, msmp: false, msmpPush: false },
+      capabilities: { rcon: false, msmp: true, msmpPush: true },
       sleepingPlayerNames: [],
       awakePlayerNames: [],
     })
     renderCard()
-    expect(screen.getByText('需启用 RCON 才能读取在线玩家')).toBeInTheDocument()
-  })
-
-  it('RCON 未连接 → 空态提供「前往服务器属性」深链', () => {
-    setState({
-      ...mockInstanceStatus,
-      capabilities: { rcon: false, msmp: false, msmpPush: false },
-      sleepingPlayerNames: [],
-      awakePlayerNames: [],
-    })
-    renderCard()
-    expect(screen.getByRole('button', { name: '前往服务器属性' })).toBeInTheDocument()
-  })
-
-  it('RCON 已连接 → 不渲染「前往服务器属性」深链', () => {
-    setState({
-      ...mockInstanceStatus,
-      capabilities: { rcon: true, msmp: false, msmpPush: false },
-      sleepingPlayerNames: [],
-      awakePlayerNames: [],
-    })
-    renderCard()
+    expect(screen.getByText('暂无玩家明细')).toBeInTheDocument()
+    expect(screen.queryByText('暂无玩家在线')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '前往服务器属性' })).not.toBeInTheDocument()
+  })
+
+  it.each(['starting', 'unknown'] as const)(
+    '状态 %s 不展示未确认的在线名单或 OP 数',
+    (startupState) => {
+      setState({ ...mockInstanceStatus, startupState })
+      renderCard()
+      expect(screen.getByText('尚未确认在线玩家')).toBeInTheDocument()
+      expect(screen.queryByText('OP 1/3')).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: '查看 Steve 详情' })).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: '查看全部玩家' })).toBeEnabled()
+    },
+  )
+
+  it('已切换实例但快照仍来自上一实例时不显示该快照', () => {
+    useServerStore.setState({ instanceId: '另一个实例' })
+    renderCard()
+    expect(screen.getByText('尚未确认在线玩家')).toBeInTheDocument()
+    expect(screen.queryByText('实例已停止，暂无玩家数据')).not.toBeInTheDocument()
+    expect(screen.queryByText('OP 1/3')).not.toBeInTheDocument()
   })
 })
 
@@ -242,9 +249,31 @@ describe('RuntimeInfoCard', () => {
     expect(screen.getByText('2h 0m').className).toContain('text-mcs-display')
   })
 
-  it('未运行时显示「未运行」', () => {
-    setState({ ...mockInstanceStatus, isRunning: false, uptime: 0 })
+  it('进程已运行时仅按服务端启动状态报告就绪，进程时长不受就绪影响', () => {
+    setState({ ...mockInstanceStatus, startupState: 'starting' })
+    render(
+      <>
+        <RuntimeInfoCard />
+        <BigStatCards />
+      </>,
+    )
+    expect(screen.getByRole('status')).toHaveTextContent('启动中')
+    expect(screen.getByText('2h 0m')).toBeInTheDocument()
+    expect(screen.queryByText('健康')).not.toBeInTheDocument()
+
+    act(() => setState({ ...mockInstanceStatus, startupState: 'unknown' }))
+    expect(screen.getByRole('status')).toHaveTextContent('就绪未知')
+    expect(screen.queryByText('健康')).not.toBeInTheDocument()
+
+    act(() => setState({ ...mockInstanceStatus, startupState: 'ready' }))
+    expect(screen.getByRole('status')).toHaveTextContent('已就绪')
+    expect(screen.getByText('健康')).toBeInTheDocument()
+  })
+
+  it('未运行时显示已停止与无运行时长', () => {
+    setState({ ...mockInstanceStatus, isRunning: false, startupState: 'stopped', uptime: 0 })
     render(<RuntimeInfoCard />)
+    expect(screen.getByRole('status')).toHaveTextContent('已停止')
     expect(screen.getByText('未运行')).toBeInTheDocument()
   })
 })

@@ -10,7 +10,7 @@
  *
  * 主口径是 `/perf`（耗时 + 堆 + 热点，直接对应「卡」），备口径是 `/jfr`（GC 与分配）。
  */
-import { Download, Info, RefreshCw } from 'lucide-react'
+import { Download, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 import { getFriendlyErrorText, ErrorCode } from '@/api/errors'
 import { ApiError } from '@/api/client'
@@ -51,7 +51,7 @@ export function SnapshotErrorBanner({
   retrying: boolean
 }) {
   return (
-    <NoticeBanner variant="error" icon={Info} role="alert">
+    <NoticeBanner variant="error" role="alert">
       <span className="flex flex-wrap items-center justify-between gap-2">
         <span className="min-w-0">
           <b>没取到快照</b> · {getFriendlyErrorText(error)}
@@ -109,7 +109,7 @@ export function SnapshotView({
       <PerfVerdictCard verdict={snapshot.verdict} />
 
       {snapshot.parseWarnings.length > 0 && (
-        <NoticeBanner variant="warning" icon={Info} form="card">
+        <NoticeBanner variant="warning" form="card">
           <p className="text-mcs-xs font-medium text-mcs-text-default">产物里有读不出来的部分</p>
           <ul className="mt-1 flex list-disc flex-col gap-0.5 pl-4">
             {snapshot.parseWarnings.map((warning) => (

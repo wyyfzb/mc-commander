@@ -154,7 +154,7 @@ export function PerfSheet() {
           {/* 读数失败与「已停止」是两回事：后者是事实，前者说明我们不知道它到底在不在跑。
               按钮此时仍可点（点击后服务端会给出确切答复），故这里只交代读数是旧的 */}
           {runningUnknown && (
-            <NoticeBanner variant="warning" icon={Activity}>
+            <NoticeBanner variant="warning">
               <span className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
                 <span className="min-w-0">
                   读不到实例运行状态（服务端暂时不可用），按钮不会被拦——若确实没在运行，取快照会直接报错。

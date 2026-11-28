@@ -9,7 +9,7 @@ import { RotateCw } from 'lucide-react'
 import { formatDurationMs } from '@/lib/format'
 import type { AuditLogItem, CommandHistoryItem } from '@/api/types'
 import { getActionLabel } from './action-labels'
-import { formatTime, formatAuditDetail } from './audit-format'
+import { formatTime, formatAuditDetail, formatCommandResult } from './audit-format'
 
 export const AUDIT_COLUMNS = 4
 export const CMD_COLUMNS = 6
@@ -111,8 +111,10 @@ export function CmdBody({
           <td className="px-3 py-2 font-mono text-mcs-text-default">{cmd.command}</td>
           <td className="px-3 py-2">
             {cmd.success || !cmd.response ? (
-              <StatusPill tone={cmd.success ? 'success' : 'error'}>
-                {cmd.success ? '成功' : '失败'}
+              <StatusPill
+                tone={cmd.success ? (cmd.response === null ? 'muted' : 'success') : 'error'}
+              >
+                {formatCommandResult(cmd.success, cmd.response)}
               </StatusPill>
             ) : (
               /* 失败行：response 携带原因时给出解释（与任务列表失败行同模式）。

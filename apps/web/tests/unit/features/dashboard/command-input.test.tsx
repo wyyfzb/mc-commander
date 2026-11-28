@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach, afterAll, beforeAll } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { setupServer } from 'msw/node'
 import { http, HttpResponse } from 'msw'
 import { Toaster } from 'sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
-import { handlers } from '@tests/support/handlers'
+import { handlers, mockInstanceStatus } from '@tests/support/handlers'
 import { CommandInput } from '@/features/dashboard/components/command-input'
 import { useServerStore } from '@/stores/server'
 import { useConnectionStore } from '@/stores/connection'
@@ -41,7 +41,7 @@ beforeEach(() => {
   usePanelPreferencesStore.setState({ remote: {}, saving: false })
   useConnectionStore.setState({ baseUrl: '', apiKey: 'test-key', status: 'ready' })
   useServerStore.setState({
-    status: null,
+    status: mockInstanceStatus,
     systemStats: null,
     instanceId: 'demo',
     socketConnected: true,
@@ -151,6 +151,48 @@ describe('CommandInput', () => {
     expect(runner).not.toBeNull()
   })
 
+  it('启动中禁用各发送入口，就绪未知时可通过命令总线发送', async () => {
+    const sent: string[] = []
+    server.use(
+      http.post('*/api/v1/instances/:id/command', async ({ request }) => {
+        sent.push(((await request.json()) as { command: string }).command)
+        return HttpResponse.json({
+          status: 'ok',
+          code: 0,
+          message: 'Success',
+          data: null,
+          timestamp: new Date().toISOString(),
+        })
+      }),
+    )
+    renderInput()
+    const input = screen.getByLabelText('服务器命令输入')
+    fireEvent.change(input, { target: { value: 'say blocked' } })
+    act(() =>
+      useServerStore.setState({ status: { ...mockInstanceStatus, startupState: 'starting' } }),
+    )
+    const send = screen.getByRole('button', { name: '发送命令' })
+    const play = screen.getByRole('button', { name: `发送 ${DEFAULT_COMMAND_PRESETS[0]}` })
+    expect(input).toBeDisabled()
+    expect(send).toBeDisabled()
+    expect(play).toBeDisabled()
+    expect(screen.getByRole('status')).toHaveTextContent('服务器正在启动，就绪后可发送命令')
+    await act(async () => {
+      fireEvent.keyDown(input, { key: 'Enter' })
+      fireEvent.click(send)
+      fireEvent.click(play)
+      useCommandBus.getState().overlayRunner?.('say blocked from palette')
+    })
+
+    act(() =>
+      useServerStore.setState({ status: { ...mockInstanceStatus, startupState: 'unknown' } }),
+    )
+    expect(input).toBeEnabled()
+    act(() => useCommandBus.getState().overlayRunner?.('say unknown'))
+    await waitFor(() => expect(input).toHaveValue(''))
+    expect(sent).toEqual(['say unknown'])
+  })
+
   describe('命令历史（↑↓）', () => {
     /** 发送两条命令入历史 */
     const sendCommands = async (cmds: string[]) => {
@@ -223,21 +265,20 @@ describe('CommandInput', () => {
   describe('RCON 降级横幅', () => {
     it('isRunning + !isRconConnected 时显示降级横幅', () => {
       useServerStore.setState({
-        status: { isRunning: true, capabilities: { rcon: false, msmp: false } } as NonNullable<
-          ReturnType<typeof useServerStore.getState>['status']
-        >,
+        status: {
+          ...mockInstanceStatus,
+          capabilities: { rcon: false, msmp: false, msmpPush: false },
+        },
       })
       renderInput()
       const banner = screen.getByRole('status')
       expect(banner).toBeInTheDocument()
-      expect(banner).toHaveTextContent('RCON 未启用，命令已发送但响应不可见')
+      expect(banner).toHaveTextContent('RCON 未启用，无法查看命令响应')
     })
 
     it('isRunning + isRconConnected 时不显示横幅', () => {
       useServerStore.setState({
-        status: { isRunning: true, capabilities: { rcon: true, msmp: false } } as NonNullable<
-          ReturnType<typeof useServerStore.getState>['status']
-        >,
+        status: mockInstanceStatus,
       })
       renderInput()
       expect(screen.queryByRole('status')).not.toBeInTheDocument()
@@ -250,22 +291,36 @@ describe('CommandInput', () => {
     })
   })
 
-  describe('历史状态回显（sent/failed 指示器）', () => {
-    it('成功命令入列 + ↑ 导航显示「已送达」', async () => {
+  describe('历史状态回显', () => {
+    it.each([
+      { response: null, label: '命令已投递，未确认游戏执行' },
+      { response: '', label: '游戏已响应' },
+    ])('回执为 $response 时，历史显示 $label', async ({ response, label }) => {
+      server.use(
+        http.post('*/api/v1/instances/:id/command', () =>
+          HttpResponse.json({
+            status: 'ok',
+            code: 0,
+            message: 'Success',
+            data: response,
+            timestamp: '',
+          }),
+        ),
+      )
       renderInput()
       const input = screen.getByLabelText('服务器命令输入')
       // 非导航态指示器不显示
-      expect(screen.queryByText('已送达')).not.toBeInTheDocument()
+      expect(screen.queryByText(label)).not.toBeInTheDocument()
       fireEvent.change(input, { target: { value: 'say ok' } })
       fireEvent.keyDown(input, { key: 'Enter' })
       await waitFor(() => expect(input).toHaveValue(''))
       // ↑ 进入导航 → 指示器出现
       fireEvent.keyDown(input, { key: 'ArrowUp' })
       expect(input).toHaveValue('say ok')
-      expect(screen.getByText('已送达')).toBeInTheDocument()
+      expect(screen.getByText(label)).toBeInTheDocument()
       // 编辑退出导航 → 指示器消失
       fireEvent.change(input, { target: { value: 'fresh' } })
-      expect(screen.queryByText('已送达')).not.toBeInTheDocument()
+      expect(screen.queryByText(label)).not.toBeInTheDocument()
     })
 
     it('失败命令入列含 error，↑ 导航显示「失败: 原因」', async () => {

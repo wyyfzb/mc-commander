@@ -1,26 +1,22 @@
-/**
- * InstanceControls phase 中间态测试
- * - phase=stopping：停止按钮禁用 + spinner；启动/重启/保存按钮禁用（防连点）
- * - phase=starting：启动按钮禁用 + spinner
- * - 无 phase：运行中实例仅停止/重启/保存可用（原行为）
- * 连点保护语义：phase 置入即 disabled，后续 click 被 HTML disabled 拦截（不发新请求）
- * store 状态全部虚构（inst-1），无真实凭据
- */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react'
+import { toast } from 'sonner'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { useServerStore } from '@/stores/server'
 import { useConnectionStore } from '@/stores/connection'
 import type { InstanceStatus } from '@/api/types'
+import { mockInstanceStatus } from '@tests/support/handlers'
 import { InstanceControls } from '@/features/dashboard/components/instance-controls'
 
-// apiPost 间谍：用于断言「点启动没有误发 save-all」
+const apiGet = vi.fn()
 const apiPost = vi.fn((..._args: unknown[]) => Promise.resolve(null))
 vi.mock('@/api/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/api/client')>()),
+  apiGet: (...args: unknown[]) => apiGet(...args),
   apiPost: (...args: unknown[]) => apiPost(...args),
 }))
+vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 
 // 启动共享 hook 桩（phase 置入逻辑在其内部，此处只验证消费端禁用行为）
 const startInstance = vi.fn((..._args: unknown[]) => undefined)
@@ -39,10 +35,13 @@ vi.mock('@/hooks/use-instance-stop', () => ({
   useStopInstance: () => ({ mutate: stopMutate, isPending: false, variables: null }),
 }))
 
-function setStatus(running: boolean) {
+function setStatus(
+  running: boolean,
+  startupState: InstanceStatus['startupState'] = running ? 'ready' : 'stopped',
+) {
   useServerStore.setState({
     instanceId: 'inst-1',
-    status: { isRunning: running, players: [] } as unknown as InstanceStatus,
+    status: { ...mockInstanceStatus, id: 'inst-1', isRunning: running, startupState, players: [] },
   })
 }
 
@@ -65,6 +64,9 @@ beforeEach(() => {
   stopMutate.mockClear()
   startInstance.mockClear()
   apiPost.mockClear()
+  apiGet.mockReset()
+  vi.mocked(toast.success).mockClear()
+  vi.mocked(toast.error).mockClear()
   useConnectionStore.setState({ baseUrl: '', apiKey: 'test-key', status: 'ready' })
   useServerStore.setState({ instanceId: 'inst-1', status: null, phase: {} })
 })
@@ -86,13 +88,36 @@ describe('InstanceControls 启动确认（EULA 前置条件前移）', () => {
     expect(screen.queryByText('确定要启动服务器吗？')).not.toBeInTheDocument()
   })
 
+  it('启动只回执发令，不因进程存在而提示成功或发起专用轮询', async () => {
+    vi.useFakeTimers()
+    try {
+      setStatus(false)
+      apiGet.mockResolvedValue({ isRunning: true, startupState: 'starting' })
+      renderControls()
+      fireEvent.click(screen.getByRole('button', { name: '启动' }))
+      const callbacks = startInstance.mock.calls[0]?.[1] as { onStarted: () => void }
+      act(() => {
+        setStatus(true, 'starting')
+        callbacks.onStarted()
+      })
+
+      expect(toast.success).toHaveBeenCalledExactlyOnceWith('启动指令已发送')
+      await act(() => vi.advanceTimersByTimeAsync(60_000))
+      expect(apiGet).not.toHaveBeenCalled()
+      expect(toast.success).toHaveBeenCalledTimes(1)
+      expect(toast.error).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('启动不走「非确认即保存」兜底：点击不得误发 save-all', () => {
     setStatus(false)
     renderControls()
     fireEvent.click(screen.getByRole('button', { name: '启动' }))
     // 按动作分派的回归防线：以前 else 分支硬编码 save，
     // 任何新增的免确认动作都会被静默执行成「保存」
-    const saveCalls = apiPost.mock.calls.filter((c) => String(c[0]).includes('/command'))
+    const saveCalls = apiPost.mock.calls.filter((c) => String(c[0]).endsWith('/save'))
     expect(saveCalls).toHaveLength(0)
   })
 
@@ -104,21 +129,45 @@ describe('InstanceControls 启动确认（EULA 前置条件前移）', () => {
     expect(screen.getByText('关闭服务器')).toBeInTheDocument()
   })
 
-  it('重启仍需确认（高危动作保留二次确认）', () => {
+  it('重启经确认发起，收到新进程启动回执才提示', async () => {
+    let resolveRequest!: (value: null) => void
+    apiPost.mockReturnValueOnce(
+      new Promise<null>((resolve) => {
+        resolveRequest = resolve
+      }),
+    )
     setStatus(true)
     renderControls()
 
     fireEvent.click(screen.getByRole('button', { name: '重启' }))
     expect(screen.getByText('重启服务器')).toBeInTheDocument()
+    fireEvent.click(
+      within(screen.getByRole('dialog', { name: '重启服务器' })).getByRole('button', {
+        name: '重启',
+      }),
+    )
+    await waitFor(() =>
+      expect(apiPost).toHaveBeenCalledWith(
+        '/api/v1/instances/inst-1/restart',
+        expect.anything(),
+        undefined,
+        { timeoutMs: 20_000 },
+      ),
+    )
+    expect(toast.success).not.toHaveBeenCalled()
+    resolveRequest(null)
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith('新进程已启动，游戏就绪状态待确认'),
+    )
   })
 
-  it('保存：无确认直接发 save-all（原行为保留）', async () => {
+  it('保存：无确认调用专用存档接口', async () => {
     setStatus(true)
     renderControls()
     fireEvent.click(screen.getByRole('button', { name: '保存' }))
     // mutationFn 是异步的：等它跑完再断言，否则读到的是空调用表
     await waitFor(() => {
-      const saveCalls = apiPost.mock.calls.filter((c) => String(c[0]).includes('/command'))
+      const saveCalls = apiPost.mock.calls.filter((c) => String(c[0]).endsWith('/save'))
       expect(saveCalls).toHaveLength(1)
     })
     expect(screen.queryByText(/确定要保存/)).not.toBeInTheDocument()
@@ -144,13 +193,29 @@ describe('InstanceControls phase 中间态', () => {
     expect(stopMutate).not.toHaveBeenCalled()
   })
 
-  it('starting 中间态：运行中的实例停止/重启/保存仍禁用（启停互斥）', () => {
-    setStatus(true)
+  it('启动中允许停止和重启，暂不允许重复启动或保存', () => {
+    setStatus(true, 'starting')
     setPhase({ 'inst-1': 'starting' })
     renderControls()
 
-    expect(screen.getByRole('button', { name: '停止' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: '重启' })).toBeDisabled()
+    const start = screen.getByRole('button', { name: '启动' })
+    expect(start).toBeDisabled()
+    expect(start.querySelector('.animate-spin')).not.toBeNull()
+    expect(screen.getByRole('button', { name: '重启' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: '保存' })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: '停止' }))
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: '停止' }))
+    expect(stopMutate).toHaveBeenCalledWith('inst-1')
+  })
+
+  it('进程就绪未确认时仍可停止、重启和发送保存指令', () => {
+    setStatus(true, 'unknown')
+    renderControls()
+
+    for (const name of ['停止', '重启', '保存']) {
+      expect(screen.getByRole('button', { name })).toBeEnabled()
+    }
+    expect(screen.getByRole('button', { name: '启动' })).toBeDisabled()
   })
 
   it('无 phase（原行为）：运行中实例停止可用且可触发确认', () => {

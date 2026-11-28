@@ -16,6 +16,14 @@ describe('错误码映射（对照服务端 ErrorCodes 契约）', () => {
     )
   })
 
+  it('区分命令未送达、回执未知和游戏拒绝，并保留游戏原因', () => {
+    expect(getFriendlyErrorMessage(50304)).toContain('命令未送达')
+    expect(getFriendlyErrorMessage(50305)).toContain('请检查实际结果后再重试')
+    expect(getFriendlyErrorMessage(40019, 'Unknown or incomplete command')).toBe(
+      'Unknown or incomplete command',
+    )
+  })
+
   it('未知错误码回退服务端 message 或通用文案', () => {
     expect(getFriendlyErrorMessage(99999, 'Some server message')).toBe('Some server message')
     expect(getFriendlyErrorMessage(99999)).toBe('操作失败（错误码 99999）')

@@ -20,6 +20,8 @@
  * 命令串只在回退分支里拼，且沿用原有的输入清洗。
  */
 
+import { AppError, ErrorCodes } from '../../utils/response.js';
+
 /** 单次结构化写超时：与查询同档，写操作要等服务器真正落地 */
 export const MSMP_WRITE_TIMEOUT_MS = 5000;
 /**
@@ -52,13 +54,25 @@ function _resultHasIp(result, ip) {
  * @param {(() => Promise<unknown>) | null} runCommand 等价的命令通道（null = 该动作没有命令等价物）
  * @returns {Promise<'msmp' | 'command' | 'skipped'>} 实际生效的通道；skipped = 无命令等价物且结构化通道不可用
  */
-export async function _writeViaPreferredChannel(structured, runCommand) {
+export async function _writeViaPreferredChannel(
+  structured,
+  runCommand,
+  isCurrentRun = this._currentRunGuard?.(),
+) {
+  const assertCurrentRun = () => {
+    if (isCurrentRun && !isCurrentRun()) {
+      throw new AppError(ErrorCodes.COMMAND_NOT_SENT, '实例运行轮次已变更');
+    }
+  };
+  assertCurrentRun();
   if (structured) {
     const result = await this._msmpRequest(
       structured.method,
       structured.params,
       structured.timeoutMs ?? MSMP_WRITE_TIMEOUT_MS,
+      ...(isCurrentRun ? [{ canSend: isCurrentRun }] : []),
     );
+    assertCurrentRun();
     if (result !== null && result !== undefined) {
       // 只在成功时置能力位：写失败可能是参数/对象问题，不足以判定整条通道不可用
       this._msmpAvailable = true;
@@ -171,7 +185,7 @@ export function applyServerSetting(key, rawValue) {
   if (!spec) return Promise.resolve('skipped');
   const value = spec.toValue(rawValue);
   const runCommand = spec.fallbackCommand
-    ? () => this.sendCommand(spec.fallbackCommand(rawValue))
+    ? () => this.sendCommand(spec.fallbackCommand(rawValue), { requireResponse: true })
     : null;
   return this._writeViaPreferredChannel(
     {
@@ -185,20 +199,60 @@ export function applyServerSetting(key, rawValue) {
 }
 
 /** 让世界落盘：`flush=true` 等价 `save-all flush`（实测返回 `true`） */
-export function saveWorld() {
+export function saveWorld({ force = false } = {}) {
+  if (force && this.isRconConnected === false) {
+    return Promise.reject(new AppError(ErrorCodes.BACKUP_RCON_UNAVAILABLE));
+  }
   return this._writeViaPreferredChannel(
-    {
-      method: 'minecraft:server/save',
-      params: [true],
-      verify: (result) => result === true,
-      unverifiedMessage: '保存世界未成功：服务端未确认落盘',
-    },
-    () => this.sendCommandWithResponse('save-all flush', { timeout: 5000 }),
+    // 备份关闭了自动保存，需要 save-all 的强制写盘语义。
+    force
+      ? null
+      : {
+          method: 'minecraft:server/save',
+          params: [true],
+          verify: (result) => result === true,
+          unverifiedMessage: '保存世界未成功：服务端未确认落盘',
+        },
+    () =>
+      runConfirmedSaveCommand(
+        this,
+        'save-all flush',
+        5000,
+        /^Saved the (?:game|world)[.!]?$/,
+        '保存世界未成功：服务端未确认落盘',
+      ),
   );
 }
 
+export function setAutoSave(enabled) {
+  const message = `服务端未确认自动保存已${enabled ? '开启' : '关闭'}`;
+  const confirmation = enabled
+    ? /^(?:Automatic saving is now enabled|Saving is already turned on)[.!]?$/
+    : /^(?:Automatic saving is now disabled|Saving is already turned off)[.!]?$/;
+  return this._writeViaPreferredChannel(
+    {
+      method: 'minecraft:serversettings/autosave/set',
+      params: [enabled],
+      verify: (result) => result === enabled,
+      unverifiedMessage: message,
+    },
+    () =>
+      runConfirmedSaveCommand(this, enabled ? 'save-on' : 'save-off', 3000, confirmation, message),
+  );
+}
+
+async function runConfirmedSaveCommand(instance, command, timeout, confirmation, message) {
+  const reply = await instance.sendCommandWithResponse(command, { timeout });
+  if (
+    typeof reply !== 'string' ||
+    !reply.split(/\r?\n/).some((line) => confirmation.test(line.trim()))
+  ) {
+    throw new Error(message);
+  }
+}
+
 /** 停机：实测 `server/stop` 会在关服前回 `true`（27ms），故不会误触发回退重发 */
-export function stopServer() {
+export function stopServer({ isCurrentRun } = {}) {
   return this._writeViaPreferredChannel(
     {
       method: 'minecraft:server/stop',
@@ -207,7 +261,12 @@ export function stopServer() {
       verify: (result) => result === true,
       unverifiedMessage: '停机未生效：服务端未确认',
     },
-    () => this.sendCommand('stop'),
+    () =>
+      this.sendCommand(
+        'stop',
+        isCurrentRun ? { stopping: true, isCurrentRun } : { stopping: true },
+      ),
+    isCurrentRun,
   );
 }
 
@@ -236,7 +295,7 @@ export function whitelistAdd(name) {
       verify: (result) => _resultHasPlayer(result, name),
       unverifiedMessage: `无法把 ${name} 加入白名单：服务端查不到该玩家的档案`,
     },
-    () => this.sendCommand(`whitelist add ${name}`),
+    () => this.sendCommand(`whitelist add ${name}`, { requireResponse: true }),
   );
 }
 
@@ -244,7 +303,7 @@ export function whitelistAdd(name) {
 export function whitelistRemove(name) {
   return this._writeViaPreferredChannel(
     { method: 'minecraft:allowlist/remove', params: [[{ name }]] },
-    () => this.sendCommand(`whitelist remove ${name}`),
+    () => this.sendCommand(`whitelist remove ${name}`, { requireResponse: true }),
   );
 }
 
@@ -264,7 +323,7 @@ export function opPlayer(name) {
       verify: (result) => _resultHasPlayer(result, name),
       unverifiedMessage: `无法把 ${name} 设为管理员：服务端查不到该玩家的档案`,
     },
-    () => this.sendCommand(`op ${name}`),
+    () => this.sendCommand(`op ${name}`, { requireResponse: true }),
   );
 }
 
@@ -272,7 +331,7 @@ export function opPlayer(name) {
 export function deopPlayer(name) {
   return this._writeViaPreferredChannel(
     { method: 'minecraft:operators/remove', params: [[{ name }]] },
-    () => this.sendCommand(`deop ${name}`),
+    () => this.sendCommand(`deop ${name}`, { requireResponse: true }),
   );
 }
 
@@ -286,7 +345,7 @@ export function kickPlayer(name, reason) {
       verify: (result) => _resultHasPlayer(result, name),
       unverifiedMessage: `${name} 不在线，踢出未生效`,
     },
-    () => this.sendCommand(`kick ${name}${text ? ` ${text}` : ''}`),
+    () => this.sendCommand(`kick ${name}${text ? ` ${text}` : ''}`, { requireResponse: true }),
   );
 }
 
@@ -305,7 +364,7 @@ export function banPlayer(name, reason, options = {}) {
       verify: (result) => _resultHasPlayer(result, name),
       unverifiedMessage: `无法封禁 ${name}：服务端查不到该玩家的档案`,
     },
-    () => this.sendCommand(`ban ${name}${text ? ` ${text}` : ''}`),
+    () => this.sendCommand(`ban ${name}${text ? ` ${text}` : ''}`, { requireResponse: true }),
   );
 }
 
@@ -319,7 +378,7 @@ export function banIp(ip, reason, options = {}) {
       verify: (result) => _resultHasIp(result, ip),
       unverifiedMessage: `无法封禁 IP ${ip}`,
     },
-    () => this.sendCommand(`ban-ip ${ip}${text ? ` ${text}` : ''}`),
+    () => this.sendCommand(`ban-ip ${ip}${text ? ` ${text}` : ''}`, { requireResponse: true }),
   );
 }
 
@@ -327,7 +386,7 @@ export function banIp(ip, reason, options = {}) {
 export function pardonPlayer(name) {
   return this._writeViaPreferredChannel(
     { method: 'minecraft:bans/remove', params: [[{ name }]] },
-    () => this.sendCommand(`pardon ${name}`),
+    () => this.sendCommand(`pardon ${name}`, { requireResponse: true }),
   );
 }
 
@@ -335,7 +394,7 @@ export function pardonPlayer(name) {
 export function pardonIp(ip) {
   return this._writeViaPreferredChannel(
     { method: 'minecraft:ip_bans/remove', params: [[ip]] },
-    () => this.sendCommand(`pardon-ip ${ip}`),
+    () => this.sendCommand(`pardon-ip ${ip}`, { requireResponse: true }),
   );
 }
 
@@ -347,6 +406,7 @@ export default {
   _writeViaPreferredChannel,
   applyServerSetting,
   saveWorld,
+  setAutoSave,
   stopServer,
   whitelistAdd,
   whitelistRemove,

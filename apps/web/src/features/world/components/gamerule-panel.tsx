@@ -30,6 +30,7 @@ import { StatusPill } from '@/components/mcs/status-pill'
 import { toast } from 'sonner'
 import { ApiError } from '@/api/client'
 import { getFriendlyErrorMessage } from '@/api/errors'
+import { COMMAND_DELIVERED_WITHOUT_RESPONSE } from '@/api/players'
 import { useGamerules } from '../queries'
 import {
   GAMERULE_CATEGORY_LABELS,
@@ -165,14 +166,19 @@ export function GamerulePanel({
     const { name, draft } = edit
     setSavingName(name)
     try {
-      await onSendCommand(buildGameruleSetCommand(name, draft))
+      const response = await onSendCommand(buildGameruleSetCommand(name, draft))
+      if (response === null) {
+        setEdit(null)
+        toast.warning(COMMAND_DELIVERED_WITHOUT_RESPONSE)
+        return
+      }
       setOptimistic((prev) => new Map(prev).set(name, draft))
       setEdit(null)
       toast.success(`已更新规则 ${name} = ${draft}`)
       await reload()
     } catch (e) {
       setEdit(null)
-      toast.error(`规则更新失败：${friendlyError(e)}`)
+      toast.error(`规则更新未确认：${friendlyError(e)}`)
     } finally {
       setSavingName(null)
     }

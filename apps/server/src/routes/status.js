@@ -3,7 +3,7 @@ import os from 'os';
 import fs from 'fs';
 import path from 'path';
 import { z } from 'zod';
-import { error, ErrorCodes } from '../utils/response.js';
+import { AppError, error, ErrorCodes } from '../utils/response.js';
 import { InstanceModel, BackupModel } from '../db/index.js';
 import config from '../config.js';
 import { atomicWriteFile, isEulaAccepted, syncInstanceJson } from '../services/mc_server.js';
@@ -44,6 +44,7 @@ import {
   applyPropertyUpdates,
 } from '../services/instance-properties.service.js';
 import { listInstanceSnapshotDirs } from '../services/backup-snapshot.service.js';
+import { hasInProgressBackup } from '../services/backup.service.js';
 
 // 卸载响应回报的快照目录名条数上限：清单可能很长，数量永远是全量，名字只列最近的
 const RETAINED_BACKUP_REPORT_LIMIT = 10;
@@ -223,6 +224,7 @@ export function createStatusRoutes(serverManager) {
           id: i.id,
           name: i.name,
           isRunning: i.isRunning,
+          startupState: i.startupState,
           playerCount: i.playerCount,
           // 与部署向导同源：面板靠它扣减其他实例的已分配量，不看运行状态
           maxMemory: i.maxMemory,
@@ -331,7 +333,6 @@ export function createStatusRoutes(serverManager) {
           // 允许清除：仅当实例当前确实有遗留 startCommand 时才需要更新
           if (instance.startCommand) {
             updates.startCommand = null;
-            instance.startCommand = null;
           }
         } else {
           return res
@@ -421,10 +422,9 @@ export function createStatusRoutes(serverManager) {
         return res.status(400).json(error(ErrorCodes.VALIDATION_ERROR, '没有可更新的字段'));
       }
 
-      // 1. 持久化到数据库
-      InstanceModel.update(req.params.id, updates);
+      InstanceModel.update(instance.id, updates);
 
-      // 2. 同步更新内存中运行实例的字段（下次 start() 生效）
+      if (updates.startCommand !== undefined) instance.startCommand = updates.startCommand;
       if (updates.javaPath !== undefined) instance.javaPath = updates.javaPath;
       if (updates.maxMemory !== undefined) instance.maxMemory = updates.maxMemory;
       if (updates.minMemory !== undefined) instance.minMemory = updates.minMemory;
@@ -434,14 +434,6 @@ export function createStatusRoutes(serverManager) {
       if (updates.autoRestart !== undefined) instance.autoRestart = Boolean(updates.autoRestart);
       if (updates.autoStart !== undefined) instance.autoStart = Boolean(updates.autoStart);
       if (updates.jvmArgs !== undefined) instance.jvmArgs = updates.jvmArgs;
-      // 重新开启 autoRestart 时重置熔断器（用户已确认手动介入）
-      if (updates.autoRestart === true && instance._circuitBreakerTripped) {
-        instance._consecutiveCrashes = 0;
-        instance._crashWindowStart = null;
-        instance._circuitBreakerTripped = false;
-      }
-
-      // 3. 同步 instance.json 保持最新（含 startCommand/jvmArgs），供 DB 丢失时兜底恢复
       _syncInstanceJson(instance);
 
       // 审计新增 INSTANCE_UPDATE 枚举（命名对齐 INSTANCE_* 生命周期组）：本端点是实例核心
@@ -510,7 +502,7 @@ export function createStatusRoutes(serverManager) {
       if (!instance) {
         return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND));
       }
-      instance.stop();
+      await instance.stop();
       try {
         InstanceModel.update(req.params.id, { status: 'stopped' });
       } catch (e) {
@@ -522,7 +514,7 @@ export function createStatusRoutes(serverManager) {
         targetType: 'instance',
         targetId: req.params.id,
       });
-      res.json(validatedSuccess(nullDataSchema, null, 'Server stopping'));
+      res.json(validatedSuccess(nullDataSchema, null, 'Server stopped'));
     }),
   );
 
@@ -534,8 +526,12 @@ export function createStatusRoutes(serverManager) {
       if (!instance) {
         return res.status(404).json(error(ErrorCodes.INSTANCE_NOT_FOUND));
       }
-      // 统一走 instance.restart()：内部处理停止命令 + 可取消的延迟启动
-      instance.restart();
+      await instance.restart();
+      try {
+        InstanceModel.update(req.params.id, { status: 'running' });
+      } catch (e) {
+        logger.warn('Failed to sync instance status to DB:', e.message);
+      }
       recordAudit({
         instanceId: req.params.id,
         action: AuditActions.INSTANCE_RESTART,
@@ -553,7 +549,7 @@ export function createStatusRoutes(serverManager) {
     '/instances/:id/command',
     validateBody(instanceCommandRequestBodySchema),
     asyncHandler(async (req, res) => {
-      const { command, source } = req.body;
+      const { command, source, requireResponse } = req.body;
       if (!command) {
         return res.status(400).json(error(ErrorCodes.VALIDATION_ERROR, 'Command is required'));
       }
@@ -567,15 +563,34 @@ export function createStatusRoutes(serverManager) {
         return res.status(400).json(error(ErrorCodes.INSTANCE_NOT_RUNNING));
       }
 
+      const response = await instance.sendCommand(command, {
+        source,
+        ...(requireResponse === undefined ? {} : { requireResponse }),
+      });
+      res.json(
+        validatedSuccess(
+          commandResponseSchema,
+          response,
+          response === null ? 'Command sent without game confirmation' : 'Minecraft responded',
+        ),
+      );
+    }),
+  );
+
+  router.post(
+    '/instances/:id/save',
+    asyncHandler(async (req, res) => {
+      const instance = serverManager.getInstance(req.params.id);
+      if (!instance) throw new AppError(ErrorCodes.INSTANCE_NOT_FOUND);
+      if (!instance.isRunning) throw new AppError(ErrorCodes.INSTANCE_NOT_RUNNING);
+      if (instance.startupState === 'starting') throw new AppError(ErrorCodes.INSTANCE_STARTING);
+      if (hasInProgressBackup(instance.id)) throw new AppError(ErrorCodes.BACKUP_IN_PROGRESS);
       try {
-        const response = await instance.sendCommand(command, { source });
-        res.json(validatedSuccess(commandResponseSchema, response, 'Command sent'));
+        await instance.saveWorld();
+        res.json(validatedSuccess(nullDataSchema, null, 'World saved'));
       } catch (err) {
-        // RCON 连接断开/超时：返回专用错误码，前端可区分引导用户启用 RCON
-        if (!instance.isRconConnected) {
-          return res.status(503).json(error(ErrorCodes.RCON_UNAVAILABLE));
-        }
-        throw err;
+        if (err instanceof AppError) throw err;
+        throw new AppError(ErrorCodes.COMMAND_UNCONFIRMED, '未确认世界已保存，请检查实例日志');
       }
     }),
   );
@@ -762,6 +777,13 @@ export function createStatusRoutes(serverManager) {
         return res.status(409).json(error(ErrorCodes.INSTANCE_DELETE_NO_BACKUP));
       }
 
+      const backupBusy = () => hasInProgressBackup(req.params.id);
+      const backupBusyResponse = () =>
+        res
+          .status(409)
+          .json(error(ErrorCodes.BACKUP_IN_PROGRESS, '备份进行中，请等待完成后再删除实例'));
+      if (backupBusy()) return backupBusyResponse();
+
       // 1. 无条件取消崩溃重启/延迟重启定时器：已崩溃实例（isRunning=false）
       //    不满足下方 stopGracefully 分支（其内部才调用 cancelRestart），卸载时
       //    定时器不取消会保持存活；若 rmSync 因 Windows 文件占用句柄抛 EPERM
@@ -792,26 +814,10 @@ export function createStatusRoutes(serverManager) {
         }
       }
 
-      // 2.5 备份互斥前置检查：实例存在 creating/restoring 备份记录时拒绝卸载。
-      //    恢复是 fire-and-forget 后台任务（耗时随世界规模可达分钟级），删除与其
-      //    并发的两条竞争终态均为数据事故：删除落在恢复 rename 之后 → 失败回滚
-      //    把已删实例目录整体还原（已删实例"复活"）；落在 rsync 复制中 → 源消失
-      //    以 exit 24 退出被 okCodes 容忍（半复制当成功，pre_restore 被永久清除，
-      //    原始世界不可逆丢失）。复用 backup.service.js 同款互斥语义（卡死恢复 +
-      //    busyCount）；置于停机等待之后、首个 rmSync 之前——停机期间新启动的
-      //    备份/恢复同样被拦下，且检查到删除间无 await（better-sqlite3 同步）无
-      //    TOCTOU 窗口；被拒请求不触碰实例目录、快照目录与任何 DB 记录。
-      BackupModel.resetStaleInProgress({
-        maxAgeMs: config.backupInProgressTimeoutMs,
-        instanceId: req.params.id,
-      });
-      const busyCount =
-        BackupModel.findAll({ instanceId: req.params.id, status: 'creating' }).total +
-        BackupModel.findAll({ instanceId: req.params.id, status: 'restoring' }).total;
-      if (busyCount > 0) {
-        return res
-          .status(409)
-          .json(error(ErrorCodes.BACKUP_IN_PROGRESS, '备份进行中，请等待完成后再删除实例'));
+      // 停机等待会让出事件循环；删目录前同步复查备份占用和进程退出。
+      if (backupBusy()) return backupBusyResponse();
+      if (instance.isRunning) {
+        throw new AppError(ErrorCodes.INSTANCE_STOP_UNCONFIRMED, '服务器尚未确认停止，未删除实例');
       }
 
       const instancePath = instance.serverPath;

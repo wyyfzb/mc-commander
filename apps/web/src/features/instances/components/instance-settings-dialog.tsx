@@ -195,9 +195,7 @@ function syncAikar(lines: string[], useAikar: boolean, allocMem: number): string
 /**
  * 保存结果文案：按**实际改了哪一类**分说。
  *
- * 三类改动来源不同（启动配置落实例记录、实时推送走 /push-channel、自动重启改的是
- * 服务端内存态），混成一句「设置已保存」会让用户不知道该去哪一项上核对。
- * 生效时机也不同：自动重启保存即生效，另两类要重启实例，故不能说成同一句。
+ * 启动配置与实时推送需要重启实例。自动重启偏好保存后立即应用，但服务器反复退出时会暂停。
  * 逐字未变时不宣称「已修改」——那会诱导一次无必要重启（保存按钮不判 dirty，原样保存也会走到这里）。
  */
 function savedToastText(
@@ -206,9 +204,12 @@ function savedToastText(
   pushNext: boolean,
   autoRestartDirty: boolean,
   autoRestartNext: boolean,
+  circuitBreakerTripped: boolean,
 ): string {
   const autoRestartText = autoRestartDirty
-    ? `自动重启已${autoRestartNext ? '开启' : '关闭'}，立即生效`
+    ? autoRestartNext && circuitBreakerTripped
+      ? '已保存设置，自动重启仍暂停'
+      : `自动重启已${autoRestartNext ? '开启' : '关闭'}，立即生效`
     : null
   /* 两句都不点名主语，只能挂在「自动重启」后面：单独出现时各自补上主语 */
   const configRestartText = configDirty ? '启动配置重启实例后生效' : null
@@ -386,7 +387,7 @@ export function InstanceSettingsDialog({
     }
     setIsSaving(true)
     try {
-      await updateMutation.mutateAsync({ instanceId: instance.id, payload })
+      const updated = await updateMutation.mutateAsync({ instanceId: instance.id, payload })
       /* 置位与推送成败无关：配置已落库，这份「待重启」必须留下载体 */
       if (configDirty) markPending(instance.id)
       if (pushDirty) {
@@ -410,6 +411,7 @@ export function InstanceSettingsDialog({
           pushDraft === true,
           autoRestartDirty,
           autoRestart === true,
+          updated.circuitBreakerTripped,
         ),
       )
       onOpenChange(false)
@@ -511,7 +513,11 @@ export function InstanceSettingsDialog({
             icon={RotateCcw}
             iconClassName={autoRestart ? 'text-mcs-accent-fg' : 'text-mcs-text-muted'}
             title="意外停止后自动重启"
-            description="服务器崩溃或意外退出后自动拉起，新建实例默认开启（手动停止不触发）；连续崩溃会先熔断暂停"
+            description={
+              detail?.circuitBreakerTripped
+                ? '服务器反复退出，自动重启已暂停。'
+                : '服务器意外退出后自动重启，新建实例默认开启。手动停止不会触发。'
+            }
             control={
               /* 读不到详情时给「状态未知」而不是开关：`?? true` 会把「读不到」显示成
                  「已开启」，用户会以为崩溃后真会自动重启——那是肯定式假信息 */

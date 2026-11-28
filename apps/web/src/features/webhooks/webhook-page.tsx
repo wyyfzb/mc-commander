@@ -401,7 +401,7 @@ export default function WebhookPage() {
 
       {/* ── 错误提示 ── */}
       {error && (
-        <NoticeBanner variant="error" icon={AlertTriangle} role="alert">
+        <NoticeBanner variant="error" role="alert">
           {getFriendlyErrorText(error)}
         </NoticeBanner>
       )}

@@ -1,11 +1,26 @@
 import { useEffect, useId, useRef, useState } from 'react'
-import { ArrowRight, Check, Pencil, Play, Send, ShieldAlert, Star, Trash2, X } from 'lucide-react'
+import {
+  ArrowRight,
+  Check,
+  Loader2,
+  Pencil,
+  Play,
+  Send,
+  ShieldAlert,
+  Star,
+  Trash2,
+  X,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import { useMutation } from '@tanstack/react-query'
 import { IconButton } from '@/components/mcs/icon-button'
 import { Input } from '@/components/ui/input'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { apiPost } from '@/api/client'
+import {
+  apiSendCommand,
+  commandResponseText,
+  COMMAND_DELIVERED_WITHOUT_RESPONSE,
+} from '@/api/players'
 import { ApiError } from '@/api/client'
 import { getFriendlyErrorText } from '@/api/errors'
 import { useConnectionStore } from '@/stores/connection'
@@ -23,7 +38,7 @@ import { Card } from '@/components/mcs/card'
 
 /**
  * 命令输入行
- * - `>` 前缀 + 回车/按钮发送；RCON 响应非空时插入终端（INFO 级）
+ * - `>` 前缀 + 回车/按钮发送；游戏回执与仅投递状态均插入终端
  * - / 开头触发补全（命令名前缀 / 参数子串，最多 10 条）
  * - ↑↓ 翻命令历史（读服务端 command_history，与审计页同源；连续重复去重；导航中保留草稿）
  * - 快捷 chips：5 默认 + 面板偏好，播放=立即发送，点主体=仅填充，X=删除
@@ -39,13 +54,15 @@ import { Card } from '@/components/mcs/card'
 const HISTORY_LIMIT = 50
 
 /** 命令历史条目状态 */
-type CommandStatus = 'sent' | 'failed'
+type CommandStatus = 'responded' | 'delivered' | 'failed'
 
 export function CommandInput() {
   const config = useConnectionStore()
   const instanceId = useServerStore((s) => s.instanceId)
-  const isRunning = useServerStore((s) => s.status?.isRunning ?? false)
-  const isRconConnected = useServerStore((s) => s.status?.capabilities.rcon ?? false)
+  const status = useServerStore((s) => (s.status?.id === s.instanceId ? s.status : null))
+  const isStarting = status?.startupState === 'starting'
+  const canSend = status?.isRunning === true && !isStarting
+  const isRconConnected = status?.capabilities.rcon ?? false
   const pushEntry = useTerminalStore((s) => s.pushEntry)
   const [value, setValue] = useState('')
   /** 快捷指令列表直接派生自面板偏好：另存一份本地副本就会在拉取完成前读到默认值，
@@ -78,7 +95,7 @@ export function CommandInput() {
     const map: Record<string, { status: CommandStatus; error?: string }> = {}
     for (const row of rows) {
       map[row.command] = row.success
-        ? { status: 'sent' }
+        ? { status: row.response === null ? 'delivered' : 'responded' }
         : { status: 'failed', error: row.response ?? undefined }
     }
     statusMapRef.current = { ...map, ...sessionStatusRef.current }
@@ -106,24 +123,19 @@ export function CommandInput() {
     setOverlayRunner((cmd) => send(cmd))
     return () => setOverlayRunner(null)
     // oxlint-disable-next-line react-hooks/exhaustive-deps -- send 是组件内普通函数（非 useCallback），每次渲染新引用，加入会每帧重注册 runner
-  }, [instanceId, isRunning])
+  }, [instanceId, canSend, isStarting])
 
   const mutation = useMutation({
     mutationFn: async (command: string) => {
       if (!instanceId) throw new ApiError(40401, 404, 'Instance not found', null)
-      return apiPost<unknown>(`/api/v1/instances/${instanceId}/command`, config, { command })
+      return apiSendCommand(config, instanceId, command)
     },
     onSuccess: (response, command) => {
-      // RCON 响应非空 → 手动插入终端（INFO 级；服务端日志不含 RCON 输出）
-      const text =
-        typeof response === 'string' && response.trim()
-          ? response.trim()
-          : (response as { response?: string } | null)?.response?.trim()
-      if (text && instanceId) {
+      if (instanceId) {
+        const text = commandResponseText(response)
         pushEntry(instanceId, text, 'stdout')
       }
-      pushHistory(command, 'sent')
-      // 成功不弹 toast：终端已有 command + stdout 回显（失败仍 toast 告警）
+      pushHistory(command, response === null ? 'delivered' : 'responded')
       setValue('')
       setNavStatus(null)
       navRef.current = null
@@ -139,12 +151,16 @@ export function CommandInput() {
   const send = (command: string) => {
     const trimmed = command.trim()
     if (!trimmed) return
+    if (!canSend) {
+      if (isStarting) toast.info('服务器正在启动，就绪后可发送命令')
+      return
+    }
     setSending(true)
     mutation.mutate(trimmed, { onSettled: () => setSending(false) })
   }
 
   /** 入列历史（shell 语义：与最近一条相同则跳过；超出上限裁头）——落库由服务端在命令执行处完成 */
-  const pushHistory = (command: string, status: CommandStatus = 'sent', error?: string) => {
+  const pushHistory = (command: string, status: CommandStatus, error?: string) => {
     const h = historyRef.current
     if (h[h.length - 1] !== command) {
       historyRef.current = [...h, command].slice(-HISTORY_LIMIT)
@@ -238,26 +254,31 @@ export function CommandInput() {
       size="compact"
       className="animate-mcs-fade-up mcs-delay-5 mcs-edge-top relative flex shrink-0 flex-col gap-2"
     >
-      {/* RCON 降级横幅：命令已发送但响应不可见 */}
-      {isRunning && !isRconConnected && (
-        <NoticeBanner variant="warning" icon={ShieldAlert}>
-          RCON 未启用，命令已发送但响应不可见
+      {isStarting ? (
+        <NoticeBanner variant="neutral" icon={Loader2} iconClassName="animate-spin">
+          服务器正在启动，就绪后可发送命令
         </NoticeBanner>
-      )}
+      ) : canSend && !isRconConnected ? (
+        <NoticeBanner variant="warning" icon={ShieldAlert}>
+          RCON 未启用，无法查看命令响应
+        </NoticeBanner>
+      ) : null}
       {/* 历史导航状态指示器 */}
       {navStatus && navRef.current != null && (
         <div
-          className={
-            'flex items-center gap-1 text-mcs-2xs ' +
-            (navStatus.status === 'sent' ? 'text-mcs-success-fg' : 'text-mcs-error-fg')
-          }
+          className={cn('flex items-center gap-1 text-mcs-xs', {
+            'text-mcs-success-fg': navStatus.status === 'responded',
+            'text-mcs-text-muted': navStatus.status === 'delivered',
+            'text-mcs-error-fg': navStatus.status === 'failed',
+          })}
         >
-          {navStatus.status === 'sent' ? (
-            <Check className="size-3" aria-hidden />
-          ) : (
-            <X className="size-3" aria-hidden />
-          )}
-          {navStatus.status === 'sent' ? '已送达' : `失败: ${navStatus.error ?? '未知'}`}
+          {navStatus.status === 'responded' && <Check className="size-3" aria-hidden />}
+          {navStatus.status === 'failed' && <X className="size-3" aria-hidden />}
+          {navStatus.status === 'responded'
+            ? '游戏已响应'
+            : navStatus.status === 'delivered'
+              ? COMMAND_DELIVERED_WITHOUT_RESPONSE
+              : `失败: ${navStatus.error ?? '未知'}`}
         </div>
       )}
 
@@ -312,7 +333,7 @@ export function CommandInput() {
             }
           }}
           placeholder="输入服务器命令... (如 /say hello)"
-          disabled={!isRunning}
+          disabled={!canSend}
           className="min-w-0 flex-1 bg-mcs-bg-subtle pl-7 font-mono text-mcs-xs text-mcs-text-default md:text-mcs-xs"
           aria-label="服务器命令输入"
           role="combobox"
@@ -348,7 +369,7 @@ export function CommandInput() {
           variant="default"
           size="icon"
           onClick={() => send(value)}
-          disabled={sending || !isRunning}
+          disabled={sending || !canSend}
           aria-label="发送命令"
         >
           <Send className="size-4" aria-hidden />
@@ -489,7 +510,8 @@ export function CommandInput() {
                   <button
                     type="button"
                     aria-label={`发送 ${preset}`}
-                    className="-m-1 cursor-pointer p-1 text-mcs-text-muted hover:text-mcs-success-fg"
+                    className="-m-1 cursor-pointer p-1 text-mcs-text-muted enabled:hover:text-mcs-success-fg disabled:cursor-not-allowed"
+                    disabled={!canSend}
                     onClick={() => send(preset)}
                   >
                     <Play className="size-3" aria-hidden />

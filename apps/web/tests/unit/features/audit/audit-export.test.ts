@@ -210,12 +210,12 @@ describe('命令历史导出工具', () => {
     expect(column(data, 0, 2)).toBe('命令')
     expect(data).toHaveLength(4)
     // seq 0：成功 + 1.5s；seq 1：失败 + null 耗时 → '-'；seq 2：成功
-    expect(column(data, 1, 3)).toBe('成功')
+    expect(column(data, 1, 3)).toBe('仅投递（未确认执行）')
     expect(column(data, 1, 5)).toBe('1.5s')
     expect(column(data, 2, 3)).toBe('失败')
     expect(column(data, 2, 5)).toBe('-')
     expect(column(data, 2, 2)).toBe('say hello-1')
-    expect(column(data, 3, 3)).toBe('成功')
+    expect(column(data, 3, 3)).toBe('仅投递（未确认执行）')
     // 时间列同审计日志：本地时区格式化到秒，非原样 ISO
     expect(column(data, 1, 1)).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/)
     expect(lastFileName()).toMatch(/^命令历史_\d{8}_\d{4}\.xlsx$/)

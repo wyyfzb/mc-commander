@@ -1,9 +1,9 @@
 /**
  * InstanceCards —— 实例卡片网格
  * - 网格列数见 INSTANCE_GRID_CLASS（与加载骨架共用同一声明）
- * - 卡片：状态点（运行 success / 停止 muted）+ 名称 + 「当前」accent 徽章（currentId 命中）
+ * - 卡片：就绪状态点 + 名称 + 「当前」accent 徽章（currentId 命中）
  *   + 「待重启」warning 徽章（面板已改、重启后生效，见 stores/restart-pending）
- *   + 副行「运行中 · N 人在线」（success 色）/「已停止」（muted）+ 数据刷新时机药丸
+ *   + 副行显示就绪状态与数据刷新时机，仅就绪时显示在线人数
  *   + 版本 mono 徽章（detailStatuses[id]?.mcVersion，组件内不查询；详情在途时仅该卡骨架占位）
  *   + 指标行（在线/TPS/内存/世界大小，detailStatuses 数据，缺省 —；TPS 按 lib/mc-tps 分级上色）
  *   + 操作（收敛）：主操作最多两个——启停（busyId 防重复触发）/ 切换（非当前实例），
@@ -24,7 +24,6 @@ import {
   MoreHorizontal,
   Play,
   RefreshCw,
-  RotateCcw,
   Server,
   Settings,
   ShieldAlert,
@@ -33,6 +32,7 @@ import {
   Trash2,
   TriangleAlert,
 } from 'lucide-react'
+import { Link } from 'react-router'
 import { toast } from 'sonner'
 import { useUiStore } from '@/stores/ui'
 import { copyText } from '@/lib/clipboard'
@@ -50,12 +50,12 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 import { formatWorldSize } from '@/lib/format'
 import { instanceHueFillClass } from '@/lib/instance-hue'
+import { AUTO_START_PAUSED_TEXT } from '@/lib/notifications'
 import { instanceLabel } from '@/lib/instance-label'
 import { instanceRefreshMark } from '@/lib/instance-refresh'
 import { tpsLevel } from '@/lib/mc-tps'
 import { SEMANTIC_TONE_CLASSES } from '@/components/mcs/tone'
 import { StatusPill } from '@/components/mcs/status-pill'
-import { LoadingButton } from '@/components/mcs/loading-button'
 import { Card } from '@/components/mcs/card'
 import { NoticeBanner } from '@/components/mcs/notice-banner'
 import { EmptyState } from '@/components/mcs/empty-state'
@@ -64,6 +64,7 @@ import { useUpgradeStore, isUpgradeTerminal } from '@/stores/upgrade'
 import { restartApplied, useRestartPendingStore } from '@/stores/restart-pending'
 import { useServerStore, type InstancePhase } from '@/stores/server'
 import type { InstanceStatus, InstanceSummary } from '@/api/types'
+import { INSTANCE_LIFECYCLE, instanceLifecycle } from '../fleet-health'
 
 /**
  * 实例网格列数（唯一声明源：真实网格与加载骨架共用，防止骨架列数与真实布局分叉）
@@ -110,9 +111,9 @@ export interface InstanceCardsProps {
   onStop: (instance: InstanceSummary) => void
   /** 重启实例（页面负责确认弹窗） */
   onRestart: (instance: InstanceSummary) => void
-  /** 启停请求在途的实例 id（对应卡启停按钮禁用 + spinner） */
-  busyId: string | null
-  /** 启停中间态表（starting/stopping 期间对应卡禁用；与 busyId 叠加） */
+  startingId: string | null
+  stoppingId: string | null
+  /** 本地启停指令的过渡态 */
   phaseById: Record<string, InstancePhase>
   /** 部署新实例入口（空态按钮与页面头部共用） */
   onDeploy: () => void
@@ -122,10 +123,6 @@ export interface InstanceCardsProps {
   onCheckReachability?: (id: string) => void
   /** 正在检测的实例 id（按钮转「检测中」并禁用） */
   checkingReachabilityId?: string | null
-  /** 熔断后重新启用自动重启；页面负责写接口与失效缓存 */
-  onReenableAutoRestart?: (id: string) => void
-  /** 正在重新启用的实例 id（该卡按钮转「重新启用中」并禁用） */
-  reenablingId?: string | null
 }
 
 /** 可达性状态在地址行的短标签：结论行另给完整说明与动作 */
@@ -151,14 +148,13 @@ export function InstanceCards({
   onStart,
   onStop,
   onRestart,
-  busyId,
+  startingId,
+  stoppingId,
   phaseById,
   onDeploy,
   remainingMemoryText,
   onCheckReachability,
   checkingReachabilityId,
-  onReenableAutoRestart,
-  reenablingId,
 }: InstanceCardsProps) {
   if (instances.length === 0) {
     return (
@@ -186,7 +182,8 @@ export function InstanceCards({
           detailFailed={detailErrorIds.has(instance.id)}
           onRetryDetail={() => onRetryDetail(instance.id)}
           isUninstalling={uninstallingId === instance.id}
-          isBusy={busyId === instance.id}
+          isStarting={startingId === instance.id}
+          isStopping={stoppingId === instance.id}
           phase={phaseById[instance.id] ?? null}
           onSwitch={onSwitch}
           onOpenSettings={onOpenSettings}
@@ -199,10 +196,6 @@ export function InstanceCards({
             onCheckReachability ? () => onCheckReachability(instance.id) : undefined
           }
           checkingReachability={checkingReachabilityId === instance.id}
-          onReenableAutoRestart={
-            onReenableAutoRestart ? () => onReenableAutoRestart(instance.id) : undefined
-          }
-          reenabling={reenablingId === instance.id}
           className={`animate-mcs-fade-up mcs-delay-${Math.min(index + 1, 6)}`}
         />
       ))}
@@ -226,7 +219,8 @@ function InstanceCard({
   detailFailed,
   onRetryDetail,
   isUninstalling,
-  isBusy,
+  isStarting,
+  isStopping,
   phase,
   onSwitch,
   onOpenSettings,
@@ -237,8 +231,6 @@ function InstanceCard({
   onRestart,
   onCheckReachability,
   checkingReachability,
-  onReenableAutoRestart,
-  reenabling,
   className,
 }: {
   instance: InstanceSummary
@@ -249,7 +241,8 @@ function InstanceCard({
   detailFailed: boolean
   onRetryDetail: () => void
   isUninstalling: boolean
-  isBusy: boolean
+  isStarting: boolean
+  isStopping: boolean
   phase: InstancePhase | null
   onSwitch: (instance: InstanceSummary) => void
   onOpenSettings: (instance: InstanceSummary) => void
@@ -262,17 +255,20 @@ function InstanceCard({
   /** 现测玩家可达性（页面负责调接口与刷新详情） */
   onCheckReachability?: () => void
   checkingReachability?: boolean
-  /** 熔断后重新启用自动重启（页面负责写接口与失效缓存） */
-  onReenableAutoRestart?: () => void
-  /** 重新启用请求在途（按钮转「重新启用中」并禁用） */
-  reenabling?: boolean
   /** 入场 stagger（页面组合处注入，组件内不内嵌动效类） */
   className?: string
 }) {
   const { id, isRunning, playerCount } = instance
+  const lifecycle = instanceLifecycle(instance, phase)
+  const { label: lifecycleLabel } = INSTANCE_LIFECYCLE[lifecycle]
+  const ready = lifecycle === 'ready'
+  const stopping = isStopping || lifecycle === 'stopping'
   // 展示名与操作按钮的可访问名统一走 instanceLabel（空名回退 id，避免出现无名按钮）
   const name = instanceLabel(instance)
   const mcVersion = detail?.mcVersion
+  const autoStartPaused = detail?.circuitBreakerTripped === true
+  const verifyingStability = autoStartPaused && detail?.checkingStartupStability === true
+  const startLabel = autoStartPaused ? '再试一次' : '启动'
   // 升级中标识：WS 订阅补发/实时事件驱动；终态残留不误显示
   // （终态 store 清理由升级弹窗打开时做，卡片只认非终态）
   const setPerfSheetInstanceId = useUiStore((s) => s.setPerfSheetInstanceId)
@@ -292,7 +288,10 @@ function InstanceCard({
   const refresh = instanceRefreshMark(socketConnected, detail?.capabilities?.msmpPush)
   /* 实例健康：低 TPS 是实例事实，不该去染顶栏的面板连接档位（那里只报连接）。
      分级与阈值取自 lib/mc-tps（与仪表盘统计卡、低 TPS 告警同源） */
-  const tps = isRunning && detail?.tps != null ? detail.tps : null
+  // 列表与详情各自刷新，任何一边未就绪时都不套用详情中的游戏指标。
+  const readyDetail = ready && detail?.startupState === 'ready' ? detail : undefined
+  const tps = readyDetail?.tps ?? null
+  const reachability = readyDetail?.reachability
   const tpsTone = tps == null ? null : tpsLevel(tps)
   const tpsToneText =
     tpsTone === 'critical'
@@ -301,12 +300,12 @@ function InstanceCard({
         ? SEMANTIC_TONE_CLASSES.warning.text
         : undefined
 
-  /* 熔断复位：PUT autoRestart=true 交由服务端一并清崩溃计数、解除熔断（读侧不自行推断，
-     详情刷新后熔断态自然消失）。写与失效都由页面持有——本组件只负责把入口摆在提示旁，
-     与 onStop/onRestart 同构；在途态由页面经 reenabling 传入，卡片据此转 spinner */
   return (
     <Card
       as="div"
+      role="group"
+      aria-label={name}
+      tabIndex={-1}
       data-instance-id={id}
       className={cn(
         // min-w-0：卡片是网格项，网格项的 min-width 默认 auto ⇒ 长实例名会把整列按 min-content 撑宽
@@ -314,12 +313,12 @@ function InstanceCard({
         'mcs-edge-top relative flex min-w-0 flex-col gap-3 p-4',
         className,
         isCurrent ? 'border-mcs-accent-border' : 'border-mcs-border-container',
-        detail?.circuitBreakerTripped && 'border-mcs-error-border',
+        autoStartPaused && !verifyingStability && 'border-mcs-error-border',
       )}
     >
       {/* 实例固定色相标识（非语义 identity）：贴左缘、上下各内缩 12px 的长色条（2px 宽、随卡高伸缩），
-          与首行状态点（success/muted，语义）各司其职——色条说「是哪个实例」，状态点说「现在怎么样」；
-          颜色与卡片描边/熔断描边无关，不随之换色 */}
+          与首行状态点各司其职——色条说「是哪个实例」，状态点说「现在怎么样」；
+          颜色与卡片描边无关，不随之换色 */}
       <span
         data-instance-hue
         aria-hidden
@@ -328,11 +327,11 @@ function InstanceCard({
       {/* 首行：状态点 + 名称 + 「当前」徽章 + 升级中徽章 + 待重启徽章 + 版本 mono 徽章（加载中骨架占位） */}
       <div className="flex items-center gap-2">
         <span
-          data-instance-status={isRunning ? 'running' : 'stopped'}
+          data-instance-status={lifecycle}
           aria-hidden
           className={cn(
             'size-2 shrink-0 rounded-full',
-            isRunning ? 'bg-mcs-success-fg' : 'bg-mcs-text-muted',
+            ready ? 'bg-mcs-success-fg' : 'bg-mcs-text-muted',
           )}
         />
         <span
@@ -374,8 +373,13 @@ function InstanceCard({
       {/* 副行＝实例状态事实行。待重启不放首行：首行三枚药丸不可压缩，再叠一枚会把名称压到
           ~57px（375 单列）；本行可换行。两条事实都带标签，不被读成运行状态的一部分 */}
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-        <p className={cn('text-mcs-xs', isRunning ? 'text-mcs-success-fg' : 'text-mcs-text-muted')}>
-          {isRunning ? `运行中 · ${playerCount} 人在线` : '已停止'}
+        <p
+          className={cn(
+            'text-mcs-xs',
+            ready ? SEMANTIC_TONE_CLASSES.success.text : 'text-mcs-text-muted',
+          )}
+        >
+          {ready ? `${lifecycleLabel} · ${playerCount} 人在线` : lifecycleLabel}
         </p>
         {restartPendingAt !== undefined && (
           <StatusPill
@@ -417,16 +421,16 @@ function InstanceCard({
           </button>
           {/* 地址能显示 ≠ 玩家连得上：云主机安全组是独立一层，面板放行不了，只能测出来并指路。
               四种状态各有对应动作，缺任一种都是「点了检测没有下文」 */}
-          {detail.reachability != null && (
+          {reachability != null && (
             <StatusPill
-              tone={detail.reachability === 'reachable' ? 'success' : 'warning'}
+              tone={reachability === 'reachable' ? 'success' : 'warning'}
               className="text-mcs-2xs"
-              title={describeReachability(detail.reachability, detail.address).summary}
+              title={describeReachability(reachability, detail.address).summary}
             >
-              {REACHABILITY_PILL_LABEL[detail.reachability]}
+              {REACHABILITY_PILL_LABEL[reachability]}
             </StatusPill>
           )}
-          {isRunning && onCheckReachability && (
+          {ready && onCheckReachability && (
             <button
               type="button"
               onClick={onCheckReachability}
@@ -441,13 +445,14 @@ function InstanceCard({
 
       {/* 检测结果行：结论 + 下一步动作。动作只在这里给——云安全组面板管不到，
           用户必须知道去哪里放行，否则「连不进来」只是一个无法行动的坏消息 */}
-      {detail?.reachability != null &&
+      {reachability != null &&
+        readyDetail &&
         (() => {
-          const outcome = describeReachability(detail.reachability, detail.address)
+          const outcome = describeReachability(reachability, readyDetail.address)
           return (
             <NoticeBanner
-              variant={detail.reachability === 'reachable' ? 'success' : 'warning'}
-              icon={detail.reachability === 'reachable' ? CircleCheck : TriangleAlert}
+              variant={reachability === 'reachable' ? 'success' : 'warning'}
+              icon={reachability === 'reachable' ? CircleCheck : TriangleAlert}
             >
               <span className="flex flex-wrap items-baseline gap-x-1.5">
                 <span className="font-medium">{outcome.summary}</span>
@@ -465,7 +470,7 @@ function InstanceCard({
           需服务端另采指标。数值以「数字 + GB」展示，精度随采集端平台而异（世界大小另有 MB 档，不与之共用格式化）。
           统计未就绪初值为 0，此时显示 —（运行中却报 0 会被读成「内存耗光」） */}
       <div className="grid grid-cols-4 gap-2 rounded-mcs-sm border border-mcs-border-muted bg-mcs-bg-default px-3 py-2 shadow-mcs-card">
-        <Metric label="在线" value={isRunning ? `${playerCount}` : '—'} />
+        <Metric label="在线" value={ready ? `${playerCount}` : '—'} />
         {/* TPS 低时不能只染色（色觉障碍分不出两档、读屏拿不到「偏低」）：色 + 语义图标 + 读屏文本，
             分级与仪表盘统计卡同源 */}
         <Metric
@@ -505,31 +510,19 @@ function InstanceCard({
         </NoticeBanner>
       )}
 
-      {/* 熔断告警行：出口必须在提示旁——只报「自动重启已禁用」而不给入口，
-          用户知道出事了却不知道去哪开，而重开这件事只存在于另一个页面 */}
-      {detail?.circuitBreakerTripped && (
-        <NoticeBanner variant="error" icon={ShieldAlert}>
-          <span className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
-            <span>
-              崩溃循环熔断已触发，自动重启已禁用（连续崩溃 {detail.consecutiveCrashes} 次）
-            </span>
-            {/* 文案写点下去的**后果**：这次 PUT 除了重开 autoRestart，还会把崩溃计数清零并解除
-                熔断（服务端 status.js 在同一分支里做）。只说「重新启用」会让人以为历史还在、
-                下次再崩就立刻熔断，实际是从零开始计数 */}
-            {onReenableAutoRestart && (
-              <LoadingButton
-                variant="outline"
-                size="xs"
-                loading={reenabling}
-                loadingText="重新启用中…"
-                title="重新开启自动重启：崩溃计数清零、熔断解除"
-                onClick={onReenableAutoRestart}
-              >
-                <RotateCcw aria-hidden />
-                重新启用自动重启
-              </LoadingButton>
-            )}
-          </span>
+      {autoStartPaused && (
+        <NoticeBanner
+          variant={verifyingStability ? 'neutral' : 'error'}
+          icon={verifyingStability ? Loader2 : undefined}
+          iconClassName={verifyingStability ? 'animate-spin' : undefined}
+        >
+          {verifyingStability ? '正在确认服务器能否稳定运行' : AUTO_START_PAUSED_TEXT}{' '}
+          <Link
+            className="font-medium underline underline-offset-2"
+            to={`/help?instance=${encodeURIComponent(id)}`}
+          >
+            查看原因
+          </Link>
         </NoticeBanner>
       )}
       {detail && !detail.circuitBreakerTripped && detail.consecutiveCrashes > 0 && (
@@ -548,16 +541,12 @@ function InstanceCard({
             <Button
               variant="destructive"
               size="sm"
-              aria-label={phase === 'stopping' ? `正在停止 ${name}` : `停止 ${name}`}
+              aria-label={stopping ? `正在停止 ${name}` : `停止 ${name}`}
               title="停止"
-              disabled={isBusy || phase !== null}
+              disabled={stopping}
               onClick={() => onStop(instance)}
             >
-              {isBusy || phase === 'stopping' ? (
-                <Loader2 className="animate-spin" aria-hidden />
-              ) : (
-                <Square aria-hidden />
-              )}
+              {stopping ? <Loader2 className="animate-spin" aria-hidden /> : <Square aria-hidden />}
               停止
             </Button>
             <Button
@@ -565,7 +554,7 @@ function InstanceCard({
               size="sm"
               aria-label={`重启 ${name}`}
               title="重启"
-              disabled={isBusy || phase !== null}
+              disabled={stopping || isStarting || phase === 'starting'}
               onClick={() => onRestart(instance)}
             >
               <RefreshCw aria-hidden />
@@ -575,17 +564,17 @@ function InstanceCard({
         ) : (
           <Button
             size="sm"
-            aria-label={phase === 'starting' ? `正在启动 ${name}` : `启动 ${name}`}
-            title="启动"
-            disabled={isBusy || phase !== null}
+            aria-label={lifecycle === 'starting' ? `正在启动 ${name}` : `${startLabel} ${name}`}
+            title={startLabel}
+            disabled={isStarting || stopping || lifecycle === 'starting'}
             onClick={() => onStart(instance)}
           >
-            {isBusy || phase === 'starting' ? (
+            {isStarting || lifecycle === 'starting' ? (
               <Loader2 className="animate-spin" aria-hidden />
             ) : (
               <Play aria-hidden />
             )}
-            启动
+            {startLabel}
           </Button>
         )}
         {!isCurrent && (
@@ -633,7 +622,7 @@ function InstanceCard({
               <Settings aria-hidden />
               实例设置
             </DropdownMenuItem>
-            {!isRunning && (
+            {!isRunning && lifecycle === 'stopped' && (
               <DropdownMenuItem onSelect={() => onUpgrade(instance)}>
                 <ArrowUpCircle aria-hidden />
                 升级版本

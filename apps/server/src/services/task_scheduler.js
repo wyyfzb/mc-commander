@@ -2,10 +2,9 @@ import { Cron } from 'croner';
 import path from 'path';
 import { ScheduledTaskModel } from '../db/scheduled_task.model.js';
 import { BanModel } from '../db/ban.model.js';
-import { BackupModel } from '../db/backup.model.js';
 import { AuditLogModel, CommandHistoryModel } from '../db/audit.model.js';
 import { WebhookModel } from '../db/webhook.model.js';
-import { BackupService } from './backup.service.js';
+import { BackupService, hasInProgressBackup } from './backup.service.js';
 import { pruneOrphanBackupDirs } from './backup-snapshot.service.js';
 import { runPanelBackupCycle, getLatestSnapshotTime } from './panel-backup.service.js';
 import config from '../config.js';
@@ -13,6 +12,7 @@ import { logger } from '../utils/logger.js';
 import { localTimestamp } from '../utils/local-date.js';
 import { parseDbTime } from '../utils/db-time.js';
 import { findExpiredOfficialBans } from '../utils/ban-reconcile.js';
+import { AppError, ErrorCodes } from '../utils/response.js';
 
 /**
  * 定时任务调度器
@@ -280,7 +280,7 @@ export class TaskScheduler {
       const handled = new Set();
       for (const ban of BanModel.findExpiredActive()) {
         const instance = ban.instanceId ? this.serverManager.getInstance(ban.instanceId) : null;
-        if (!instance || !instance.isRunning) continue;
+        if (!instance?.isRunning || instance.startupState === 'starting') continue;
         handled.add(`${ban.instanceId}:${ban.targetType}:${ban.target}`);
         this._pardonExpiredBan(instance, ban.targetType, ban.target, ban.id);
       }
@@ -314,6 +314,7 @@ export class TaskScheduler {
       });
   }
 
+  // 仅返回阻止触发的错误码定义，执行结果由任务历史与异步通知承载。
   executeTask(task) {
     logger.info(`Executing scheduled task: ${task.name} (${task.type})`);
     // 执行起点：command/backup 的异步结果回写历史时换算 duration_ms
@@ -335,50 +336,49 @@ export class TaskScheduler {
 
     try {
       const instance = task.instanceId ? this.serverManager.getInstance(task.instanceId) : null;
+      if (instance?.circuitBreakerTripped && (task.type === 'start' || task.type === 'restart')) {
+        ScheduledTaskModel.updateLastRun(task.id, nextRunAt, 'skipped', '服务器多次意外退出');
+        return ErrorCodes.TASK_BLOCKED_BY_CIRCUIT_BREAKER;
+      }
 
       switch (task.type) {
         case 'start':
-          if (instance && !instance.isRunning) {
-            instance.start();
+          if (!instance) {
+            ScheduledTaskModel.updateLastRun(task.id, nextRunAt, 'skipped');
+          } else if (instance.isRunning) {
+            ScheduledTaskModel.updateLastRun(task.id, nextRunAt, 'success');
+          } else {
+            this._trackTaskResult(task, instance.start(), nextRunAt, startTs);
           }
-          break;
+          return;
 
         case 'stop':
-          if (instance && instance.isRunning) {
-            instance.stop();
+        case 'restart': {
+          if (!instance || (task.type === 'stop' && !instance.isRunning)) {
+            ScheduledTaskModel.updateLastRun(task.id, nextRunAt, 'skipped');
+            return;
           }
-          break;
-
-        case 'restart':
-          if (instance) {
-            instance.restart();
-          }
-          break;
+          const result = task.type === 'stop' ? instance.stop() : instance.restart();
+          this._trackTaskResult(task, result, nextRunAt, startTs);
+          return;
+        }
 
         case 'command':
+          if (instance?.startupState === 'starting') {
+            ScheduledTaskModel.updateLastRun(
+              task.id,
+              nextRunAt,
+              'skipped',
+              ErrorCodes.INSTANCE_STARTING.message,
+            );
+            return ErrorCodes.INSTANCE_STARTING;
+          }
           if (instance && instance.isRunning && task.command) {
-            // 触发先刷新时间戳，结果由异步回调回填 status
-            ScheduledTaskModel.updateLastRun(task.id, nextRunAt);
-            instance
-              .sendCommand(task.command)
-              .then(() =>
-                ScheduledTaskModel.updateLastRunStatus(
-                  task.id,
-                  'success',
-                  null,
-                  Date.now() - startTs,
-                ),
-              )
-              .catch((err) => {
-                const errMsg = err?.message ?? String(err);
-                ScheduledTaskModel.updateLastRunStatus(
-                  task.id,
-                  'failed',
-                  errMsg,
-                  Date.now() - startTs,
-                );
-                this.emitTaskFailed(task, err);
-              });
+            const result = instance.sendCommand(task.command, {
+              source: 'scheduler',
+              requireResponse: true,
+            });
+            this._trackTaskResult(task, result, nextRunAt, startTs);
           } else {
             // 实例未运行/无命令未真正下发：本次触发按跳过计
             ScheduledTaskModel.updateLastRun(task.id, nextRunAt, 'skipped');
@@ -387,28 +387,7 @@ export class TaskScheduler {
 
         case 'backup':
           if (instance) {
-            // 卡死恢复先行：进程崩溃残留的 creating/restoring 记录必须在此处
-            // 重置（路由 hasInProgressBackup 与服务层 createBackup 已同步前置，
-            // 调度器路径同样先 reset 再判断——否则崩溃后定时备份路径同样锁死）
-            BackupModel.resetStaleInProgress({
-              maxAgeMs: config.backupInProgressTimeoutMs,
-              instanceId: task.instanceId,
-            });
-            // 互斥检查（restoring 状态机）：与手动备份入口（routes/backups.js）
-            // 检查保持一致，实例已有进行中操作（creating=备份中 / restoring=
-            // 恢复中）时跳过本次触发，避免定时备份与手动备份并发执行——
-            // 两个备份的 save-off/save-all flush/save-on 序列交错，压缩期间
-            // 世界文件被改写导致备份包损坏（Windows 下还因文件占用报错）。
-            // 服务层 backup.service.js createBackup 内亦有同款兜底检查。
-            const creatingCount = BackupModel.findAll({
-              instanceId: task.instanceId,
-              status: 'creating',
-            }).total;
-            const restoringCount = BackupModel.findAll({
-              instanceId: task.instanceId,
-              status: 'restoring',
-            }).total;
-            if (creatingCount + restoringCount > 0) {
+            if (hasInProgressBackup(task.instanceId)) {
               logger.warn(
                 `Scheduled backup skipped for instance ${task.instanceId}: backup/restore already in progress`,
               );
@@ -478,14 +457,6 @@ export class TaskScheduler {
           );
           this.emitTaskFailed(task, new Error(`未知任务类型: ${task.type}`));
       }
-
-      // start/stop/restart 记「触发结果」（trigger outcome）而非实例最终状态：
-      // restart 是延迟 3s 启动（_scheduleRestartStart 内部吞错）、stop 的 RCON
-      // 回执被实例内部吞掉，最终成败由实例状态/自动重启机制反映，不落任务状态。
-      // command/backup 的 status 由异步回调回填，触发时时间戳已在分支内落库
-      if (task.type === 'start' || task.type === 'stop' || task.type === 'restart') {
-        ScheduledTaskModel.updateLastRun(task.id, nextRunAt, 'success');
-      }
     } catch (err) {
       logger.error(`Task execution failed (${task.name}):`, err);
       // 同步 throw（如 start 的 EULA/路径校验）：失败同样落库记录 last_run_at
@@ -498,6 +469,29 @@ export class TaskScheduler {
       );
       this.emitTaskFailed(task, err);
     }
+  }
+
+  _trackTaskResult(task, result, nextRunAt, startTs) {
+    if (!result?.then) {
+      ScheduledTaskModel.updateLastRun(task.id, nextRunAt, 'success');
+      return;
+    }
+    ScheduledTaskModel.updateLastRun(task.id, nextRunAt);
+    result
+      .then(
+        () =>
+          ScheduledTaskModel.updateLastRunStatus(task.id, 'success', null, Date.now() - startTs),
+        (err) => {
+          ScheduledTaskModel.updateLastRunStatus(
+            task.id,
+            'failed',
+            err?.message ?? String(err),
+            Date.now() - startTs,
+          );
+          this.emitTaskFailed(task, err);
+        },
+      )
+      .catch((err) => logger.error(`Failed to record task outcome (${task.id}):`, err));
   }
 
   /**
@@ -523,7 +517,10 @@ export class TaskScheduler {
       throw new Error('Task not found');
     }
 
-    this.executeTask(task);
+    const rejection = this.executeTask(task);
+    if (rejection) {
+      throw new AppError(rejection);
+    }
     return true;
   }
 

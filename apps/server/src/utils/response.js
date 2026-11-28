@@ -22,6 +22,12 @@ export const ErrorCodes = {
   // 实例错误
   INSTANCE_NOT_FOUND: { code: 40401, message: 'Instance not found', status: 404 },
   INSTANCE_NOT_RUNNING: { code: 40002, message: 'Instance is not running', status: 400 },
+  INSTANCE_STARTING: { code: 40922, message: '服务器正在启动，请等待就绪', status: 409 },
+  INSTANCE_STOP_UNCONFIRMED: {
+    code: 40923,
+    message: '未确认进程已退出，请检查实例日志',
+    status: 409,
+  },
   INSTANCE_RUNNING: { code: 40003, message: 'Instance is running', status: 409 },
   INSTANCE_ID_CONFLICT: { code: 40919, message: '实例标识已被占用，请重新部署', status: 409 },
   DEPLOY_PORTS_EXHAUSTED: { code: 40920, message: '可用游戏端口已用尽', status: 409 },
@@ -112,6 +118,11 @@ export const ErrorCodes = {
   // 定时任务错误
   TASK_NOT_FOUND: { code: 40405, message: 'Scheduled task not found', status: 404 },
   INVALID_CRON_EXPRESSION: { code: 40004, message: 'Invalid cron expression', status: 400 },
+  TASK_BLOCKED_BY_CIRCUIT_BREAKER: {
+    code: 40921,
+    message: '服务器多次意外退出，任务未执行。请到实例页再试一次。',
+    status: 409,
+  },
 
   // 文件错误
   FILE_NOT_FOUND: { code: 40406, message: 'File not found', status: 404 },
@@ -188,6 +199,13 @@ export const ErrorCodes = {
 
   // RCON 不可用（命令路由需要 RCON 响应但连接未启用或已断开）
   RCON_UNAVAILABLE: { code: 50302, message: 'RCON not available', status: 503 },
+  COMMAND_NOT_SENT: { code: 50304, message: '命令未送达：没有可写的控制台连接', status: 503 },
+  COMMAND_UNCONFIRMED: {
+    code: 50305,
+    message: '未收到游戏的命令回执，请检查结果后再决定是否重试',
+    status: 503,
+  },
+  COMMAND_REJECTED: { code: 40019, message: 'Minecraft 拒绝了命令', status: 400 },
 
   // 管理员登录（安全主线）
   AUTH_INVALID_CREDENTIALS: { code: 40102, message: '密码错误', status: 401 },
@@ -259,7 +277,7 @@ export function success(data, message = 'Success') {
     status: 'ok',
     code: 0,
     message,
-    data: data || null,
+    data: data ?? null,
     timestamp: new Date().toISOString(),
   };
 }

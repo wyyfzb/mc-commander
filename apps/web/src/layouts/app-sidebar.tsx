@@ -21,7 +21,7 @@ import { BrandLogo } from '@/components/mcs/brand-logo'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useUiStore } from '@/stores/ui'
 import { useInstanceStatus, useInstances } from '@/api/queries'
-import { instanceLabel } from '@/lib/instance-label'
+import { instanceLabel, STARTUP_STATE_LABELS } from '@/lib/instance-label'
 import { instanceRefreshMark } from '@/lib/instance-refresh'
 import { useServerStore } from '@/stores/server'
 
@@ -211,6 +211,8 @@ function SidebarBody(props: SidebarBodyProps) {
   // 详情与实例名一样取自本组件自己的订阅（不复用顶栏那份）：两者渲染在同一屏，
   // query key 相同，TanStack Query 去重后仍是一次请求
   const { data: instanceDetail } = useInstanceStatus(instanceId)
+  const startupState = instanceDetail?.startupState ?? current?.startupState ?? 'unknown'
+  const playerCount = instanceDetail?.playerCount ?? current?.playerCount
 
   /* 该标记的真值是实例详情里的 capabilities.msmpPush，而服务端在推送面断连时**不广播**
      capabilities（只改自身状态）⇒ 标记最多滞后一个详情轮询周期（30 秒）后才翻转；
@@ -256,7 +258,7 @@ function SidebarBody(props: SidebarBodyProps) {
             <span
               className={cn(
                 'size-2 shrink-0 rounded-full',
-                current.isRunning ? 'bg-mcs-success-fg' : 'bg-mcs-text-muted',
+                startupState === 'ready' ? 'bg-mcs-success-fg' : 'bg-mcs-text-muted',
               )}
               aria-hidden
             />
@@ -268,7 +270,8 @@ function SidebarBody(props: SidebarBodyProps) {
                 className="truncate font-mono text-mcs-2xs text-mcs-text-muted"
                 title={refresh?.description}
               >
-                {current.isRunning ? '运行中' : '已停止'} · {current.playerCount} 人在线
+                {STARTUP_STATE_LABELS[startupState]}
+                {startupState === 'ready' && playerCount != null && ` · ${playerCount} 人在线`}
                 {refresh && ` · ${refresh.short}`}
                 {/* 完整解释挂在 role=generic 的 div 上按规范会被读屏忽略（本仓已踩过），故用 sr-only */}
                 {refresh && <span className="sr-only">，{refresh.description}</span>}

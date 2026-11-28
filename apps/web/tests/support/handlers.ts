@@ -49,7 +49,16 @@ export const mockOverview: OverviewData = {
   totalMemory: 16,
   freeMemory: 11.8,
   // 该实例已分配 2G：部署向导扣掉它后才算「还能给新实例多少」
-  instances: [{ id: 'demo', name: '演示实例', isRunning: true, playerCount: 0, maxMemory: '2G' }],
+  instances: [
+    {
+      id: 'demo',
+      name: '演示实例',
+      isRunning: true,
+      startupState: 'ready',
+      playerCount: 0,
+      maxMemory: '2G',
+    },
+  ],
 }
 
 export const mockSystemStats: SystemStats = {
@@ -83,6 +92,7 @@ export const mockInstanceStatus: InstanceStatus = {
   id: 'demo',
   name: '演示实例',
   isRunning: true,
+  startupState: 'ready',
   capabilities: { rcon: true, msmp: false, msmpPush: false },
   autoRestart: true,
   autoStart: false,
@@ -900,7 +910,11 @@ export const handlers = [
   ),
   http.get('*/api/v1/instances', () =>
     ok([
-      instanceStatusSchema.parse({ ...mockInstanceStatus, isRunning: instanceListMock.running }),
+      instanceStatusSchema.parse({
+        ...mockInstanceStatus,
+        isRunning: instanceListMock.running,
+        startupState: instanceListMock.running ? 'ready' : 'stopped',
+      }),
     ]),
   ),
   http.get('*/api/v1/instances/:id', () => ok(instanceStatusSchema.parse(mockInstanceStatus))),
@@ -1021,7 +1035,8 @@ export const handlers = [
     return ok({ accepted: true })
   }),
   http.post('*/api/v1/instances/:id/stop', () => ok({ stopped: true })),
-  http.post('*/api/v1/instances/:id/restart', () => ok({ restarted: true })),
+  http.post('*/api/v1/instances/:id/restart', () => ok(null)),
+  http.post('*/api/v1/instances/:id/save', () => ok(null)),
   // 裸 `gamerule` **不是**合法命令（实测 26.3 与 1.21.4 都回 Unknown or incomplete command），
   // 故这里不为它提供响应；规则名单与当前值走 /gamerules 端点
   http.post('*/api/v1/instances/:id/command', async ({ request }) => {
@@ -1031,7 +1046,7 @@ export const handlers = [
     if (/^gamerule\s+\S+\s+\S+\s*$/i.test(cmd)) {
       return ok('Game rule has been updated')
     }
-    return ok({ response: `已执行: ${cmd}` })
+    return ok(`已执行: ${cmd}`)
   }),
   // GET /gamerules：名单与当前值由服务端自述，解析不在前端
   http.get('*/api/v1/instances/:id/gamerules', () => {

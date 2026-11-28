@@ -278,7 +278,9 @@ describe('File Routes - Path Traversal Protection', () => {
 
       expect(res.status).toBe(200);
       // 修复前：LIST_FILE_SYNC 按小写 basename 精确匹配，大写文件名不同步
-      expect(mockInstance.sendCommand).toHaveBeenCalledWith('pardon Steve');
+      expect(mockInstance.sendCommand).toHaveBeenCalledWith('pardon Steve', {
+        requireResponse: true,
+      });
       expect(BanModel.deactivateByPlayer).toHaveBeenCalledWith('s1', 'Steve');
     });
 
@@ -389,7 +391,9 @@ describe('File Routes - Path Traversal Protection', () => {
       expect(fs.existsSync(path.join(tmpDir, 'banned-players.json'))).toBe(false);
       // 文件删除 = 全部条目移除：修复前 DELETE 不走 LIST_FILE_SYNC，
       // 不下发命令、不清理 temp_bans——MC 内存封禁仍生效，玩家无法进服
-      expect(mockInstance.sendCommand).toHaveBeenCalledWith('pardon Alex');
+      expect(mockInstance.sendCommand).toHaveBeenCalledWith('pardon Alex', {
+        requireResponse: true,
+      });
       expect(BanModel.deactivateByPlayer).toHaveBeenCalledWith('s1', 'Alex');
     });
   });
@@ -646,9 +650,9 @@ describe('File Routes - Path Traversal Protection', () => {
 
       expect(res.status).toBe(200);
       // 被移除的条目执行 pardon，同步 MC 内存封禁列表
-      expect(sendCommand).toHaveBeenCalledWith('pardon Saul233');
+      expect(sendCommand).toHaveBeenCalledWith('pardon Saul233', { requireResponse: true });
       // 未移除的条目不触发
-      expect(sendCommand).not.toHaveBeenCalledWith('pardon Other');
+      expect(sendCommand).not.toHaveBeenCalledWith('pardon Other', { requireResponse: true });
       // 同步清理 temp_bans 生效记录
       expect(BanModel.deactivateByPlayer).toHaveBeenCalledWith('s1', 'Saul233');
       // 文件已按新内容保存
@@ -699,9 +703,9 @@ describe('File Routes - Path Traversal Protection', () => {
 
       expect(res.status).toBe(200);
       // 新增条目执行 ban，立即在内存中生效
-      expect(sendCommand).toHaveBeenCalledWith('ban Newbie spam');
+      expect(sendCommand).toHaveBeenCalledWith('ban Newbie spam', { requireResponse: true });
       // 未变化的条目不触发
-      expect(sendCommand).not.toHaveBeenCalledWith('ban Other');
+      expect(sendCommand).not.toHaveBeenCalledWith('ban Other', { requireResponse: true });
       // 新增不涉及 temp_bans 清理（永久封禁）
       expect(BanModel.deactivateByPlayer).not.toHaveBeenCalled();
     });
@@ -726,7 +730,7 @@ describe('File Routes - Path Traversal Protection', () => {
         });
 
       expect(res.status).toBe(200);
-      expect(sendCommand).toHaveBeenCalledWith('pardon-ip 1.2.3.4');
+      expect(sendCommand).toHaveBeenCalledWith('pardon-ip 1.2.3.4', { requireResponse: true });
       expect(BanModel.deactivateByIp).toHaveBeenCalledWith('s1', '1.2.3.4');
     });
 
@@ -905,8 +909,8 @@ describe('File Routes - Path Traversal Protection', () => {
         });
 
       expect(res.status).toBe(200);
-      expect(sendCommand).toHaveBeenCalledWith('whitelist remove Alex');
-      expect(sendCommand).toHaveBeenCalledWith('whitelist add Carol');
+      expect(sendCommand).toHaveBeenCalledWith('whitelist remove Alex', { requireResponse: true });
+      expect(sendCommand).toHaveBeenCalledWith('whitelist add Carol', { requireResponse: true });
       // 白名单不涉及 temp_bans 清理
       expect(BanModel.deactivateByPlayer).not.toHaveBeenCalled();
       expect(BanModel.deactivateByIp).not.toHaveBeenCalled();
@@ -930,8 +934,8 @@ describe('File Routes - Path Traversal Protection', () => {
         });
 
       expect(res.status).toBe(200);
-      expect(sendCommand).toHaveBeenCalledWith('deop Alex');
-      expect(sendCommand).toHaveBeenCalledWith('op Admin');
+      expect(sendCommand).toHaveBeenCalledWith('deop Alex', { requireResponse: true });
+      expect(sendCommand).toHaveBeenCalledWith('op Admin', { requireResponse: true });
       expect(BanModel.deactivateByPlayer).not.toHaveBeenCalled();
     });
 

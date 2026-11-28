@@ -5,6 +5,8 @@
  * - useUpdateProperties：保存属性，成功后失效 properties + world（difficulty/
  *   gameMode/viewDistance 等世界字段直接来源于 properties，需同步刷新）
  */
+import { getFriendlyErrorText } from '@/api/errors'
+import { ApiError } from '@/api/client'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/api/queries'
 import {
@@ -106,7 +108,10 @@ export function useDatapackList(
   return useQuery({
     queryKey: queryKeys.datapacks(instanceId ?? ''),
     queryFn: async () => {
-      const raw = await sendCommand(buildDatapackListCommand())
+      const raw = await sendCommand(buildDatapackListCommand()).catch((error: unknown) => {
+        if (error instanceof ApiError) throw new Error(getFriendlyErrorText(error))
+        throw error
+      })
       if (raw == null) throw new Error('命令通道没有返回内容，读不到数据包列表')
       const parsed = parseDatapackList(raw)
       if (parsed.unparsed !== null) throw new Error(`无法识别服务端返回：${parsed.unparsed}`)

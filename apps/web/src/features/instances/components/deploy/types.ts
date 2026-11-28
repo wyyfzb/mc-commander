@@ -23,6 +23,3 @@ export const INITIAL_FORM: DeployForm = {
   name: '',
   memory: DEFAULT_MEMORY,
 }
-
-/** 部署成功后自动启动状态（首启闭环；未勾选 EULA 时为 null 不自动启动） */
-export type AutoStartState = 'pending' | 'ok' | 'failed' | null

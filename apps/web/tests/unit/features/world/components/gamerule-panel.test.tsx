@@ -153,6 +153,21 @@ describe('GamerulePanel 三态渲染', () => {
   })
 })
 
+it('仅 stdin 投递时保留服务器规则读数，不重取或报更新成功', async () => {
+  const user = userEvent.setup()
+  const send = vi.fn(async () => null)
+  renderPanel({ send })
+  await screen.findByText('keepInventory')
+  const control = within(row('keepInventory')).getByRole('switch')
+  await user.click(control)
+  await user.click(screen.getByRole('button', { name: '保存' }))
+  expect(await screen.findByText('命令已投递，未确认游戏执行')).toBeInTheDocument()
+  expect(send).toHaveBeenCalledWith('gamerule keepInventory true')
+  expect(control).toHaveAttribute('data-state', 'unchecked')
+  expect(gameruleHits).toBe(1)
+  expect(screen.queryByText(/已更新规则/)).not.toBeInTheDocument()
+})
+
 describe('GamerulePanel 通道徽章', () => {
   it("source='msmp' ⇒ 徽章显示 MSMP，且规则行照常可编辑", async () => {
     snapshot = { source: 'msmp', rules: SNAPSHOT.rules }
@@ -440,7 +455,7 @@ describe('GamerulePanel 行级编辑', () => {
       within(row('keepInventory')).getByRole('switch', { name: 'keepInventory 开关' }),
     )
     await user.click(screen.getByRole('button', { name: '保存' }))
-    expect(await screen.findByText('规则更新失败：网络错误')).toBeInTheDocument()
+    expect(await screen.findByText('规则更新未确认：网络错误')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '保存' })).not.toBeInTheDocument()
     expect(
       within(row('keepInventory')).getByRole('switch', { name: 'keepInventory 开关' }),

@@ -40,7 +40,10 @@ import {
   getBackupService,
   sanitizeFileName,
   estimateDirSize,
+  inFlightBackupOps,
+  requestCancelBackup,
 } from '../src/services/backup.service.js';
+import { ScheduledTaskModel } from '../src/db/scheduled_task.model.js';
 import { BackupModel as MockBackupModel } from '../src/db/backup.model.js';
 import { spawn as mockSpawn } from 'child_process';
 import { ErrorCodes, AppError } from '../src/utils/response.js';
@@ -307,163 +310,253 @@ describe('_verifySnapshot 完整性边界', () => {
   });
 });
 
-// 组级余量：走 RCON 保存序列的用例含一次固定的 2s 真实等待（executeBackup 发完
-// save-all flush 后等磁盘写入，见 services/backup.service.js）。这段等待是产品语义，
-// 不能被 mock 掉——否则「保存后立刻快照」这条时序就测不到了。
-// 等待时长已占去默认上限的近半，并行负载下没有余量。
-describe('executeBackup：RCON 保存序列与对称恢复', { timeout: 30_000 }, () => {
+describe('在线备份保存屏障', () => {
   let tmpRoot;
-  let serversDir;
-  let backupsDir;
+  let instanceDir;
+  let snapshotDir;
   let manager;
+  let service;
+  let copy;
+  let complete;
+  let failed;
+  let instance;
 
   beforeEach(() => {
     vi.clearAllMocks();
     MockBackupModel.findAll.mockReturnValue({ total: 0, backups: [] });
     MockBackupModel.create.mockReturnValue({ id: 1, instanceId: 's1', name: 'x' });
-    tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'bu-rcon-'));
-    serversDir = path.join(tmpRoot, 'servers');
-    backupsDir = path.join(tmpRoot, 'backups');
-    fs.mkdirSync(serversDir, { recursive: true });
-    fs.mkdirSync(backupsDir, { recursive: true });
-    config.serversDir = serversDir;
-    config.backupsDir = backupsDir;
-    manager = makeManager();
-  });
-  afterEach(() => {
-    if (tmpRoot) fs.rmSync(tmpRoot, { recursive: true, force: true });
+    tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'bu-online-'));
+    config.serversDir = path.join(tmpRoot, 'servers');
+    config.backupsDir = path.join(tmpRoot, 'backups');
+    instanceDir = createTestInstance(config.serversDir);
+    snapshotDir = path.join(config.backupsDir, 's1', 'snap');
+    instance = asInstance({
+      serverPath: instanceDir,
+      isRunning: true,
+      process: {},
+      startTime: 1,
+      sendCommandWithResponse: vi.fn(
+        async (command) =>
+          ({
+            'save-off': 'Automatic saving is now disabled',
+            'save-all flush': 'Saving the game (this may take a moment!)\nSaved the game',
+            'save-on': 'Automatic saving is now enabled',
+          })[command],
+      ),
+      sendCommand: vi.fn(),
+    });
+    manager = makeManager(instance);
+    service = new BackupService(manager);
+    copy = vi.spyOn(service, '_createSnapshot').mockImplementation(async (_id, _source, target) => {
+      fs.cpSync(instanceDir, target, { recursive: true });
+    });
+    complete = vi.fn();
+    failed = vi.fn();
+    manager.on('instance:backupComplete', complete);
+    manager.on('instance:backupFailed', failed);
   });
 
-  function snapshotWithWorld() {
-    const snapshotDir = path.join(backupsDir, 's1', 'snap');
-    vi.spyOn(BackupService.prototype, '_createSnapshot').mockImplementation(
-      async (_id, _instanceDir, dir) => {
-        fs.mkdirSync(path.join(dir, 'world'), { recursive: true });
-        fs.writeFileSync(path.join(dir, 'world', 'level.dat'), 'x');
-      },
-    );
-    return snapshotDir;
+  afterEach(() => fs.rmSync(tmpRoot, { recursive: true, force: true }));
+
+  function execute() {
+    return service.executeBackup('s1', instanceDir, 1, snapshotDir, { taskId: 42 });
   }
 
-  it('RCON 可用实例：save-off → save-all flush → 完成后 finally 补发 save-on（成对保证）', async () => {
-    createTestInstance(serversDir);
-    const snapshotDir = snapshotWithWorld();
-    const send = vi.fn().mockResolvedValue('ok');
-    manager.getInstance = vi.fn(() =>
-      asInstance({
-        isRunning: true,
-        isRconConnected: true,
-        sendCommandWithResponse: send,
-        jarFile: 'server.jar',
-      }),
-    );
-    const service = new BackupService(manager);
+  it.each(['MSMP + RCON', 'RCON'])(
+    '%s 确认暂停和落盘后复制，确认恢复后才发布成功',
+    async (channel) => {
+      const resumed = Promise.withResolvers();
+      const resuming = Promise.withResolvers();
+      const history = [];
+      const record = async (step) => {
+        history.push(step);
+        if (step === 'on') {
+          resuming.resolve();
+          await resumed.promise;
+        }
+      };
+      if (channel === 'MSMP + RCON') {
+        instance._msmpRequest.mockImplementation(async (method, [value]) => {
+          if (method !== 'minecraft:serversettings/autosave/set') {
+            throw new Error(`不应通过 MSMP 强制落盘：${method}`);
+          }
+          await record(value ? 'on' : 'off');
+          return value;
+        });
+      }
+      const responses = instance.sendCommandWithResponse.getMockImplementation();
+      instance.sendCommandWithResponse.mockImplementation(async (command) => {
+        await record({ 'save-off': 'off', 'save-all flush': 'flush', 'save-on': 'on' }[command]);
+        return responses(command);
+      });
+      const copyToDir = copy.getMockImplementation();
+      copy.mockImplementation(async (...args) => {
+        history.push('copy');
+        await copyToDir(...args);
+      });
 
-    const done = waitForEvent(manager, 'instance:backupComplete');
-    await service.executeBackup('s1', INSTANCE_DIR, 1, snapshotDir, {});
-    await done;
+      const pending = execute();
+      try {
+        await Promise.race([resuming.promise, pending]);
+        expect(history).toEqual(['off', 'flush', 'copy', 'on']);
+        expect(fs.existsSync(snapshotDir)).toBe(false);
+        expect(complete).not.toHaveBeenCalled();
+        expect(MockBackupModel.update).not.toHaveBeenCalled();
+        expect(ScheduledTaskModel.updateLastRunStatus).not.toHaveBeenCalled();
+        expect(inFlightBackupOps()).toContainEqual({ instanceId: 's1', kind: 'create' });
+        await expect(new BackupService(manager).createBackup('s1')).rejects.toMatchObject({
+          code: ErrorCodes.BACKUP_IN_PROGRESS.code,
+        });
+        MockBackupModel.findByIdWithPath.mockReturnValue({
+          status: 'completed',
+          instance_id: 's1',
+        });
+        await expect(service.restoreBackup(2)).rejects.toMatchObject({
+          code: ErrorCodes.RESTORE_IN_PROGRESS.code,
+        });
+      } finally {
+        resumed.resolve();
+        await pending;
+      }
+      expect(complete).toHaveBeenCalledOnce();
+      expect(failed).not.toHaveBeenCalled();
+      expect(ScheduledTaskModel.updateLastRunStatus).toHaveBeenCalledWith(
+        42,
+        'success',
+        null,
+        expect.any(Number),
+      );
+      expect(inFlightBackupOps()).toEqual([]);
+      if (channel === 'MSMP + RCON') {
+        expect(instance.sendCommandWithResponse).toHaveBeenCalledExactlyOnceWith('save-all flush', {
+          timeout: 5000,
+        });
+      }
+      expect(instance.sendCommand).not.toHaveBeenCalled();
+    },
+  );
 
-    expect(send).toHaveBeenCalledWith('save-off', { timeout: 3000 });
-    expect(send).toHaveBeenCalledWith('save-all flush', { timeout: 5000 });
-    expect(send).toHaveBeenCalledWith('save-on', { timeout: 3000 });
-    expect(send.mock.calls.indexOf(send.mock.calls.find((c) => c[0] === 'save-off'))).toBeLessThan(
-      send.mock.calls.indexOf(send.mock.calls.find((c) => c[0] === 'save-all flush')),
-    );
-  });
-
-  it('save 序列 RCON 失败非致命：快照继续完成，save-on 仍在 finally 补发', async () => {
-    createTestInstance(serversDir);
-    const snapshotDir = snapshotWithWorld();
-    const send = vi
-      .fn()
-      .mockRejectedValueOnce(new Error('RCON timeout')) // save-off 失败
-      .mockRejectedValueOnce(new Error('RCON timeout')); // save-all flush 失败
-    manager.getInstance = vi.fn(() =>
-      asInstance({
-        isRunning: true,
-        isRconConnected: true,
-        sendCommandWithResponse: send,
-        jarFile: 'server.jar',
-      }),
-    );
-    const service = new BackupService(manager);
-
-    const done = waitForEvent(manager, 'instance:backupComplete');
-    await expect(
-      service.executeBackup('s1', INSTANCE_DIR, 1, snapshotDir, {}),
-    ).resolves.toBeUndefined();
-    await done;
-
-    expect(MockBackupModel.update).toHaveBeenCalledWith(1, {
-      status: 'completed',
-      size: expect.any(Number),
+  it.each([
+    ['暂停响应不确认', 'off', 'Saving is already turned on', '未确认自动保存已关闭'],
+    ['暂停响应丢失', 'off', new Error('RCON timeout'), 'RCON timeout'],
+    ['落盘只有开始提示', 'flush', 'Saving the game (this may take a moment!)', '未确认落盘'],
+    ['落盘明确失败', 'flush', 'Saving failed', '未确认落盘'],
+    ['恢复响应不确认', 'on', 'Saving is already turned off', '恢复自动保存失败'],
+  ])('%s 不发布快照，并尝试恢复自动保存', async (_label, stage, response, message) => {
+    const send = instance.sendCommandWithResponse;
+    const responses = send.getMockImplementation();
+    send.mockImplementation(async (command) => {
+      if (command !== { off: 'save-off', flush: 'save-all flush', on: 'save-on' }[stage])
+        return responses(command);
+      if (response instanceof Error) throw response;
+      return response;
     });
+
+    await expect(execute()).rejects.toThrow(message);
+    if (stage !== 'on') expect(copy).not.toHaveBeenCalled();
+    if (stage === 'off')
+      expect(send.mock.calls.map(([command]) => command)).toEqual(['save-off', 'save-on']);
     expect(send).toHaveBeenCalledWith('save-on', { timeout: 3000 });
-  });
-
-  it('save-on 失败：backupFailed 事件（phase=save-on）暴露给用户（防永久停写）', async () => {
-    createTestInstance(serversDir);
-    const snapshotDir = snapshotWithWorld();
-    const send = vi
-      .fn()
-      .mockResolvedValueOnce('ok') // save-off
-      .mockResolvedValueOnce('ok') // save-all flush
-      .mockRejectedValueOnce(new Error('connection lost')); // save-on（finally 中）
-    manager.getInstance = vi.fn(() =>
-      asInstance({
-        isRunning: true,
-        isRconConnected: true,
-        sendCommandWithResponse: send,
-        jarFile: 'server.jar',
+    expect(complete).not.toHaveBeenCalled();
+    expect(failed).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        backupId: 1,
+        phase: stage === 'on' ? 'save-on' : 'execution',
+        error: expect.stringContaining(message),
       }),
     );
-    const service = new BackupService(manager);
+    expect(MockBackupModel.update).toHaveBeenCalledExactlyOnceWith(1, { status: 'failed' });
+    expect(ScheduledTaskModel.updateLastRunStatus).toHaveBeenCalledWith(
+      42,
+      'failed',
+      expect.stringContaining(message),
+      expect.any(Number),
+    );
+    expect(fs.existsSync(snapshotDir)).toBe(false);
+  });
 
+  it('复制和恢复均失败时保留两个原因，只发送一个失败终态', async () => {
+    vi.spyOn(instance, 'setAutoSave')
+      .mockResolvedValueOnce('command')
+      .mockRejectedValueOnce(new Error('RCON 断开'));
+    copy.mockRejectedValueOnce(new Error('复制中断'));
+    await expect(execute()).rejects.toThrow(/复制中断.*恢复自动保存失败.*RCON 断开/);
+    expect(failed).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ phase: 'save-on' }));
+  });
+
+  it('等待暂停确认时取消：不复制，恢复后才发布取消', async () => {
+    const paused = Promise.withResolvers();
+    const resumed = Promise.withResolvers();
+    const resuming = Promise.withResolvers();
+    const setAutoSave = vi.spyOn(instance, 'setAutoSave').mockImplementation(async (enabled) => {
+      if (!enabled) return paused.promise;
+      resuming.resolve();
+      return resumed.promise;
+    });
+    const cancelled = vi.fn();
+    manager.on('instance:backupCancelled', cancelled);
+    const execution = execute();
+    const pending = expect(execution).rejects.toMatchObject({ code: 'CANCELLED' });
+    try {
+      expect(requestCancelBackup('s1')).toEqual({ kind: 'create', backupId: 1 });
+      expect(setAutoSave).toHaveBeenCalledWith(false);
+      paused.resolve('command');
+      await Promise.race([resuming.promise, execution.catch(() => {})]);
+      expect(copy).not.toHaveBeenCalled();
+      expect(cancelled).not.toHaveBeenCalled();
+    } finally {
+      paused.resolve('command');
+      resumed.resolve('command');
+      await pending;
+    }
+    expect(cancelled).toHaveBeenCalledOnce();
+  });
+
+  it('复制期间实例切换运行代次：不发布快照，不向新进程发恢复命令', async () => {
+    copy.mockImplementationOnce(async () => {
+      instance.process = {};
+    });
+    await expect(execute()).rejects.toThrow('运行状态发生变化');
+    expect(instance.sendCommandWithResponse.mock.calls.map(([command]) => command)).toEqual([
+      'save-off',
+      'save-all flush',
+    ]);
+    expect(complete).not.toHaveBeenCalled();
+  });
+
+  it('磁盘扫描期间其他备份入口无法占用同一实例', async () => {
+    const scanned = Promise.withResolvers();
+    const scanning = Promise.withResolvers();
+    const original = fs.promises.readdir.bind(fs.promises);
+    vi.spyOn(fs.promises, 'readdir').mockImplementation(async (dir, ...args) => {
+      if (dir === instanceDir) {
+        scanning.resolve();
+        await scanned.promise;
+      }
+      return original(dir, ...args);
+    });
     const done = waitForEvent(manager, 'instance:backupComplete');
-    const saveOnFailed = waitForEvent(manager, 'instance:backupFailed');
-    await service.executeBackup('s1', INSTANCE_DIR, 1, snapshotDir, {});
-    await done;
-    const failed = await saveOnFailed;
-
-    expect(failed.phase).toBe('save-on');
-    expect(failed.error).toContain('connection lost');
-    expect(failed.content).toContain('恢复自动保存失败');
+    const pending = service.createBackup('s1');
+    try {
+      await Promise.race([scanning.promise, pending]);
+      expect(inFlightBackupOps()).toContainEqual({ instanceId: 's1', kind: 'create' });
+      await expect(new BackupService(manager).createBackup('s1')).rejects.toMatchObject({
+        code: ErrorCodes.BACKUP_IN_PROGRESS.code,
+      });
+      expect(MockBackupModel.create).not.toHaveBeenCalled();
+    } finally {
+      scanned.resolve();
+      await pending;
+      await done;
+    }
+    expect(MockBackupModel.create).toHaveBeenCalledOnce();
   });
 
-  it('_restoreSaveOn 早退：无 serverManager / 实例不存在 / 未发过 save-off 时静默返回', async () => {
-    const bare = new BackupService(null);
-    await expect(bare._restoreSaveOn('s1')).resolves.toBeUndefined();
-
-    manager.getInstance = vi.fn(() => null);
-    const noInstance = new BackupService(manager);
-    await expect(noInstance._restoreSaveOn('s1')).resolves.toBeUndefined();
-
-    manager.getInstance = vi.fn(() =>
-      asInstance({
-        isRconConnected: false,
-        sendCommandWithResponse: vi.fn(),
-      }),
-    );
-    const noRcon = new BackupService(manager);
-    // 未发过 save-off ⇒ 不欠 save-on，静默返回是对的
-    await expect(noRcon._restoreSaveOn('s1', false)).resolves.toBeUndefined();
-  });
-
-  it('发过 save-off 但 RCON 已断 → 必须报 backupFailed(phase=save-on)，不能静默', async () => {
-    // 这条路径下服务器已停自动保存，而连接状态已看不出这件事：
-    // 静默返回等于让世界永久停写、且用户以为备份一切正常
-    const failed = waitForEvent(manager, 'instance:backupFailed');
-    manager.getInstance = vi.fn(() =>
-      asInstance({
-        isRconConnected: false,
-        sendCommandWithResponse: vi.fn(),
-      }),
-    );
-    const svc = new BackupService(manager);
-    await svc._restoreSaveOn('s1', true);
-    const ev = await failed;
-    expect(ev.phase).toBe('save-on');
-    expect(ev.error).toContain('save-on');
+  it('在线快照拒绝 rsync 源文件消失的退出码', async () => {
+    spawnEmits((proc) => proc.emit('close', 24));
+    await expect(
+      service._rsyncSnapshot('s1', instanceDir, snapshotDir, { strict: true }),
+    ).rejects.toThrow('Exit code 24');
   });
 });
 
@@ -721,7 +814,7 @@ describe('createBackup / restoreBackup / deleteBackup 入口校验缺口收口',
     const externalDir = path.join(elsewhere, 'legacy-folder');
     fs.mkdirSync(path.join(externalDir, 'world'), { recursive: true });
     fs.writeFileSync(path.join(externalDir, 'world', 'level.dat'), 'EXTERNAL');
-    manager.getInstance = vi.fn(() =>
+    manager.getInstance = vi.fn().mockReturnValue(
       asInstance({
         id: 's1',
         serverPath: externalDir,
@@ -744,7 +837,7 @@ describe('createBackup / restoreBackup / deleteBackup 入口校验缺口收口',
 
   it('statfs 不可用（罕见平台）：跳过磁盘预检不阻断备份（非 AppError 被吞）', async () => {
     createTestInstance(serversDir);
-    manager.getInstance = vi.fn(() =>
+    manager.getInstance = vi.fn().mockReturnValue(
       asInstance({
         id: 's1',
         serverPath: path.join(serversDir, 's1'),
@@ -779,7 +872,7 @@ describe('createBackup / restoreBackup / deleteBackup 入口校验缺口收口',
     fs.mkdirSync(path.join(movedDir, 'world'), { recursive: true });
     fs.writeFileSync(path.join(movedDir, 'world', 'level.dat'), 'moved-world');
     fs.writeFileSync(path.join(movedDir, 'world', 'region.mca'), Buffer.alloc(2 * 1024 * 1024));
-    manager.getInstance = vi.fn(() =>
+    manager.getInstance = vi.fn().mockReturnValue(
       asInstance({
         id: 's1',
         serverPath: movedDir,

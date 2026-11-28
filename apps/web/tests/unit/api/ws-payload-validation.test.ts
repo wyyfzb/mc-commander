@@ -4,6 +4,7 @@ import { validateWsPayload } from '@/api/ws-payload-validation'
 const statusSnapshot = {
   status: 'running',
   isRunning: true,
+  startupState: 'ready',
   players: [],
   tps: 20,
   msmpPush: false,

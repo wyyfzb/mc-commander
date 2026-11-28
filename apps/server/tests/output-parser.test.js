@@ -44,6 +44,8 @@ function makeBareInstance() {
   // EventEmitter.call 显式初始化事件系统（parseOutput 大量 emit）
   const inst = Object.create(MCServerInstance.prototype);
   EventEmitter.call(inst);
+  inst.isRunning = true;
+  inst.process = {};
   inst.id = 'fixture';
   inst.serverPath = fs.mkdtempSync(path.join(tmpBase, 'inst-'));
   inst.players = new Map();

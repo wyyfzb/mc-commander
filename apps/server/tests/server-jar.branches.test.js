@@ -68,7 +68,7 @@ vi.mock('child_process', async (importOriginal) => {
   const nodeFs = await import('node:fs');
   return {
     ...actual,
-    spawnSync: vi.fn(actual.spawnSync),
+    spawnSync: vi.fn(),
     spawn: vi.fn((cmd, args, opts) => {
       const proc = new events.EventEmitter();
       proc.stdout = new events.EventEmitter();
@@ -84,6 +84,7 @@ vi.mock('child_process', async (importOriginal) => {
       } else if (testState.spawnBehavior === 'exit1') {
         queueMicrotask(() => proc.emit('exit', 1));
       } else if (testState.spawnBehavior === 'error') {
+        proc.pid = undefined;
         queueMicrotask(() => proc.emit('error', new Error('spawn java ENOENT')));
       } else if (testState.spawnBehavior === 'emit-data') {
         queueMicrotask(() => {
@@ -592,10 +593,10 @@ describe('forge 安装段分支', () => {
     );
   });
 
-  it('安装器 900s 超时 → 进程树终止 + 502 timed out', async () => {
+  it.each([true, false])('Forge 安装器超时：仅在确认退出后清理目录（%s）', async (exited) => {
     defineForgeChain();
     testState.spawnBehavior = 'hang';
-    const { app } = buildApp();
+    const { app, manager } = buildApp();
     const setTimeoutSpy = vi.spyOn(global, 'setTimeout');
     const pending = request(app)
       .post('/api/instances/deploy')
@@ -610,14 +611,26 @@ describe('forge 安装段分支', () => {
     expect(timerCall, 'forge 安装器应注册 900s 定时器').not.toBeNull();
     const callIdx = setTimeoutSpy.mock.calls.findIndex(([, ms]) => ms === 900000);
     clearTimeout(setTimeoutSpy.mock.results[callIdx].value);
-    timerCall[0](); // 手动触发超时回调：终止进程树 + reject
+    timerCall[0]();
+
+    const { spawn, spawnSync } = await import('child_process');
+    const installer = spawn.mock.results[0].value;
+    const confirmIdx = setTimeoutSpy.mock.calls.findIndex(([, ms]) => ms === 5000);
+    if (exited) {
+      installer.emit('exit', null, 'SIGKILL');
+    } else if (confirmIdx >= 0) {
+      clearTimeout(setTimeoutSpy.mock.results[confirmIdx].value);
+      setTimeoutSpy.mock.calls[confirmIdx][0]();
+    }
 
     const res = await inflight;
+    const instanceId = manager.emit.mock.calls.find(([, p]) => p.stage === 'error')[1].instanceId;
     expect(res.status).toBe(502);
     expect(res.body.message).toContain('timed out (900s)');
-    const { spawn, spawnSync } = await import('child_process');
-    // 单进程 SIGKILL 兜底
-    expect(spawn.mock.results[0].value.kill).toHaveBeenCalled();
+    expect(fs.existsSync(path.join(testState.serversDir, instanceId))).toBe(!exited);
+    if (exited) expect(res.body.details?.cleanup).toBeUndefined();
+    else expect(res.body.details?.cleanup).toContain('未确认进程退出（Forge 安装器）');
+    expect(installer.kill).toHaveBeenCalledWith('SIGKILL');
     // 进程树终止（与实例 stop 同策略，见 utils/process-tree.js）：
     // Windows 走 taskkill /T 递归；POSIX 上安装器未 detached（无进程组语义）→ 不做 kill(-pid)
     if (process.platform === 'win32') {
@@ -657,9 +670,10 @@ describe('win32 平台分支与首启输出', () => {
       clearTimeout(setTimeoutSpy.mock.results[callIdx].value);
       timeoutCall[0]();
 
+      const { spawn, spawnSync } = await import('child_process');
+      spawn.mock.results[0].value.emit('exit', null, 'SIGKILL');
       const res = await inflight;
       expect(res.status).toBe(200);
-      const { spawn, spawnSync } = await import('child_process');
       // win32 不设 detached
       const spawnOpts = spawn.mock.calls[0][2];
       expect(spawnOpts.detached).toBeUndefined();

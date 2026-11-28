@@ -37,6 +37,7 @@ import { InfoHint } from '@/components/mcs/info-hint'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { toast } from 'sonner'
 import { getFriendlyErrorText } from '@/api/errors'
+import { INSTANCE_RESTART_SPAWNED } from '@/api/instances'
 import {
   buildPropertiesPayload,
   buildUnknownPropertyDef,
@@ -253,9 +254,10 @@ export function PropertiesPanel({
     setRestarting(true)
     try {
       await onRestart()
+      toast.success(INSTANCE_RESTART_SPAWNED)
       setRestartDialogOpen(false)
-    } catch {
-      toast.error('重启失败，请检查服务器连接')
+    } catch (e) {
+      toast.error(`重启失败：${getFriendlyErrorText(e)}`)
     } finally {
       setRestarting(false)
     }

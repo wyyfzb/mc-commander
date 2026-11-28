@@ -38,6 +38,7 @@ export interface FleetData {
   phase: QueryPhase
   listError: unknown
   refetchList: () => void
+  refetchAll: () => void
 }
 
 export function useFleetData(): FleetData {
@@ -52,5 +53,9 @@ export function useFleetData(): FleetData {
     phase: queryPhase(instancesQuery),
     listError: instancesQuery.error,
     refetchList: () => void instancesQuery.refetch(),
+    refetchAll: () => {
+      void instancesQuery.refetch()
+      void overviewQuery.refetch()
+    },
   }
 }

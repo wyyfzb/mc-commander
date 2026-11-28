@@ -75,6 +75,10 @@ function sanitizeReason(reason) {
 
 // RCON 命令守卫：实例未运行返回 400 INSTANCE_NOT_RUNNING（替代 sendCommand 抛裸 Error → 500）
 function requireRunning(instance, res) {
+  if (instance.startupState === 'starting') {
+    res.status(ErrorCodes.INSTANCE_STARTING.status).json(error(ErrorCodes.INSTANCE_STARTING));
+    return false;
+  }
   if (!instance.isRunning) {
     res.status(400).json(error(ErrorCodes.INSTANCE_NOT_RUNNING));
     return false;

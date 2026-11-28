@@ -343,7 +343,7 @@ describe('instance-properties.service · 写盘与重启联动编排 applyProper
     const r = await applyPropertyUpdates(instance, { pvp: 'false', difficulty: 'hard' });
     expect(r.restartRequired).toEqual(['pvp']);
     expect(instance.sendCommand).toHaveBeenCalledTimes(1);
-    expect(instance.sendCommand).toHaveBeenCalledWith('difficulty hard');
+    expect(instance.sendCommand).toHaveBeenCalledWith('difficulty hard', { requireResponse: true });
   });
 
   it('运行中命令构造：white-list 布尔分支与 gamemode 命令映射', async () => {
@@ -352,8 +352,12 @@ describe('instance-properties.service · 写盘与重启联动编排 applyProper
       properties: { 'white-list': 'false', gamemode: 'survival' },
     });
     await applyPropertyUpdates(instance, { 'white-list': 'true', gamemode: 'creative' });
-    expect(instance.sendCommand).toHaveBeenNthCalledWith(1, 'whitelist on');
-    expect(instance.sendCommand).toHaveBeenNthCalledWith(2, 'defaultgamemode creative');
+    expect(instance.sendCommand).toHaveBeenNthCalledWith(1, 'whitelist on', {
+      requireResponse: true,
+    });
+    expect(instance.sendCommand).toHaveBeenNthCalledWith(2, 'defaultgamemode creative', {
+      requireResponse: true,
+    });
   });
 
   it('运行期应用失败：仅警告，保存与返回不受阻，且如实把该键列入「需重启」', async () => {

@@ -90,11 +90,9 @@ export function McClockCard({ embedded = false }: { embedded?: boolean }) {
   const weather = status?.weather ?? null
   const worldDay = status?.worldDay ?? null
   const rcon = status?.capabilities.rcon ?? false
-  const canControl = isRunning && rcon && tick != null
+  const canControl = isRunning && status?.startupState !== 'starting' && rcon && tick != null
 
-  // 乐观更新窗口（对齐 Flutter 版 _weatherOptimisticUntil/_timeOptimisticUntil）：
-  // 点击天气/时间 chip 后本地立即生效（图示/按钮即时联动），窗口内忽略服务器覆盖防抖，
-  // 窗口外回落到服务器真实状态（WS 推送）——图示区/按钮区/服务器三联同步
+  // 仅收到游戏回执后暂时显示目标值，等待下一次世界状态推送。
   const [optimistic, setOptimistic] = useState<{
     weather?: WeatherKey
     timeTick?: number
@@ -107,21 +105,32 @@ export function McClockCard({ embedded = false }: { embedded?: boolean }) {
   const phase = worldTimePhase(displayTick)
 
   // 天气/时间两组 chip 是互斥单选：当前世界状态即「选中」，点击发命令（不可控时 on* 直接返回）
-  /* eslint-disable react/purity -- 两处置 Date.now() 都只在用户事件（点击/方向键）里取当下时刻，
-     乐观窗口以此为基准是本意；经 useRadioGroup 的 onChange 形参传递后，编译器无法判定它不在渲染期执行 */
+  /* eslint-disable react/purity -- 回执到达时记录时间，决定界面何时恢复显示服务器读数 */
   const applyWeather = (key: WeatherKey) => {
     if (!canControl) return
     const preset = WEATHER_PRESETS.find((w) => w.key === key)
     if (!preset) return
-    setOptimistic({ weather: preset.key, timeTick: optimistic.timeTick, until: Date.now() + 3000 })
-    send(preset.cmd)
+    send(preset.cmd, () => {
+      const at = Date.now()
+      setOptimistic((prev) => ({
+        ...(at < prev.until ? prev : {}),
+        weather: preset.key,
+        until: at + 3000,
+      }))
+    })
   }
   const applyTime = (key: string) => {
     if (!canControl) return
     const preset = TIME_PRESETS.find((p) => p.key === key)
     if (!preset) return
-    setOptimistic({ weather: optimistic.weather, timeTick: preset.tick, until: Date.now() + 3000 })
-    send(preset.cmd)
+    send(preset.cmd, () => {
+      const at = Date.now()
+      setOptimistic((prev) => ({
+        ...(at < prev.until ? prev : {}),
+        timeTick: preset.tick,
+        until: at + 3000,
+      }))
+    })
   }
   /* eslint-enable react/purity */
   const weatherGroup = useRadioGroup<WeatherKey>({

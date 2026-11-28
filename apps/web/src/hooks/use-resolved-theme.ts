@@ -50,12 +50,15 @@ export function changeThemeFrom(origin: HTMLElement | null, mode?: ThemeMode) {
     activeReveal.commit()
   }
 
-  const { theme, setTheme, toggleTheme } = useUiStore.getState()
+  const { theme, setTheme } = useUiStore.getState()
   if (theme === mode) return
-  const applyTheme = mode === undefined ? toggleTheme : () => setTheme(mode)
+  const current = resolveTheme(theme)
+  // 快照回调可能晚于系统换色，目标必须在本次操作时确定。
+  const nextMode = mode ?? (current === 'dark' ? 'light' : 'dark')
+  const applyTheme = () => setTheme(nextMode)
   if (
     !origin?.isConnected ||
-    (mode !== undefined && resolveTheme(theme) === resolveTheme(mode)) ||
+    current === resolveTheme(nextMode) ||
     typeof document.startViewTransition !== 'function' ||
     !window.matchMedia?.('(prefers-reduced-motion: no-preference)').matches
   ) {

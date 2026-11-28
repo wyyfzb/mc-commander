@@ -238,8 +238,8 @@ describe('routes/index.js 聚合层', () => {
       expect(res.body.data.endpoints).toEqual(
         expect.arrayContaining(['/instances', '/webhooks', '/check-update']),
       );
-      // 清单数量锁定（23 项，防漂移）
-      expect(res.body.data.endpoints).toHaveLength(23);
+      expect(res.body.data.endpoints).toContain('/instances/:id/save');
+      expect(res.body.data.endpoints).toHaveLength(24);
 
       // 未匹配路径穿透至 setupRoutes 尾部 notFoundHandler
       const nf = await apiGet('/api/v1/nonexistent');

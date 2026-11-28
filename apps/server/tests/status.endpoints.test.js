@@ -10,6 +10,7 @@ const __state = vi.hoisted(() => ({ procStatContent: null, actualFs: null }));
 
 // ── Mock 隔离：SQLite 模型（InstanceModel + DELETE 依赖的 BackupModel）──
 vi.mock('../src/db/index.js', () => ({
+  getDb: vi.fn(),
   InstanceModel: {
     update: vi.fn(),
     delete: vi.fn(),
@@ -19,6 +20,10 @@ vi.mock('../src/db/index.js', () => ({
     resetStaleInProgress: vi.fn(),
     findAll: vi.fn(),
   },
+}));
+
+vi.mock('../src/db/backup.model.js', async () => ({
+  BackupModel: (await import('../src/db/index.js')).BackupModel,
 }));
 
 // recordAudit 捕获审计断言；AuditActions 保留真实枚举值
@@ -73,10 +78,12 @@ vi.mock('fs', async (importOriginal) => {
 });
 
 import { createStatusRoutes } from '../src/routes/status.js';
+import { MCServerInstance } from '../src/services/mc_server.js';
 import { InstanceModel, BackupModel } from '../src/db/index.js';
 import { recordAudit, AuditActions } from '../src/utils/audit.js';
 import { listInstanceSnapshotDirs } from '../src/services/backup-snapshot.service.js';
 import { errorHandler } from '../src/middleware/error_handler.js';
+import { AppError, ErrorCodes } from '../src/utils/response.js';
 import config from '../src/config.js';
 import { __configureLogger, __resetLogger } from '../src/utils/logger.js';
 import { panelErrorsSchema } from '@mc-commander/schemas';
@@ -286,7 +293,7 @@ describe('Status Routes · 端点缺口收口', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.data).toBeNull();
-      expect(res.body.message).toBe('Server stopping');
+      expect(res.body.message).toBe('Server stopped');
       expect(instance.stop).toHaveBeenCalledTimes(1);
       expect(InstanceModel.update).toHaveBeenCalledWith('s1', { status: 'stopped' });
       expect(recordAudit).toHaveBeenCalledWith(
@@ -380,6 +387,24 @@ describe('Status Routes · 端点缺口收口', () => {
       );
     });
 
+    it('旧进程退出未确认：返回 409，不记成功审计', async () => {
+      const restart = vi.fn().mockRejectedValue(new AppError(ErrorCodes.INSTANCE_STOP_UNCONFIRMED));
+      mockManager.getInstance.mockReturnValue(asInstance({ id: 's1', restart }));
+      // 单独附加处理器，避免路由遗漏 await 时以未处理拒绝掩盖 HTTP 断言。
+      const originalRestart = restart.getMockImplementation();
+      restart.mockImplementation(() => {
+        const result = originalRestart();
+        result.catch(() => {});
+        return result;
+      });
+
+      const res = await request(app).post('/api/instances/s1/restart');
+
+      expect(res.status).toBe(409);
+      expect(res.body.code).toBe(40923);
+      expect(recordAudit).not.toHaveBeenCalled();
+    });
+
     it('404：实例不存在', async () => {
       mockManager.getInstance.mockReturnValue(asInstance(undefined));
       const res = await request(app).post('/api/instances/s1/restart');
@@ -400,19 +425,19 @@ describe('Status Routes · 端点缺口收口', () => {
       expect(res.body.code).toBe(40401);
     });
 
-    it('RCON 断开降级：sendCommand 抛错且 isRconConnected=false → 503 专用错误码', async () => {
+    it('命令无可写通道时返回未送达，不依赖 RCON 配置位', async () => {
       const instance = {
         id: 's1',
         isRunning: true,
-        isRconConnected: false,
-        sendCommand: vi.fn().mockRejectedValue(new Error('rcon timeout')),
+        isRconConnected: true,
+        sendCommand: vi.fn().mockRejectedValue(new AppError(ErrorCodes.COMMAND_NOT_SENT)),
       };
       mockManager.getInstance.mockReturnValue(asInstance(instance));
 
       const res = await request(app).post('/api/instances/s1/command').send({ command: 'say hi' });
 
       expect(res.status).toBe(503);
-      expect(res.body.code).toBe(50302);
+      expect(res.body.code).toBe(50304);
     });
 
     it('RCON 连接正常时 sendCommand 抛错 → 重新抛出经全局 errorHandler 500', async () => {
@@ -647,7 +672,7 @@ describe('Status Routes · 端点缺口收口', () => {
     });
   });
 
-  // ── PUT /instances/:id 字段同步与熔断重置补口 ──
+  // ── PUT /instances/:id 字段同步 ──
   describe('PUT /api/instances/:id（字段同步补口）', () => {
     it('javaPath null 清除 + 内存字段同步：javaPath/maxMemory/minMemory/jvmArgs/autoRestart', async () => {
       const instance = {
@@ -687,25 +712,45 @@ describe('Status Routes · 端点缺口收口', () => {
       );
     });
 
-    it('autoRestart 重新开启时重置崩溃熔断器（用户已确认手动介入）', async () => {
-      const instance = {
-        id: 's1',
-        serverPath: INSTANCE_PATH,
-        javaPath: 'java',
-        autoRestart: false,
-        toStatus: () => ({ id: 's1' }),
-        _circuitBreakerTripped: true,
-        _consecutiveCrashes: 3,
-        _crashWindowStart: 123456,
-      };
-      mockManager.getInstance.mockReturnValue(asInstance(instance));
+    it('开启自动重启偏好时保留熔断和崩溃次数', async () => {
+      const detect = vi
+        .spyOn(MCServerInstance.prototype, '_detectPublicIp')
+        .mockResolvedValue(undefined);
+      try {
+        mockManager.getInstance.mockReturnValue(
+          new MCServerInstance({
+            id: 's1',
+            name: '测试实例',
+            serverPath: INSTANCE_PATH,
+            autoStart: true,
+            autoRestart: false,
+            circuitBreakerCrashCount: 5,
+          }),
+        );
 
-      const res = await request(app).put('/api/instances/s1').send({ autoRestart: true });
+        const res = await request(app).put('/api/instances/s1').send({ autoRestart: true });
 
-      expect(res.status).toBe(200);
-      expect(instance._circuitBreakerTripped).toBe(false);
-      expect(instance._consecutiveCrashes).toBe(0);
-      expect(instance._crashWindowStart).toBeNull();
+        expect(res.status).toBe(200);
+        expect(InstanceModel.update).toHaveBeenCalledExactlyOnceWith('s1', { autoRestart: true });
+        expect(res.body.data).toMatchObject({
+          autoStart: true,
+          autoRestart: true,
+          circuitBreakerTripped: true,
+          consecutiveCrashes: 5,
+        });
+      } finally {
+        detect.mockRestore();
+      }
+    });
+
+    it('设置端点不接受单独的复位字段，也不写入设置或审计', async () => {
+      mockManager.getInstance.mockReturnValue(asInstance({ id: 's1' }));
+
+      const res = await request(app).put('/api/instances/s1').send({ resetCircuitBreaker: true });
+
+      expect(res.status).toBe(400);
+      expect(InstanceModel.update).not.toHaveBeenCalled();
+      expect(recordAudit).not.toHaveBeenCalled();
     });
 
     it('javaPath 指向目录（非文件）→ 400 拒绝，不落库', async () => {
@@ -890,7 +935,10 @@ describe('Status Routes · 端点缺口收口', () => {
       const proc = {
         exitCode: null,
         signalCode: null,
-        once: vi.fn((ev, cb) => cb()),
+        once: vi.fn((_ev, cb) => {
+          instance.isRunning = false;
+          cb();
+        }),
       };
       const instance = makeInstance({
         isRunning: true,
@@ -913,7 +961,7 @@ describe('Status Routes · 端点缺口收口', () => {
       expect(mockManager.instances.size).toBe(0);
     });
 
-    it('stopGracefully 超时抛错被吞 + 实例目录不存在也照常清理 → 卸载流程继续', async () => {
+    it('停机未确认：拒绝删除仍在运行的实例', async () => {
       const instance = makeInstance({
         isRunning: true,
         stopGracefully: vi.fn().mockRejectedValue(new Error('stop timeout')),
@@ -924,9 +972,10 @@ describe('Status Routes · 端点缺口收口', () => {
 
       const res = await uninstall({ confirmName: NAME, acknowledgeIrreversible: true });
 
-      expect(res.status).toBe(200);
-      expect(BackupModel.deleteByInstance).toHaveBeenCalledWith('s1');
-      expect(InstanceModel.delete).toHaveBeenCalledWith('s1');
+      expect(res.status).toBe(409);
+      expect(fs.rmSync).not.toHaveBeenCalled();
+      expect(BackupModel.deleteByInstance).not.toHaveBeenCalled();
+      expect(InstanceModel.delete).not.toHaveBeenCalled();
     });
 
     it('DB 删除失败降级：实例目录已清理后 DB 删除抛错仅警告，仍返回成功', async () => {
@@ -1007,22 +1056,25 @@ describe('Status Routes · 端点缺口收口', () => {
       expect(InstanceModel.delete).toHaveBeenCalledWith('s1');
     });
 
-    it('检查置于停机等待之后：运行中实例先 stopGracefully 再命中互斥 → 409', async () => {
+    it('停机等待期间出现备份操作：拒绝删除', async () => {
+      let backupStarted = false;
       const instance = makeInstance({
         isRunning: true,
-        stopGracefully: vi.fn().mockResolvedValue(),
+        stopGracefully: vi.fn(async () => {
+          instance.isRunning = false;
+          backupStarted = true;
+        }),
       });
       mockManager.getInstance.mockReturnValue(asInstance(instance));
       mockManager.instances.set('s1', instance);
       BackupModel.findAll.mockImplementation(({ status }) => ({
         backups: [],
-        total: status === 'restoring' ? 1 : 0,
+        total: backupStarted && status === 'restoring' ? 1 : 0,
       }));
 
       const res = await uninstall({ confirmName: NAME, acknowledgeIrreversible: true });
 
       expect(res.status).toBe(409);
-      // 停机等待先行（删前必停的既有语义保留），互斥检查紧贴删除动作消除 TOCTOU 窗口
       expect(instance.stopGracefully).toHaveBeenCalledTimes(1);
       expect(instance.cancelRestart).toHaveBeenCalledTimes(1);
       expect(fs.rmSync).not.toHaveBeenCalled();

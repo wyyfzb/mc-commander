@@ -15,6 +15,7 @@ import { Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { DataTableShell } from '@/components/mcs/data-table-shell'
 import { StatusPill } from '@/components/mcs/status-pill'
+import { Chip } from '@/components/mcs/chip'
 import { CountBadge } from '@/components/mcs/count-badge'
 import { CardTitle } from '@/components/mcs/card'
 import { Button } from '@/components/ui/button'
@@ -25,8 +26,7 @@ import { formatWorldSize } from '@/lib/format'
 import { parseMemoryGB } from '@/lib/instance-memory'
 import { tpsLevel } from '@/lib/mc-tps'
 import { useServerStore } from '@/stores/server'
-import type { FleetRow } from '../fleet-health'
-import { fleetRowSummary } from '../fleet-health'
+import { fleetRowSummary, INSTANCE_LIFECYCLE, type FleetRow } from '../fleet-health'
 
 /**
  * 列上列阈值（容器档，Tailwind v4 默认档：@2xl=672 / @3xl=768）。
@@ -48,7 +48,7 @@ const BASE_CELL = 'px-2 py-2'
  *
  * 状态与需关注两列给**响应式宽**：它们在任何档都在列，而窄容器（375 视口下表格区约 343px）
  * 两列各占 96/112px 会把实例名压到只剩「E2E ...」。窄档收到 64px——两列里的药丸都是
- * 4 字以内（运行中/已停止/崩溃熔断），2xs 档约 40px 加内距，64px 装得下。
+ * 4 字以内（已就绪/就绪未知/反复退出），2xs 档约 40px 加内距，64px 装得下。
  */
 const COLUMN_WIDTH = {
   status: 'w-16 @2xl:w-24',
@@ -69,7 +69,6 @@ export interface FleetTableProps {
 
 export function FleetTable({ rows, isLoading, error }: FleetTableProps) {
   const currentId = useServerStore((s) => s.instanceId)
-  const phaseById = useServerStore((s) => s.phase)
   const setInstanceId = useServerStore((s) => s.setInstanceId)
   const navigate = useNavigate()
 
@@ -155,8 +154,10 @@ export function FleetTable({ rows, isLoading, error }: FleetTableProps) {
               key={row.status.id}
               row={row}
               isCurrent={currentId === row.status.id}
-              phase={phaseById[row.status.id] ?? null}
               onOpen={() => openInstance(row.status.id)}
+              onOpenCircuitBreaker={() =>
+                void navigate(`/instances?focus=${encodeURIComponent(row.status.id)}`)
+              }
             />
           ))}
         </tbody>
@@ -165,48 +166,23 @@ export function FleetTable({ rows, isLoading, error }: FleetTableProps) {
   )
 }
 
-/** 生命周期状态：启停中间态优先——isRunning 尚未翻转时先照实说「正在启动/停止」 */
-function LifecyclePill({ isRunning, phase }: { isRunning: boolean; phase: string | null }) {
-  if (phase === 'starting') {
-    return (
-      <StatusPill tone="default" className="text-mcs-2xs">
-        启动中
-      </StatusPill>
-    )
-  }
-  if (phase === 'stopping') {
-    return (
-      <StatusPill tone="default" className="text-mcs-2xs">
-        停止中
-      </StatusPill>
-    )
-  }
-  return isRunning ? (
-    <StatusPill tone="success" className="text-mcs-2xs">
-      运行中
-    </StatusPill>
-  ) : (
-    <StatusPill tone="muted" className="text-mcs-2xs">
-      已停止
-    </StatusPill>
-  )
-}
-
 function FleetRowView({
   row,
   isCurrent,
-  phase,
   onOpen,
+  onOpenCircuitBreaker,
 }: {
   row: FleetRow
   isCurrent: boolean
-  phase: string | null
   onOpen: () => void
+  onOpenCircuitBreaker: () => void
 }) {
-  const { status, issue } = row
+  const { status, lifecycle, issue } = row
   const label = instanceLabel(status)
-  const running = status.isRunning
-  const tps = running ? status.tps : null
+  const lifecycleLabel = INSTANCE_LIFECYCLE[lifecycle]
+  const ready = lifecycle === 'ready'
+  const tps = ready ? status.tps : null
+  const summary = fleetRowSummary(status, lifecycle)
   const level = tps == null ? null : tpsLevel(tps)
   const tpsToneText =
     level === 'critical'
@@ -217,7 +193,7 @@ function FleetRowView({
   // RSS 与 -Xmx 不同口径（前者含堆外），只并排展示、不据此造告警阈值
   const allocatedGB = parseMemoryGB(status.maxMemory)
   const memoryText =
-    running && status.memoryUsage > 0
+    status.isRunning && status.memoryUsage > 0
       ? allocatedGB != null
         ? `${status.memoryUsage} / ${allocatedGB}`
         : `${status.memoryUsage} / —`
@@ -247,18 +223,32 @@ function FleetRowView({
             </StatusPill>
           )}
         </div>
-        <p
-          className="mt-0.5 truncate text-mcs-2xs text-mcs-text-muted @2xl:hidden"
-          title={status.mcVersion || undefined}
-        >
-          {fleetRowSummary(status)}
-        </p>
+        {summary && (
+          <p
+            className="mt-0.5 truncate text-mcs-2xs text-mcs-text-muted @2xl:hidden"
+            title={status.mcVersion || undefined}
+          >
+            {summary}
+          </p>
+        )}
       </td>
       <td className={BASE_CELL}>
-        <LifecyclePill isRunning={running} phase={phase} />
+        <StatusPill tone={lifecycleLabel.tone} className="px-0.5 text-mcs-2xs @2xl:px-2">
+          {lifecycleLabel.label}
+        </StatusPill>
       </td>
       <td className={BASE_CELL}>
-        {issue ? (
+        {status.circuitBreakerTripped && issue ? (
+          <Chip
+            tone="error"
+            className="px-0.5 text-mcs-2xs font-semibold whitespace-nowrap underline underline-offset-2 @2xl:px-2"
+            ariaLabel={`查看 ${label} 反复退出的实例卡`}
+            title={issue.description}
+            onClick={onOpenCircuitBreaker}
+          >
+            {issue.label}
+          </Chip>
+        ) : issue ? (
           <StatusPill
             tone={issue.level === 'error' ? 'error' : 'warning'}
             className="text-mcs-2xs font-semibold"
@@ -267,11 +257,13 @@ function FleetRowView({
             {issue.label}
           </StatusPill>
         ) : (
-          <span className="text-mcs-xs text-mcs-text-muted">无</span>
+          <span className="text-mcs-xs text-mcs-text-muted">
+            {ready && tps != null ? '无' : '—'}
+          </span>
         )}
       </td>
       <td className={cn(METRIC_COLUMN_CLASS, 'mcs-num text-mcs-xs')}>
-        {running ? `${status.playerCount}/${status.maxPlayers}` : '—'}
+        {ready ? `${status.playerCount}/${status.maxPlayers}` : '—'}
       </td>
       <td className={cn(METRIC_COLUMN_CLASS, 'mcs-num text-mcs-xs', tpsToneText)}>
         {tps != null ? tps.toFixed(1) : '—'}

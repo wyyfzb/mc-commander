@@ -7,9 +7,10 @@ import { Card, CardHeader, CardTitle } from '@/components/mcs/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useServerStore } from '@/stores/server'
 import { formatRelativeTime, formatStartTime, formatUptime } from '@/lib/format'
-import { serverTypeLabel } from '@/lib/instance-label'
+import { serverTypeLabel, STARTUP_STATE_LABELS } from '@/lib/instance-label'
 import { cn } from '@/lib/utils'
 import { TPS_HEALTHY_MIN, tpsLevel } from '@/lib/mc-tps'
+import { readHostMemory } from '@/lib/instance-memory'
 
 /**
  * 仪表盘统计卡（顶部四卡 + 右栏在线玩家/运行信息）
@@ -68,23 +69,20 @@ export function BigStatCards({
   /** 首屏加载（B17）：status 未到前显示骨架 */
   isLoading?: boolean
 }) {
-  const status = useServerStore((s) => s.status)
+  const status = useServerStore((s) => (s.status?.id === s.instanceId ? s.status : null))
   const systemStats = useServerStore((s) => s.systemStats)
 
   const isRunning = status?.isRunning ?? false
   const tps = status?.tps ?? null
-  const healthy = isRunning && (tps ?? 0) >= TPS_HEALTHY_MIN
+  const healthy = tps != null && tps >= TPS_HEALTHY_MIN
 
   // 本卡是**整机**资源口径：实例状态里的 memoryUsage 是进程 RSS、cpuUsage 是进程 CPU%，
   // 与整机口径不同源，不能互为后备（混用会得出「进程内存 / 整机总量」这类失真比例）。
   // 整机数据未到时如实留空，由渲染层给「暂无数据」——与磁盘行既有做法一致。
   const cpu = systemStats?.cpuUsage ?? null
-  const memUsed = systemStats?.memoryUsage ?? null
-  const memTotal = systemStats?.totalMemory ?? null
+  const memory = readHostMemory(systemStats)
+  const memPct = memory?.percent ?? null
   const cores = systemStats?.cpuCores
-  // 无数据时保持 null（不是 0）：0 会被进度条与读屏当成「占用 0%」播报，与「暂无数据」冲突
-  const hasMem = memUsed != null && memTotal != null
-  const memPct = hasMem ? (systemStats?.memoryPercent ?? (memUsed / memTotal) * 100) : null
   const diskUsage = systemStats?.diskUsage
   const primary = diskUsage?.primary ?? null
 
@@ -113,7 +111,7 @@ export function BigStatCards({
       title="资源使用"
       className="animate-mcs-fade-up mcs-delay-2"
       eyebrow={
-        isRunning ? (
+        isRunning && status?.startupState === 'ready' && tps != null ? (
           <span className="inline-flex items-center gap-2">
             <StatusPill tone={healthy ? 'success' : 'warning'} className="gap-1 text-mcs-2xs">
               <CheckCircle2 className="size-3.5" aria-hidden />
@@ -122,7 +120,7 @@ export function BigStatCards({
             {/* TPS 是卡级关键数字（Grafana 三段式：小标签 + 大数 + 后缀）：
                 数值占数字档 display，单位与状态词留在小档，不随数字放大 */}
             <span className={cn('mcs-num text-mcs-display leading-none', tpsColor(tps, isRunning))}>
-              {tps != null ? tps.toFixed(1) : '--'}
+              {tps.toFixed(1)}
             </span>
             <span className="text-mcs-lg text-mcs-text-muted">TPS</span>
           </span>
@@ -164,12 +162,12 @@ export function BigStatCards({
             ) : undefined
           }
           value={
-            hasMem ? (
+            memory ? (
               <>
-                {memUsed.toFixed(1)}
+                {memory.used.toFixed(1)}
                 <span className="text-mcs-sm font-medium text-mcs-text-muted">
                   {' '}
-                  / {memTotal.toFixed(0)}G
+                  / {memory.total}G
                 </span>
               </>
             ) : (
@@ -265,10 +263,9 @@ function ResourceRow({
 const MAX_COLUMN_ROWS = 3
 
 export function PlayersCard({ isLoading = false }: { isLoading?: boolean }) {
-  const status = useServerStore((s) => s.status)
+  const status = useServerStore((s) => (s.status?.id === s.instanceId ? s.status : null))
   const navigate = useNavigate()
-  const isRunning = status?.isRunning ?? false
-  const rconConnected = status?.capabilities.rcon ?? false
+  const ready = status?.startupState === 'ready'
   const online = status?.playerCount ?? 0
   const max = status?.maxPlayers ?? 20
   const opCount = status?.opCount ?? 0
@@ -342,23 +339,14 @@ export function PlayersCard({ isLoading = false }: { isLoading?: boolean }) {
     // 首帧未落定不得抢答：status 未到即按 isRunning=false 渲染
     // 「实例已停止，暂无玩家数据」，会把「还不知道」说成一条确定结论
     <ListSkeleton rows={3} />
-  ) : !isRunning ? (
+  ) : status?.startupState === 'stopped' ? (
     <p className="py-1 text-mcs-xs text-mcs-text-muted">实例已停止，暂无玩家数据</p>
+  ) : !ready ? (
+    <p className="py-1 text-mcs-xs text-mcs-text-muted">尚未确认在线玩家</p>
   ) : names.length === 0 ? (
-    <div className="flex items-center gap-2 py-1">
-      <p className="text-mcs-xs text-mcs-text-muted">
-        {rconConnected ? '暂无玩家在线' : '需启用 RCON 才能读取在线玩家'}
-      </p>
-      {!rconConnected && (
-        <button
-          type="button"
-          onClick={() => navigate('/world?tab=properties')}
-          className="shrink-0 text-mcs-xs font-medium text-mcs-info-fg hover:underline"
-        >
-          前往服务器属性
-        </button>
-      )}
-    </div>
+    <p className="py-1 text-mcs-xs text-mcs-text-muted">
+      {online === 0 ? '暂无玩家在线' : '暂无玩家明细'}
+    </p>
   ) : (
     <div className="flex gap-4 border-t border-mcs-border-muted pt-2">
       {renderColumn(
@@ -398,14 +386,14 @@ export function PlayersCard({ isLoading = false }: { isLoading?: boolean }) {
       <div className="flex items-end justify-between gap-2">
         <div className="flex flex-col gap-0.5">
           <span className="mcs-num text-mcs-display leading-none">
-            {online}
+            {ready ? online : '—'}
             <span className="text-mcs-lg font-normal text-mcs-text-muted">/{max}</span>
           </span>
           <span className="text-mcs-2xs text-mcs-text-muted">
             今日新增 {status?.todayNewPlayers ?? 0}
           </span>
         </div>
-        {opCount > 0 && (
+        {ready && opCount > 0 && (
           <div className="flex flex-col items-end gap-0.5">
             <StatusPill tone="warning" className="text-mcs-2xs">
               OP {opCount}/{online}
@@ -426,8 +414,9 @@ export function PlayersCard({ isLoading = false }: { isLoading?: boolean }) {
 
 // ── 顶部卡：实例信息 ────────────────────────────────────────
 export function RuntimeInfoCard({ isLoading = false }: { isLoading?: boolean }) {
-  const status = useServerStore((s) => s.status)
+  const status = useServerStore((s) => (s.status?.id === s.instanceId ? s.status : null))
   const isRunning = status?.isRunning ?? false
+  const startupState = status?.startupState ?? 'unknown'
 
   // 本次运行时长：status.uptime 为本次秒数
   const uptime = status?.uptime ?? 0
@@ -495,9 +484,16 @@ export function RuntimeInfoCard({ isLoading = false }: { isLoading?: boolean }) 
         <>
           <div className="flex items-center justify-between gap-2">
             {/* 停止态下数值为 —（本次会话已结束），label 同步改「上次」避免语义误导 */}
-            <p className="text-mcs-xs text-mcs-text-muted">
-              {isRunning ? '本次运行时长' : '上次运行时长'}
-            </p>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <p className="text-mcs-xs text-mcs-text-muted">
+                {isRunning ? '本次运行时长' : '上次运行时长'}
+              </p>
+              <span role="status">
+                <StatusPill tone={startupState === 'ready' ? 'success' : 'muted'}>
+                  {STARTUP_STATE_LABELS[startupState]}
+                </StatusPill>
+              </span>
+            </div>
             {/* 本卡关键数字：与在线玩家 / 资源使用两卡同为顶排卡级大数（明细行留在 xs） */}
             <p
               className={cn(

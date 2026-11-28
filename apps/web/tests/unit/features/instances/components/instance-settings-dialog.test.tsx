@@ -53,7 +53,13 @@ const PUSH_ON: PushChannelState = { ...PUSH_OFF, enabled: true, tlsEnabled: fals
 
 // ── 虚构占位数据 ────────────────────────────────────────────────
 
-const alpha: InstanceSummary = { id: 'alpha', name: '虚构甲服', isRunning: true, playerCount: 3 }
+const alpha: InstanceSummary = {
+  id: 'alpha',
+  name: '虚构甲服',
+  isRunning: true,
+  startupState: 'unknown',
+  playerCount: 3,
+}
 
 function detailWith(overrides: Partial<InstanceStatus> = {}): InstanceStatus {
   return {
@@ -499,15 +505,40 @@ describe('InstanceSettingsDialog 自动重启（实例级配置）', () => {
     // 「默认开启」是这段说明的主体：开关躺着就是开的，读不出「这是可以关的」
     const desc = screen.getByText(/新建实例默认开启/)
     expect(desc).toHaveClass('text-mcs-xs')
-    expect(desc).toHaveTextContent(
-      '服务器崩溃或意外退出后自动拉起，新建实例默认开启（手动停止不触发）；连续崩溃会先熔断暂停',
-    )
+    expect(desc).toHaveTextContent('服务器意外退出后自动重启，新建实例默认开启。手动停止不会触发。')
   })
 
   it('服务端已关（autoRestart=false）：开关如实为关', () => {
     renderDialog(detailWith({ autoRestart: false }))
 
     expect(screen.getByRole('switch', { name: '意外停止后自动重启' })).not.toBeChecked()
+  })
+
+  it('自动重启暂停期间可保存偏好，回执说明仍暂停', async () => {
+    const tripped = detailWith({ autoRestart: false, circuitBreakerTripped: true })
+    server.use(
+      http.put('*/api/v1/instances/alpha', async ({ request }) => {
+        const body = (await request.json()) as Record<string, unknown>
+        putBodies.push(body)
+        return HttpResponse.json({
+          status: 'ok',
+          code: 0,
+          message: 'Success',
+          data: { ...tripped, ...body },
+          timestamp: new Date().toISOString(),
+        })
+      }),
+    )
+    renderDialog(tripped)
+    const user = userEvent.setup()
+
+    expect(screen.getByText('服务器反复退出，自动重启已暂停。')).toBeInTheDocument()
+    await user.click(screen.getByRole('switch', { name: '意外停止后自动重启' }))
+    await user.click(screen.getByRole('button', { name: '保存配置' }))
+
+    expect(await screen.findByText('已保存设置，自动重启仍暂停')).toBeInTheDocument()
+    expect(putBodies[0]).toHaveProperty('autoRestart', true)
+    expect(putBodies[0]).not.toHaveProperty('resetCircuitBreaker')
   })
 
   /* 读不到详情 ≠ 已开启：`?? true` 会把「不知道」显示成「已开启」，用户会以为崩溃后

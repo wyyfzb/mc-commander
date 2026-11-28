@@ -91,7 +91,7 @@ interface NotificationState {
    * 「lowTps 恢复了」并推送一条**属于 B 的**「TPS 已恢复正常」（B 从没低过）；
    * 反之若 B 也低，则因已在集合里而**不发告警**，真实的低 TPS 被静默吞掉。
    */
-  resetAlerts: () => void
+  resetAlerts: (scope?: 'instance') => void
 }
 
 /**
@@ -252,7 +252,15 @@ export const useNotificationStore = create<NotificationState>()((set, get) => ({
       return { items: [], unreadCount: 0, activeAlerts: new Set() }
     }),
 
-  resetAlerts: () => set({ activeAlerts: new Set() }),
+  resetAlerts: (scope) =>
+    set((s) => ({
+      activeAlerts:
+        scope === 'instance'
+          ? new Set(
+              [...s.activeAlerts].filter((alert) => alert !== 'lowTps' && alert !== 'highCpu'),
+            )
+          : new Set(),
+    })),
 }))
 
 /**

@@ -107,6 +107,25 @@ describe('TaskList 渲染', () => {
     expect(within(summary).queryByText('无启用任务')).not.toBeInTheDocument()
   })
 
+  it('下次执行跳过到期排期与停用任务，保留已到期的行内提示', () => {
+    vi.useFakeTimers({ now: new Date('2026-11-27T12:00:00Z') })
+    renderList({
+      tasks: [
+        { ...mockTasks[0]!, isEnabled: true, nextRunAt: '2026-11-27T12:00:00Z' },
+        { ...mockTasks[1]!, isEnabled: true, nextRunAt: '2026-11-27T12:30:00Z' },
+        { ...mockTasks[2]!, isEnabled: false, nextRunAt: '2026-11-27T12:01:00Z' },
+      ],
+    })
+    expect(within(screen.getByTestId('task-summary')).getByText('30m 后')).toBeInTheDocument()
+    expect(screen.getByText(/下次运行:.*已过期/)).toBeInTheDocument()
+  })
+
+  it('没有未来排期但有到期时间：摘要区别于未排期', () => {
+    vi.useFakeTimers({ now: new Date('2026-11-27T12:01:00Z') })
+    renderList({ tasks: [{ ...mockTasks[0]!, nextRunAt: '2026-11-27T12:00:00Z' }] })
+    expect(within(screen.getByTestId('task-summary')).getByText('已过期')).toBeInTheDocument()
+  })
+
   it('没有任何启用任务：摘要才说「无启用任务」', () => {
     renderList({ tasks: [{ ...mockTasks[0]!, isEnabled: false, nextRunAt: null }] })
     const summary = screen.getByTestId('task-summary')
